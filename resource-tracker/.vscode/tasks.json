@@ -1,0 +1,43 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Resource Tracker: Start MySQL",
+            "type": "shell",
+            "command": "docker compose up -d mysql",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Resource Tracker: Build",
+            "type": "shell",
+            "command": "./mvnw package -DskipTests",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": ["$javac"]
+        },
+        {
+            "label": "Resource Tracker: Run",
+            "type": "shell",
+            "command": "set -a && . .env && set +a && ./mvnw spring-boot:run",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "dependsOn": ["Resource Tracker: Start MySQL"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Resource Tracker: Test",
+            "type": "shell",
+            "command": "set -a && . .env && set +a && ./mvnw test",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": ["$javac"]
+        }
+    ]
+}
