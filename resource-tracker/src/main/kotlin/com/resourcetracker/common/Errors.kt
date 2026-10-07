@@ -15,7 +15,7 @@ open class ApiException(val status : HttpStatus, val code: String, message: Stri
 
 class InvalidCredentialsException :
         ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid username or password")
-class AccountLockedException :
+class AccountLockedException(val until: Instant? = null) :
         ApiException(HttpStatus.LOCKED, "ACCOUNT_LOCKED", "Account is temporarily locked. Try again later")
 class AccountDeactivatedException :
         ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_DEACTIVATED", "This account has been deactivated" )
@@ -55,26 +55,28 @@ class GlobalExceptionHandler{
             code = ex.code,
             message = ex.message ?: ex.code,
             requiredRoles = forbidden?.required?.map { it.name },
-            actualRole = forbidden?.actual.name,
+            actualRole = forbidden?.actual?.name,
             retryAfter = (ex as? AccountLockedException)?.until,
             details = (ex as? WeakPasswordException)?.violations,
         )
         return ResponseEntity.status(ex.status).body(body)
     }
-}
 
-@ExceptionHandler(MethodArgumentNotValidException::class)
-fun validation (ex: MethodArgumentNotValidException):
-        ResponseEntity<ErrorResponse> {
-    val fields = ex.bindingResult.fieldErrors.associate{
-        it.field to(it.defaultMessage ?: "invalid")
+    @ExceptionHandler(MethodArgumentNotValidException::class)
+    fun validation(ex: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> {
+        val fields = ex.bindingResult.fieldErrors.associate {
+            it.field to (it.defaultMessage ?: "invalid")
+        }
+        return ResponseEntity.badRequest().body(
+            ErrorResponse(400, "VALIDATION_FAILED", "Request validation failed", fieldErrors = fields),
+        )
     }
-    return ResponseEntity.badRequest().body(ErrorResponse(400,"VALIDATION_FAILED", "Request validation failed", fieldErrors = fields))
-}
 
-@ExceptionHandler(HttpMessageNotReadableException::class)
-fun unreadable(ex: HttpMessageNotReadableException):
-        ResponseEntity<ErrorResponse> {
-    log.debug("Unreadable request body")
-    return ResponseEntity.badRequest().body(ErrorResponse(400, "MALFORMED_REQUEST","Malforemed request body"))
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun unreadable(ex: HttpMessageNotReadableException): ResponseEntity<ErrorResponse> {
+        log.debug("Unreadable request body")
+        return ResponseEntity.badRequest().body(
+            ErrorResponse(400, "MALFORMED_REQUEST", "Malformed request body"),
+        )
+    }
 }

@@ -1,4 +1,8 @@
-import com,resourcetracker.user.*
+package com.resourcetracker.dev
+
+import com.resourcetracker.user.Role
+import com.resourcetracker.user.UserRepository
+import com.resourcetracker.user.UserService
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Profile

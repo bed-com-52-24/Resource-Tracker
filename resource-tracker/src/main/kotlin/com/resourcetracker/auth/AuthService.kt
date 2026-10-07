@@ -1,20 +1,27 @@
 package com.resourcetracker.auth
 
 import com.resourcetracker.common.ApiException
+import com.resourcetracker.common.AccountDeactivatedException
+import com.resourcetracker.common.AccountLockedException
+import com.resourcetracker.common.InvalidCredentialsException
 import com.resourcetracker.common.InvalidRefreshTokenException
 import com.resourcetracker.config.SecurityProps
 import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
+import org.springframework.stereotype.Service
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Clock
+import java.time.Instant
 import kotlin.io.encoding.Base64
 
 @Service
 class AuthService(
     private val users: UserRepository,
-    private val refreshTokenRepository: RefreshTokenRepository,
+    private val refreshTokens: RefreshTokenRepository,
     private val revokedTokens: RevokedAccessTokenRepository,
     private val encoder: PasswordEncoder,
     private val jwt: JwtService,
@@ -25,28 +32,28 @@ class AuthService(
 
     private val dummyHash: String = encoder.encode("not-a-ral-password-for-timing")!!
 
-    @Transactional(noRollbackFor = [ApiException::claa])
+    @Transactional(noRollbackFor = [ApiException::class])
     fun login(req: LoginRequest): LoginResponse{
         val now = clock.instant()
-        val user = users.findForUpdatedByUsername(req.username)
+        val user = users.findForUpdateByUsername(req.username)
         if(user == null){
             encoder.matches(req.password, dummyHash)
-            throw InvalidCredentialException()
+            throw InvalidCredentialsException()
         }
         val lockedUntil = user.lockedUntil
-        if(lockedUntil != null && lockedUntil.isAfter(now)) throw AccountLockedException(lockedUntil)
+        if(lockedUntil != null && lockedUntil.isAfter(now)) throw AccountLockedException()
 
-        if(encoder.matches(req.password, user.password)){
+        if(!encoder.matches(req.password, user.passwordHash)){
             registerFailure(user, now)
             throw InvalidCredentialsException()
         }
 
-        if(!user.active) throw AccounrDeactivedException()
+        if(!user.active) throw AccountDeactivatedException()
 
         user.failedAttempts = 0
         user.failedWindowStart = null
         user.lockedUntil = null
-        return LoginResponce(
+        return LoginResponse(
             user = UserSummary(user.id.toString(),
                 user.username, user.role.name,user.department),
             tokens = issueTokens(user, now),
@@ -57,7 +64,7 @@ class AuthService(
     fun refresh(rawToken: String): TokenPair{
         val now = clock.instant()
         val stored = refreshTokens.findForUpdate(sha256(rawToken)) ?: throw InvalidRefreshTokenException()
-        if(stored.revoked || stored.expiresAt.isVefore(now)) throw InvalidRefreshTokenException()
+        if(stored.revoked || stored.expiresAt.isBefore(now)) throw InvalidRefreshTokenException()
 
         stored.revoked  = true
         val user = users.findById(stored.userId).orElse(null)
@@ -91,15 +98,15 @@ class AuthService(
 
     private fun issueTokens(user: User, now: Instant):TokenPair{
         val access = jwt.issueAccessToken(user)
-        val bytes = ByteArrat(32).also(random::nextBytes)
-        val refresh = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        val bytes = ByteArray(32).also(random::nextBytes)
+        val refresh = Base64.UrlSafe.encode(bytes).trimEnd('=')
         refreshTokens.save(
             RefreshToken(userId = user.id, tokenHash = sha256(refresh), expiresAt = now.plus(props.refreshTtl)),
         )
         return TokenPair(
             accessToken = access.token,
             refreshToken = refresh,
-            AccessTokenExpiresIn = props.accessTtl.seconds,
+            accessTokenExpiresIn = props.accessTtl.seconds,
             refreshTokenExpiresIn = props.refreshTtl.seconds,
         )
     }

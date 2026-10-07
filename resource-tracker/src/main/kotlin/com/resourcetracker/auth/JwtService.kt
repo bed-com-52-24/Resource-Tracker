@@ -15,7 +15,7 @@ data class IssuedAccessToken(val token: String, val jti: String, val expiresAt: 
 
 @Service
 class JwtService(private val props: SecurityProps, private val clock: Clock){
-    private val key = Keys.hmacShareKeyFor(props.jwtSecret.toByteArray())
+    private val key = Keys.hmacShaKeyFor(props.jwtSecret.toByteArray())
 
     fun issueAccessToken(user: User): IssuedAccessToken{
         val now = clock.instant()

@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.annotation.AnnotatedElementUtils
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.servlet.HandlerInterceptor
+import org.springframework.web.method.HandlerMethod
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
@@ -18,12 +19,12 @@ annotation class RequiresRoles(vararg val value: Role)
 class RoleAuthorizationInterceptor : HandlerInterceptor {
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         if(handler !is HandlerMethod) return true
-        val required = handle.getMethodAnnotation(RequiresRoles::class.java)
+        val required = handler.getMethodAnnotation(RequiresRoles::class.java)
             ?: AnnotatedElementUtils.findMergedAnnotation(handler.beanType, RequiresRoles::class.java)
             ?: return true
 
-        val caller = SecurityContextHolder.getContext().authentication?.principle as? AuthenticatedUser
-            ?: throw UnauthenticatedException() as Throwable
+        val caller = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
+            ?: throw com.resourcetracker.common.UnauthenticatedException()
         if(caller.role !in required.value) throw ForbiddenRoleException(required.value.toList(),caller.role)
         return true
     }
@@ -31,6 +32,6 @@ class RoleAuthorizationInterceptor : HandlerInterceptor {
 @Configuration
 class webConfig : WebMvcConfigurer{
     override fun addInterceptors(registry: InterceptorRegistry) {
-        registry.addInterceptors(RoleAuthorizationInterceptor())
+        registry.addInterceptor(RoleAuthorizationInterceptor())
     }
 }

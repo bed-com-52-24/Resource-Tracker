@@ -18,7 +18,7 @@ import java.time.Instant
 @Table(name = "refresh_tokens")
 class RefreshToken(
     @Id val id: UUID = UUID.randomUUID(),
-    @Column(nullable = false) val userId: UUID,
+    @Column(nullable = false) val userId: Int,
     @Column(nullable = false, unique = true , length = 64) val tokenHash: String,
     @Column(nullable = false) val expiresAt: Instant,
     @Column(nullable = false)var revoked: Boolean = false,
@@ -43,7 +43,7 @@ interface RefreshTokenRepository : JpaRepository<RefreshToken, UUID>{
 
 interface RevokedAccessTokenRepository : JpaRepository<RevokedAccessToken, String>{
     @Modifying
-    @Query("delete from RevokedAccessToken t where t.expireAt < :now")
+    @Query("delete from RevokedAccessToken t where t.expiresAt < :now")
     fun deleteExpired(@Param("now") time: Instant): Int
 }
 
@@ -56,7 +56,7 @@ class TokenCleanupJob(
 @Scheduled(cron = "0 0 * * * *")
 @Transactional
 fun purge(){
-    val now = colock.instant()
+    val now = clock.instant()
     refreshTokens.deleteExpired(now)
     revoked.deleteExpired(now)
     }

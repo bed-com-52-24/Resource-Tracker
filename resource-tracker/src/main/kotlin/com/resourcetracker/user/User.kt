@@ -9,29 +9,36 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.LockModeType
+import jakarta.persistence.FetchType
+import jakarta.persistence.Id
+import jakarta.persistence.Table
 import jakarta.transaction.Transactional
 import jakarta.validation.Constraint
+import jakarta.validation.ConstraintValidator
 import jakarta.validation.ConstraintValidatorContext
+import jakarta.validation.Payload
+import org.springframework.data.repository.query.Param
+import org.springframework.data.jpa.repository.Query
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import java.time.Instant
-import java.util.UUID
+import kotlin.reflect.KClass
 
 enum class Role {ADMIN,TEAM_LEAD,DEPARTMENT_MANAGER,MANAGING_DIRECTOR}
 
 @Entity
 @Table(name = "users")
 class User(
-    @Id val id: UUID = UUID.randomUUID(),
+    @Id @Column(name = "user_id") val id: Int = 0,
     @Column(nullable = false, unique = true,length = 50) var username: String,
     @Column(nullable = false, unique = true) var email: String,
     @Column(nullable = false) var fullName: String,
     @Column(nullable = false) var passwordHash: String,
     @Enumerated(EnumType.STRING) @Column(nullable = false) var role: Role,
     @Column(nullable = false) var department: String,
-    @ElementCollection(fetch = FechType.EAGER)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_teams", joinColumns = [JoinColumn(name = "user_id")])
     @Column(name = "team")
     var teams: MutableSet<String> = mutableSetOf(),
@@ -40,7 +47,7 @@ class User(
     var failedWindowStart: Instant? = null,
     var lockedUntil: Instant? = null,
     )
-interface UserRepository : JpaRepository<User, UUID> {
+interface UserRepository : JpaRepository<User, Int> {
     fun findByUsername(username: String): User?
     fun existsByUsername(username: String): Boolean
 
@@ -65,34 +72,35 @@ object PasswordPolicy {
 
     @Target(AnnotationTarget.FIELD, AnnotationTarget.VALUE_PARAMETER)
     @Retention(AnnotationRetention.RUNTIME)
-    @Constraint(validateBy = [StrongPasswordValidator::class])
-    annotation class StrongPassword {
+    @Constraint(validatedBy = [StrongPasswordValidator::class])
+    annotation class StrongPassword(
         val message: String = "Password does not meet the password policy",
-        val groups: Aray<KClass<*>> = [],
+        val groups: Array<KClass<*>> = [],
         val payload: Array<KClass<out Payload>> = [],
-    }
+    )
 
     class StrongPasswordValidator : ConstraintValidator<StrongPassword, String?> {
-        override fun isValid(vaue: String?, context: ConstraintValidatorContext?): Boolean =
+        override fun isValid(value: String?, context: ConstraintValidatorContext?): Boolean =
             value == null || PasswordPolicy.violations(value).isEmpty()
     }
 
-    @Service
-    class UserService(private val users: UserRepository, private val encoder: PasswordEncoder) {
-        @Transactional
-        fun create(
-            username: String, email: String, fullName: String, rawPassword: String,
-            role: Role, department: String, teams: Set<String> = emptySet(),
-        ): User {
-            val violations = PasswordPolicy.violations(rawPassword)
-            if (violations.isNotEmpty()) throw WeakPasswordException(violations)
-            return users.save(
-                User(
-                    username = usename, email = email, fullName = fullName,
-                    passwordHash = encoder.encode(rawPassword)!!,
-                    role = role, department = department, teams = teams.toMutableSet(),
-                ),
-            )
-        }
+}
+
+@Service
+class UserService(private val users: UserRepository, private val encoder: PasswordEncoder) {
+    @Transactional
+    fun create(
+        username: String, email: String, fullName: String, rawPassword: String,
+        role: Role, department: String, teams: Set<String> = emptySet(),
+    ): User {
+        val violations = PasswordPolicy.violations(rawPassword)
+        if (violations.isNotEmpty()) throw WeakPasswordException(violations)
+        return users.save(
+            User(
+                username = username, email = email, fullName = fullName,
+                passwordHash = encoder.encode(rawPassword)!!,
+                role = role, department = department, teams = teams.toMutableSet(),
+            ),
+        )
     }
 }

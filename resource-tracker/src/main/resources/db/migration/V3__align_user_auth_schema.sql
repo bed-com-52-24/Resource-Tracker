@@ -1,0 +1,19 @@
+ALTER TABLE users
+    ADD COLUMN username VARCHAR(50) NOT NULL UNIQUE,
+    ADD COLUMN full_name VARCHAR(255) NOT NULL,
+    ADD COLUMN department VARCHAR(100) NOT NULL,
+    ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN failed_attempts INT NOT NULL DEFAULT 0,
+    ADD COLUMN failed_window_start TIMESTAMP NULL,
+    ADD COLUMN locked_until TIMESTAMP NULL;
+
+CREATE TABLE user_teams (
+    user_id INT NOT NULL,
+    team VARCHAR(100) NOT NULL,
+
+    PRIMARY KEY (user_id, team),
+    CONSTRAINT fk_user_teams_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE
+);

@@ -1,13 +1,6 @@
-
-
-
 CREATE DATABASE IF NOT EXISTS resource_tracker;
 
-
 USE resource_tracker;
-
-
-
 
 CREATE TABLE IF NOT EXISTS departments (
     department_id INT AUTO_INCREMENT,
@@ -28,6 +21,7 @@ CREATE TABLE IF NOT EXISTS projects (
     description VARCHAR(255),
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
 
+
     PRIMARY KEY (project_id),
     UNIQUE (department_id, project_name),
 
@@ -35,8 +29,6 @@ CREATE TABLE IF NOT EXISTS projects (
         FOREIGN KEY (department_id)
         REFERENCES departments(department_id)
 );
-
-
 
 
 CREATE TABLE IF NOT EXISTS teams (
