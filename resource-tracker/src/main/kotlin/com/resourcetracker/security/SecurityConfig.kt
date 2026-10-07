@@ -59,7 +59,10 @@ class SecurityConfig {
         .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
         .exceptionHandling { it.authenticationEntryPoint(entryPoint) }
         .authorizeHttpRequests {
-            it.requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh", "/error").permitAll()
+            it.requestMatchers(
+                "/api/v1/auth/login", "/api/v1/auth/refresh", "/error",
+                "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
+            ).permitAll()
                 .anyRequest().authenticated()
         }
         .addFilterBefore(

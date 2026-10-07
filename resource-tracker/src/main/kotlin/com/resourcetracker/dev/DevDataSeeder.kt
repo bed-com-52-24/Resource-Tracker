@@ -1,6 +1,7 @@
 package com.resourcetracker.dev
 
 import com.resourcetracker.user.Role
+import com.resourcetracker.user.CreateUserRequest
 import com.resourcetracker.user.UserRepository
 import com.resourcetracker.user.UserService
 import org.springframework.boot.ApplicationArguments
@@ -16,8 +17,18 @@ class DevDataSeeder(private val users: UserRepository,
 private val userService: UserService): ApplicationRunner
 {
     override fun run(args: ApplicationArguments){
-        if(!users.existsByUsername("admin")){
-            userService.create("admin","admin@example.com", "Dev Admin", "Admin@2026", Role.ADMIN, "IT", setOf("Platform"))
+        if (!users.existsByUsernameIgnoreCase("admin")) {
+            userService.create(
+                CreateUserRequest(
+                    username = "admin",
+                    email = "admin@example.com",
+                    fullName = "Dev Admin",
+                    password = "Admin@2026",
+                    role = Role.ADMIN,
+                    department = "IT",
+                    teams = setOf("Platform"),
+                ),
+            )
         }
     }
 }

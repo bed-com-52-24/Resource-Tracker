@@ -26,10 +26,17 @@ class UnauthenticatedException :
 class ForbiddenRoleException (val required: List<Role>, val actual: Role):
         ApiException(
              HttpStatus.FORBIDDEN, "INSUFFICIENT_ROLE",
-            "Requires role ${required.joinToString("or")} your role is ${actual}",
+            "Requires role ${required.joinToString("or")} your role is $actual",
         )
 class WeakPasswordException(val violations: List<String>):
         ApiException(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Password does not meet the password policy")
+class DuplicateResourceException(
+    message: String = "Resource already exists",
+) : ApiException(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", message)
+class ResourceNotFoundException(message: String = "Resource not found") :
+    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
+class BusinessRuleException(message: String) :
+    ApiException(HttpStatus.CONFLICT, "BUSINESS_RULE_VIOLATION", message)
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class ErrorResponse(

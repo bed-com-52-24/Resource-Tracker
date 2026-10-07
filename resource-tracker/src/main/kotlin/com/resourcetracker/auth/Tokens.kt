@@ -19,9 +19,9 @@ import java.time.Instant
 class RefreshToken(
     @Id val id: UUID = UUID.randomUUID(),
     @Column(nullable = false) val userId: Int,
-    @Column(nullable = false, unique = true , length = 64) val tokenHash: String,
+    @Column(nullable = false, unique = true, length = 64) val tokenHash: String,
     @Column(nullable = false) val expiresAt: Instant,
-    @Column(nullable = false)var revoked: Boolean = false,
+    @Column(nullable = false) var revoked: Boolean = false,
 )
 
 @Entity
@@ -31,7 +31,7 @@ class RevokedAccessToken(
     @Column(nullable = false) val expiresAt: Instant,
 )
 
-interface RefreshTokenRepository : JpaRepository<RefreshToken, UUID>{
+interface RefreshTokenRepository : JpaRepository<RefreshToken, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from RefreshToken t where t.tokenHash = :hash")
     fun findForUpdate(@Param("hash") hash: String): RefreshToken?
@@ -39,9 +39,14 @@ interface RefreshTokenRepository : JpaRepository<RefreshToken, UUID>{
     @Modifying
     @Query("delete from RefreshToken t where t.expiresAt < :now")
     fun deleteExpired(@Param("now") time: Instant): Int
+
+    @Modifying
+    @Query("update RefreshToken t set t.revoked = true where t.userId = :userId and t.revoked = false")
+    fun revokeAllByUserId(@Param("userId") userId: Int): Int
+
 }
 
-interface RevokedAccessTokenRepository : JpaRepository<RevokedAccessToken, String>{
+interface RevokedAccessTokenRepository : JpaRepository<RevokedAccessToken, String> {
     @Modifying
     @Query("delete from RevokedAccessToken t where t.expiresAt < :now")
     fun deleteExpired(@Param("now") time: Instant): Int
@@ -52,12 +57,12 @@ class TokenCleanupJob(
     private val refreshTokens: RefreshTokenRepository,
     private val revoked: RevokedAccessTokenRepository,
     private val clock: Clock,
-){
-@Scheduled(cron = "0 0 * * * *")
-@Transactional
-fun purge(){
-    val now = clock.instant()
-    refreshTokens.deleteExpired(now)
-    revoked.deleteExpired(now)
+) {
+    @Scheduled(cron = "0 0 * * * *")
+    @Transactional
+    fun purge() {
+        val now = clock.instant()
+        refreshTokens.deleteExpired(now)
+        revoked.deleteExpired(now)
     }
 }
