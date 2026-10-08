@@ -1,8 +1,11 @@
 package com.resourcetracker.department
 
+import org.springframework.data.domain.Pageable
+import org.springframework.data.web.PageableDefault
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
+
 
 @RestController
 @RequestMapping("/api/departments")
@@ -14,7 +17,11 @@ class DepartmentController(private val departmentService: DepartmentService) {
         departmentService.create(request)
 
     @GetMapping
-    fun list() = departmentService.getAll()
+    fun list(
+        @RequestParam(required = false) status: String?,
+        @RequestParam(required = false) keyword: String?,
+        @PageableDefault(size = 20, sort = ["name"]) pageable: Pageable
+    ) = departmentService.search(status, keyword, pageable)
 
     @GetMapping("/{id}")
     fun get(@PathVariable id: Int) = departmentService.getById(id)

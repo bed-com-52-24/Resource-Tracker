@@ -4,6 +4,8 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 
 @Service
 class DepartmentService(private val departmentRepository: DepartmentRepository) {
@@ -19,8 +21,11 @@ class DepartmentService(private val departmentRepository: DepartmentRepository) 
         return saved.toResponse()
     }
 
-    fun getAll(): List<DepartmentResponse> =
-        departmentRepository.findAll().map { it.toResponse() }
+    fun getAll(): () -> Unit = {}
+    fun search(status: String?, keyword: String?, pageable: Pageable): Page<DepartmentResponse> =
+        departmentRepository
+            .search(status?.trim()?.ifBlank { null }, keyword?.trim()?.ifBlank { null }, pageable)
+            .map { it.toResponse() }
 
     fun getById(id: Int): DepartmentResponse = findOrThrow(id).toResponse()
 
