@@ -1,5 +1,7 @@
 package com.resourcetracker.vendor
 
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -21,6 +23,11 @@ class VendorService(private val vendorRepository: VendorRepository) {
 
     fun getAll(): List<VendorResponse> =
         vendorRepository.findAll().map { it.toResponse() }
+
+    fun search(status: String?, keyword: String?, pageable: Pageable): Page<VendorResponse> =
+        vendorRepository
+            .search(status?.trim()?.ifBlank { null }, keyword?.trim()?.ifBlank { null }, pageable)
+            .map { it.toResponse() }
 
     fun getById(id: Int): VendorResponse = findOrThrow(id).toResponse()
 

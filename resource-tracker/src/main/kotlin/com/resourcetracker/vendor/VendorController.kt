@@ -1,5 +1,7 @@
 package com.resourcetracker.vendor
 
+import org.springframework.data.domain.Pageable
+import org.springframework.data.web.PageableDefault
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
@@ -14,7 +16,11 @@ class VendorController(private val vendorService: VendorService) {
         vendorService.create(request)
 
     @GetMapping
-    fun list() = vendorService.getAll()
+    fun list(
+        @RequestParam(required = false) status: String?,
+        @RequestParam(required = false) keyword: String?,
+        @PageableDefault(size = 20, sort = ["name"]) pageable: Pageable
+    ) = vendorService.search(status, keyword, pageable)
 
     @GetMapping("/{id}")
     fun get(@PathVariable id: Int) = vendorService.getById(id)
