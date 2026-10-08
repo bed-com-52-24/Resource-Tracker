@@ -1,4 +1,4 @@
-package department
+package com.resourcetracker.department
 
 class Department {
 }
