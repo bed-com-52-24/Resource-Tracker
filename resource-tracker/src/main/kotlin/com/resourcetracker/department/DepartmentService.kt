@@ -24,8 +24,16 @@ class DepartmentService(private val departmentRepository: DepartmentRepository) 
     fun getAll(): () -> Unit = {}
     fun search(status: String?, keyword: String?, pageable: Pageable): Page<DepartmentResponse> =
         departmentRepository
-            .search(status?.trim()?.ifBlank { null }, keyword?.trim()?.ifBlank { null }, pageable)
+            .search(status?.trim()?.ifBlank { null }, cleanKeyword(keyword), pageable)
             .map { it.toResponse() }
+
+    private fun cleanKeyword(keyword: String?): String? {
+        val trimmed = keyword?.trim() ?: return null
+        if (trimmed.length > 200) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Keyword must be at most 200 characters")
+        }
+        return if (trimmed.length < 2) null else trimmed
+    }
 
     fun getById(id: Int): DepartmentResponse = findOrThrow(id).toResponse()
 
