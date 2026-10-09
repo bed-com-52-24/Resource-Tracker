@@ -5,8 +5,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import java.util.UUID
 
 interface ProjectRepository : JpaRepository<Project, UUID>, JpaSpecificationExecutor<Project> {
-    fun existsByDepartmentIdAndNameIgnoreCase(departmentId: UUID, name: String): Boolean
-    fun existsByDepartmentIdAndNameIgnoreCaseAndIdNot(departmentId: UUID, name: String, id: UUID): Boolean
+    fun existsByDepartmentIdAndNameIgnoreCase(departmentId: Int, name: String): Boolean
+    fun existsByDepartmentIdAndNameIgnoreCaseAndIdNot(departmentId: Int, name: String, id: UUID): Boolean
     fun existsByCodeIgnoreCase(code: String): Boolean
     fun existsByCodeIgnoreCaseAndIdNot(code: String, id: UUID): Boolean
 }

@@ -2,6 +2,8 @@ package com.resourcetracker.project
 
 import com.resourcetracker.department.Department
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -12,10 +14,12 @@ import java.util.UUID
     uniqueConstraints = [UniqueConstraint(columnNames = ["department_id", "name"])]
 )
 class Project(
-    @Id @GeneratedValue(strategy = GenerationType.UUID)
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @JdbcTypeCode(SqlTypes.CHAR)
     var id: UUID? = null,
 
-    @Column(nullable = false, length = 100)
+    @Column(name = "project_name", nullable = false, length = 150)
     var name: String,
 
     @Column(nullable = false, unique = true, length = 20)
@@ -25,16 +29,18 @@ class Project(
     @JoinColumn(name = "department_id")
     var department: Department,
 
-    @Column(nullable = false)
+    @Column(name = "start_date", nullable = false)
     var startDate: LocalDate,
 
+    @Column(name = "end_date")
     var endDate: LocalDate? = null,
 
-    @Column(nullable = false)
+    @Column(name = "active", nullable = false)
     var active: Boolean = true,
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
 
+    @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
 )

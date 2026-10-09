@@ -63,6 +63,11 @@ class SecurityConfig {
                 "/api/v1/auth/login", "/api/v1/auth/refresh", "/error",
                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
             ).permitAll()
+                .requestMatchers(
+                    "/api/departments/**",
+                    "/api/vendors/**",
+                    "/api/v1/projects/**",
+                ).hasRole("ADMIN")
                 .anyRequest().authenticated()
         }
         .addFilterBefore(

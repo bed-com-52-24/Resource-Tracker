@@ -18,8 +18,8 @@ class ProjectServiceTest {
     private val departments = mock(DepartmentRepository::class.java)
     private val service = ProjectService(projects, departments)
 
-    private val deptId = UUID.randomUUID()
-    private val dept = Department(id = deptId, name = "Engineering", code = "ENG")
+    private val deptId = 1
+    private val dept = Department(id = deptId, name = "Engineering")
 
     private fun request(
         name: String = "Data Pipeline",
@@ -38,7 +38,7 @@ class ProjectServiceTest {
 
     @Test
     fun `create fails when department is inactive`() {
-        dept.active = false
+        dept.status = "INACTIVE"
         `when`(departments.findById(deptId)).thenReturn(Optional.of(dept))
         assertThrows<NotFoundException> { service.create(request()) }
     }

@@ -8,7 +8,7 @@ import java.util.UUID
 object ProjectSpecifications {
 
     fun filter(
-        departmentId: UUID?,
+        departmentId: Int?,
         active: Boolean?,
         startFrom: LocalDate?,
         startTo: LocalDate?,
@@ -16,7 +16,7 @@ object ProjectSpecifications {
     ): Specification<Project> = Specification { root, _, cb ->
         val predicates = mutableListOf<Predicate>()
 
-        departmentId?.let { predicates.add(cb.equal(root.get<Any>("department").get<UUID>("id"), it)) }
+        departmentId?.let { predicates.add(cb.equal(root.get<Any>("department").get<Int>("id"), it)) }
         active?.let { predicates.add(cb.equal(root.get<Boolean>("active"), it)) }
         startFrom?.let { predicates.add(cb.greaterThanOrEqualTo(root.get<LocalDate>("startDate"), it)) }
         startTo?.let { predicates.add(cb.lessThanOrEqualTo(root.get<LocalDate>("startDate"), it)) }

@@ -14,8 +14,6 @@ import java.util.UUID
 @RequestMapping("/api/v1/projects")
 class ProjectController(private val service: ProjectService) {
 
-    // TODO(#16): add @PreAuthorize("hasRole('ADMIN')") on create/update/deactivate once auth (#12) is merged
-
     @PostMapping
     fun create(@Valid @RequestBody body: CreateProjectRequest): ResponseEntity<ProjectResponse> =
         ResponseEntity.status(HttpStatus.CREATED).body(service.create(body))
@@ -33,7 +31,7 @@ class ProjectController(private val service: ProjectService) {
     // Sort format: ?sort=name:asc&sort=startDate:desc (max 3)
     @GetMapping
     fun list(
-        @RequestParam(required = false) departmentId: UUID?,
+        @RequestParam(required = false) departmentId: Int?,
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startFrom: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startTo: LocalDate?,

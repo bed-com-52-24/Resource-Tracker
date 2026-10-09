@@ -15,7 +15,7 @@ data class CreateProjectRequest(
     val code: String,
 
     @field:NotNull
-    val departmentId: UUID,
+    val departmentId: Int,
 
     @field:NotNull
     val startDate: LocalDate,
@@ -31,7 +31,7 @@ data class UpdateProjectRequest(
     val code: String,
 
     @field:NotNull
-    val departmentId: UUID,
+    val departmentId: Int,
 
     @field:NotNull
     val startDate: LocalDate,
@@ -43,7 +43,7 @@ data class ProjectResponse(
     val id: UUID,
     val name: String,
     val code: String,
-    val departmentId: UUID,
+    val departmentId: Int,
     val departmentName: String,
     val startDate: LocalDate,
     val endDate: LocalDate?,

@@ -21,7 +21,7 @@ class ProjectService(
 
     @Transactional
     fun create(req: CreateProjectRequest): ProjectResponse {
-        val dept = departments.findByIdOrNull(req.departmentId)?.takeIf { it.active }
+        val dept = departments.findByIdOrNull(req.departmentId)?.takeIf { it.status == "ACTIVE" }
             ?: throw NotFoundException("Department not found or inactive")
         validateDates(req.startDate, req.endDate)
         val name = req.name.trim()
@@ -42,7 +42,7 @@ class ProjectService(
     @Transactional
     fun update(id: UUID, req: UpdateProjectRequest): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
-        val dept = departments.findByIdOrNull(req.departmentId)?.takeIf { it.active }
+        val dept = departments.findByIdOrNull(req.departmentId)?.takeIf { it.status == "ACTIVE" }
             ?: throw NotFoundException("Department not found or inactive")
         validateDates(req.startDate, req.endDate)
         val name = req.name.trim()
@@ -76,7 +76,7 @@ class ProjectService(
 
     @Transactional(readOnly = true)
     fun list(
-        departmentId: UUID?,
+        departmentId: Int?,
         active: Boolean?,
         startFrom: LocalDate?,
         startTo: LocalDate?,
