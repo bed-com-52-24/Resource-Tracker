@@ -1,6 +1,5 @@
 package com.resourcetracker.user
 
-import com.resourcetracker.common.WeakPasswordException
 import jakarta.persistence.CollectionTable
 import jakarta.persistence.Column
 import jakarta.persistence.ElementCollection
@@ -10,29 +9,30 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.LockModeType
 import jakarta.persistence.FetchType
+import jakarta.persistence.GeneratedValue
+import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import jakarta.transaction.Transactional
 import jakarta.validation.Constraint
 import jakarta.validation.ConstraintValidator
 import jakarta.validation.ConstraintValidatorContext
 import jakarta.validation.Payload
-import org.springframework.data.repository.query.Param
-import org.springframework.data.jpa.repository.Query
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
-import org.springframework.security.crypto.password.PasswordEncoder
-import org.springframework.stereotype.Service
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
+import org.springframework.data.repository.query.Param
+import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import kotlin.reflect.KClass
 
-enum class Role {ADMIN,TEAM_LEAD,DEPARTMENT_MANAGER,MANAGING_DIRECTOR}
+enum class Role { ADMIN, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR }
 
 @Entity
 @Table(name = "users")
 class User(
-    @Id @Column(name = "user_id") val id: Int = 0,
-    @Column(nullable = false, unique = true,length = 50) var username: String,
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "user_id") val id: Int = 0,
+    @Column(nullable = false, unique = true, length = 50) var username: String,
     @Column(nullable = false, unique = true) var email: String,
     @Column(nullable = false) var fullName: String,
     @Column(nullable = false) var passwordHash: String,
@@ -46,10 +46,25 @@ class User(
     @Column(nullable = false) var failedAttempts: Int = 0,
     var failedWindowStart: Instant? = null,
     var lockedUntil: Instant? = null,
-    )
+)
+
 interface UserRepository : JpaRepository<User, Int> {
     fun findByUsername(username: String): User?
-    fun existsByUsername(username: String): Boolean
+    fun existsByUsernameIgnoreCase(username: String): Boolean
+    fun existsByEmailIgnoreCase(email: String): Boolean
+    fun existsByEmailIgnoreCaseAndIdNot(email: String, id: Int): Boolean
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.role = :role and u.active = true")
+    fun findActiveByRoleForUpdate(@Param("role") role: Role): List<User>
+
+    @Query(
+        """select u from User u
+          where lower(u.username) like lower(concat('%', :q, '%'))
+             or lower(u.email) like lower(concat('%', :q, '%'))
+             or lower(u.fullName) like lower(concat('%', :q, '%'))"""
+    )
+    fun search(@Param("q") q: String, pageable: Pageable): Page<User>
 
     //lock so concurrent login should not lose counter increments
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -70,7 +85,7 @@ object PasswordPolicy {
         if (password.none { !it.isLetterOrDigit() }) add("Must contain at least one special character")
     }
 
-    @Target(AnnotationTarget.FIELD, AnnotationTarget.VALUE_PARAMETER)
+    @Target(AnnotationTarget.FIELD, AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.PROPERTY_GETTER)
     @Retention(AnnotationRetention.RUNTIME)
     @Constraint(validatedBy = [StrongPasswordValidator::class])
     annotation class StrongPassword(
@@ -84,23 +99,4 @@ object PasswordPolicy {
             value == null || PasswordPolicy.violations(value).isEmpty()
     }
 
-}
-
-@Service
-class UserService(private val users: UserRepository, private val encoder: PasswordEncoder) {
-    @Transactional
-    fun create(
-        username: String, email: String, fullName: String, rawPassword: String,
-        role: Role, department: String, teams: Set<String> = emptySet(),
-    ): User {
-        val violations = PasswordPolicy.violations(rawPassword)
-        if (violations.isNotEmpty()) throw WeakPasswordException(violations)
-        return users.save(
-            User(
-                username = username, email = email, fullName = fullName,
-                passwordHash = encoder.encode(rawPassword)!!,
-                role = role, department = department, teams = teams.toMutableSet(),
-            ),
-        )
-    }
 }
