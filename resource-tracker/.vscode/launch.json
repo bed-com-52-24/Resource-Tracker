@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Resource Tracker",
+            "request": "launch",
+            "mainClass": "com.resourcetracker.ResourceTrackerApplicationKt",
+            "projectName": "resource-tracker",
+            "cwd": "${workspaceFolder}/resource-tracker",
+            "envFile": "${workspaceFolder}/resource-tracker/.env",
+            "preLaunchTask": "Resource Tracker: Build"
+        }
+    ]
+}

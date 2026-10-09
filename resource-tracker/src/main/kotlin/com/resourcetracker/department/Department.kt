@@ -1,21 +1,22 @@
 package com.resourcetracker.department
 
 import jakarta.persistence.*
-import java.util.UUID
 
-// TEMPORARY STUB for issue #16. Replace with the real entity when it is merged.
 @Entity
 @Table(name = "departments")
 class Department(
-    @Id @GeneratedValue(strategy = GenerationType.UUID)
-    var id: UUID? = null,
 
-    @Column(nullable = false, length = 100)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "department_id")
+    val id: Int = 0,
+
+    @Column(name = "department_name", nullable = false, length = 100, unique = true)
     var name: String,
 
-    @Column(nullable = false, unique = true, length = 10)
-    var code: String,
+    @Column(name = "description", length = 255)
+    var description: String? = null,
 
-    @Column(nullable = false)
-    var active: Boolean = true
+    @Column(name = "status", length = 20)
+    var status: String = "ACTIVE"
 )
