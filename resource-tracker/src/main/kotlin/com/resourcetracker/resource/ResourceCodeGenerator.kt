@@ -27,7 +27,7 @@ interface CodeSequenceRepository : JpaRepository<CodeSequence, String> {
 
 @Service
 class ResourceCodeGenerator(private val repo: CodeSequenceRepository) {
-    @Transactional(propagation = Propagation.Mandatory)
+    @Transactional(propagation = Propagation.MANDATORY)
     fun next(): String {
         val seq = repo.lockByName("RESOURCE") ?: repo.save(CodeSequence("RESOURCE"))
         val value = seq.nextValue++
