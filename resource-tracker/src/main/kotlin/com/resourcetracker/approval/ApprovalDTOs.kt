@@ -1,18 +1,40 @@
 package com.resourcetracker.approval
 
+import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 
-/** What the manager sends. For approve the comment is optional (SRS 2.4.4.5). */
+/** Body for reject and query. */
 data class DecisionRequest(
-    @field:Size(max = 500, message = "Comment must be at most 500 characters")
+    @field:Schema(description = "Reason. Reject needs 10 to 500 characters; query needs 1 to 500.")
     val comment: String? = null
 )
 
-/** What the API returns after a decision. */
+/** One rejected line item and why. */
+data class RejectedLine(
+    val lineId: Int,
+    @field:Size(min = 10, max = 500, message = "A rejected line needs a comment of 10 to 500 characters")
+    val comment: String
+)
+
+/** Body for approve. Leave both lists empty to approve every line item. */
+data class ApproveRequest(
+    @field:Size(max = 500, message = "Comment must be at most 500 characters")
+    val comment: String? = null,
+
+    @field:Schema(description = "Line items to approve. For partial approval, list every line item once, either here or in rejectedLines.")
+    val approvedLineIds: List<Int> = emptyList(),
+
+    @field:Valid
+    val rejectedLines: List<RejectedLine> = emptyList()
+)
+
 data class DecisionResponse(
     val requestId: Int,
     val previousStatus: String,
     val newStatus: String,
     val decidedBy: Int,
-    val comment: String?
+    val comment: String?,
+    val approvedLineIds: List<Int>,
+    val rejectedLineIds: List<Int>
 )

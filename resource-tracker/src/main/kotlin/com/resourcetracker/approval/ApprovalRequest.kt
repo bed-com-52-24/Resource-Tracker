@@ -2,11 +2,6 @@ package com.resourcetracker.approval
 
 import jakarta.persistence.*
 
-/**
- * The part of resource_requests that the approval workflow needs.
- * It maps only some columns, which is allowed: Hibernate checks that the
- * columns it uses exist, and ignores the rest.
- */
 @Entity(name = "ApprovalRequest")
 @Table(name = "resource_requests")
 class ApprovalRequest(
@@ -22,5 +17,10 @@ class ApprovalRequest(
     val requesterId: Int,
 
     @Column(name = "status", nullable = false, length = 20)
-    var status: String
+    var status: String,
+
+    /** Optimistic lock: if two people change the same row, the second save fails. */
+    @Version
+    @Column(name = "version", nullable = false)
+    var version: Long = 0
 )

@@ -3,50 +3,49 @@ package com.resourcetracker.approval
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 
-/**
- * The statuses a resource request can have.
- * The database column resource_requests.status stores these as text.
- */
+/** The statuses a resource request can have (stored as text in resource_requests.status). */
 enum class RequestStatus {
-    PENDING, QUERIED, APPROVED, REJECTED, CANCELLED;
+    PENDING, QUERIED, APPROVED, PARTIALLY_APPROVED, REJECTED, CANCELLED;
 
-    /** Final statuses can never change again (SRS 2.4.4.5, 2.4.3.13). */
+    /** Final statuses can never change again. */
     val isFinal: Boolean
-        get() = this == APPROVED || this == REJECTED || this == CANCELLED
+        get() = this == APPROVED || this == PARTIALLY_APPROVED ||
+                this == REJECTED || this == CANCELLED
 }
 
-/**
- * Holds the rules for which status changes are allowed.
- * Keeping them in one place means every service uses the same rules
- * and invalid transitions are refused consistently (SRS 2.4.4.5, 2.4.4.6).
- */
+/** The single source of truth for allowed status changes. */
 object RequestStateMachine {
 
-    // For each status, the statuses it is allowed to move to.
-    // A status with no entry (APPROVED, REJECTED, CANCELLED) cannot move at all.
     private val allowedMoves: Map<RequestStatus, Set<RequestStatus>> = mapOf(
         RequestStatus.PENDING to setOf(
-            RequestStatus.APPROVED,   // manager approves
-            RequestStatus.REJECTED,   // manager rejects (comment required)
-            RequestStatus.QUERIED,    // manager asks for clarification (comment required)
-            RequestStatus.CANCELLED   // team lead cancels
+            RequestStatus.APPROVED,
+            RequestStatus.PARTIALLY_APPROVED,
+            RequestStatus.REJECTED,
+            RequestStatus.QUERIED,
+            RequestStatus.CANCELLED
         ),
-        RequestStatus.QUERIED to setOf(
-            RequestStatus.PENDING     // team lead resubmits after correcting
-        )
+        RequestStatus.QUERIED to setOf(RequestStatus.PENDING)
     )
 
-    /** True if a request may move from one status to another. */
     fun canMove(from: RequestStatus, to: RequestStatus): Boolean =
         allowedMoves[from]?.contains(to) == true
 
-    /** Throws 409 Conflict if the move is not allowed; does nothing if it is. */
     fun requireMove(from: RequestStatus, to: RequestStatus) {
         if (!canMove(from, to)) {
             val options = allowedMoves[from]?.joinToString() ?: "none (final status)"
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
                 "Cannot change a request from $from to $to. Allowed moves: $options"
+            )
+        }
+    }
+
+    /** A manager can only decide on a request that is PENDING. */
+    fun requirePending(current: RequestStatus) {
+        if (current != RequestStatus.PENDING) {
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Only PENDING requests can be decided on. Current status: $current"
             )
         }
     }
