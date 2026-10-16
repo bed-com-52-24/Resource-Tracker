@@ -5,6 +5,7 @@ import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.resource.Resource
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
+import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
@@ -22,6 +23,29 @@ class InventoryService(
         private val users: UserRepository,
         private val events: ApplicationEventPublisher,
 ) {
+    @Transactional(readOnly = true)
+    fun availability(resourceId: UUID): ResourceAvailabilityResponse {
+        val resource = internalResource(resourceId)
+        val totals = inventories.totalsForResource(resourceId)
+        return availabilityResponse(resource, totals?.getAvailable() ?: 0L,
+            totals?.getReserved() ?: 0L, totals?.getIssued() ?: 0L)
+    }
+
+    @Transactional(readOnly = true)
+    fun availabilityList(departmentId: Int?, category: ResourceCategory?, status: AvailabilityStatus?): List<ResourceAvailabilityResponse> {
+        val resources = resources.findActiveForAvailability(ResourceType.INTERNAL, departmentId, category)
+        if (resources.isEmpty()) return emptyList()
+        val totals = inventories.totalsForResources(resources.map { it.id }).associateBy { it.getResourceId() }
+        return resources.map { resource ->
+            val row = totals[resource.id]
+            availabilityResponse(resource, row?.getAvailable() ?: 0L, row?.getReserved() ?: 0L, row?.getIssued() ?: 0L)
+        }.filter { status == null || it.status == status }
+    }
+
+    private fun availabilityResponse(resource: Resource, available: Long, reserved: Long, issued: Long) =
+        ResourceAvailabilityResponse(resource.id, resource.name, resource.category, resource.department?.name,
+            available.toInt(), reserved.toInt(), issued.toInt(), classifyAvailability(available, reserved, issued), null)
+
     @Transactional
     fun create(
             resourceId: UUID,
@@ -261,4 +285,15 @@ class InventoryService(
                     reorderLevel,
                     lastUpdated
             )
+}
+
+/** Stock with free units is AVAILABLE when there are no holds or issues; otherwise PARTIALLY_AVAILABLE.
+ * With no free units, a positive reservation yields FULLY_RESERVED; otherwise it is OUT_OF_STOCK.
+ * Issued quantity is excluded from free stock and does not count as a reservation.
+ */
+internal fun classifyAvailability(available: Long, reserved: Long, issued: Long): AvailabilityStatus = when {
+    available > 0 && reserved == 0L && issued == 0L -> AvailabilityStatus.AVAILABLE
+    available > 0 -> AvailabilityStatus.PARTIALLY_AVAILABLE
+    reserved > 0 -> AvailabilityStatus.FULLY_RESERVED
+    else -> AvailabilityStatus.OUT_OF_STOCK
 }

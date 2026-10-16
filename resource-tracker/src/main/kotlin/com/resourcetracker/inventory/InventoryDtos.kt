@@ -7,6 +7,25 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
+import com.resourcetracker.resource.ResourceCategory
+
+enum class AvailabilityStatus {
+    AVAILABLE, PARTIALLY_AVAILABLE, FULLY_RESERVED, OUT_OF_STOCK
+}
+
+@Schema(description = "Availability for an internal resource. AVAILABLE means stock is wholly free; PARTIALLY_AVAILABLE means some but not all stock is free; FULLY_RESERVED means no stock is free and at least one unit is reserved; OUT_OF_STOCK means no stock is free and none is reserved (including stock currently issued).")
+data class ResourceAvailabilityResponse(
+    val resourceId: UUID,
+    val name: String,
+    val category: ResourceCategory,
+    val department: String?,
+    val available: Int,
+    val reserved: Int,
+    val issued: Int,
+    val status: AvailabilityStatus,
+    @get:Schema(description = "Null until scheduled due-return data is introduced by RT-18")
+    val nextExpectedAvailability: java.time.Instant? = null,
+)
 
 data class CreateInventoryRequest(
     @field:NotBlank @field:Size(max = 120)

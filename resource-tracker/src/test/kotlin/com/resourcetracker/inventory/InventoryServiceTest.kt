@@ -17,6 +17,15 @@ import java.util.UUID
 import kotlin.test.assertTrue
 
 class InventoryServiceTest {
+    @Test
+    fun `availability classification follows documented stock rules`() {
+        assertEquals(AvailabilityStatus.AVAILABLE, classifyAvailability(5, 0, 0))
+        assertEquals(AvailabilityStatus.PARTIALLY_AVAILABLE, classifyAvailability(2, 2, 1))
+        assertEquals(AvailabilityStatus.FULLY_RESERVED, classifyAvailability(0, 3, 0))
+        assertEquals(AvailabilityStatus.OUT_OF_STOCK, classifyAvailability(0, 0, 4))
+        assertEquals(AvailabilityStatus.OUT_OF_STOCK, classifyAvailability(0, 0, 0))
+    }
+
     private val inventories = mock(InventoryRepository::class.java)
     private val audits = mock(InventoryAuditLogRepository::class.java)
     private val resources = mock(ResourceRepository::class.java)
