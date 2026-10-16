@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 
 @Service
@@ -16,7 +17,9 @@ class ResourceRequestService(
     private val requestRepository: ResourceRequestRepository,
     private val lineItemRepository: RequestLineItemRepository,
     private val numberService: RequestNumberService,
-    private val validationService: RequestValidationService
+    private val validationService: RequestValidationService,
+    private val objectMapper: ObjectMapper,
+    private val idempotencyService: RequestIdempotencyService
 ) {
 
     @Transactional
@@ -174,5 +177,67 @@ class ResourceRequestService(
         request.status = RequestStatus.CANCELLED
 
         return requestRepository.save(request)
+    }
+    @Transactional
+    fun createRequestIdempotently(
+        dto: CreateResourceRequestDto,
+        requesterId: Int,
+        assignedManagerId: Int,
+        idempotencyId: Long
+    ): RequestCreationResult {
+        validationService.validateLineItems(dto.lineItems)
+
+        val total = validationService.calculateTotal(dto.lineItems)
+        val firstItem = dto.lineItems.first()
+
+        val request = requestRepository.save(
+            ResourceRequest(
+                requestNumber = numberService.generateRequestNumber(),
+                itemDescription = firstItem.description,
+                manufacturer = firstItem.manufacturer,
+                unitPrice = firstItem.unitPrice,
+                quantity = firstItem.quantity,
+                batchNumber = firstItem.batchNumber,
+                vendorId = dto.vendorId,
+                departmentId = dto.departmentId,
+                projectId = dto.projectId,
+                teamId = dto.teamId,
+                requesterId = requesterId,
+                assignedManagerId = assignedManagerId,
+                status = RequestStatus.PENDING,
+                justification = dto.justification,
+                totalAmount = total
+            )
+        )
+
+        val requestId = requireNotNull(request.requestId)
+
+        lineItemRepository.saveAll(
+            dto.lineItems.map { item ->
+                ResourceRequestLineItem(
+                    requestId = requestId,
+                    description = item.description,
+                    manufacturer = item.manufacturer,
+                    unitPrice = item.unitPrice,
+                    quantity = item.quantity,
+                    category = item.category,
+                    batchNumber = item.batchNumber
+                )
+            }
+        )
+
+        val body = objectMapper.writeValueAsString(request)
+
+        idempotencyService.complete(
+            idempotencyId = idempotencyId,
+            requestId = requestId,
+            responseStatus = 201,
+            responseBody = body
+        )
+
+        return RequestCreationResult(
+            httpStatus = 201,
+            responseBody = body
+        )
     }
 }

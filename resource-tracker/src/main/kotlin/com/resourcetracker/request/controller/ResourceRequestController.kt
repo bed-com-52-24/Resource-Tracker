@@ -2,10 +2,13 @@ package com.resourcetracker.request.controller
 
 import com.resourcetracker.request.dto.CreateResourceRequestDto
 import com.resourcetracker.request.dto.UpdateResourceRequestDto
+import com.resourcetracker.request.service.RequestCreationFacade
 import com.resourcetracker.request.service.ResourceRequestService
 import com.resourcetracker.common.UnauthenticatedException
 import com.resourcetracker.security.AuthenticatedUser
 import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
@@ -14,7 +17,8 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @RequestMapping("/api/requests")
 class ResourceRequestController(
-    private val requestService: ResourceRequestService
+    private val requestService: ResourceRequestService,
+    private val requestCreationFacade: RequestCreationFacade
 ) {
 
     private fun currentUserId(
@@ -24,18 +28,33 @@ class ResourceRequestController(
             ?: throw UnauthenticatedException()
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    fun create(
-        @Valid @RequestBody dto: CreateResourceRequestDto,
-        @RequestHeader("Idempotency-Key") idempotencyKey: String,
-        authentication: Authentication
-    ) = requestService.createRequest(
-        dto = dto,
-        requesterId = currentUserId(authentication),
-        assignedManagerId = TODO(
-            "Resolve the manager using your routing rules"
-        )
+fun create(
+    @Valid @RequestBody dto: CreateResourceRequestDto,
+    @RequestHeader("Idempotency-Key") idempotencyKey: String,
+    authentication: Authentication
+): org.springframework.http.ResponseEntity<String> {
+    val requesterId = currentUserId(authentication)
+
+    // Replace this TODO with your routing-rule service.
+    val assignedManagerId = TODO(
+        "Resolve the manager using your routing rules"
     )
+
+    val result = requestCreationFacade.create(
+        dto = dto,
+        requesterId = requesterId,
+        assignedManagerId = assignedManagerId,
+        idempotencyKey = idempotencyKey
+    )
+
+    return org.springframework.http.ResponseEntity
+        .status(result.httpStatus)
+        .header(
+            org.springframework.http.HttpHeaders.CONTENT_TYPE,
+            org.springframework.http.MediaType.APPLICATION_JSON_VALUE
+        )
+        .body(result.responseBody)
+}
 
     @GetMapping
     fun list(

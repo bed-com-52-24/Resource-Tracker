@@ -3,16 +3,18 @@ package com.resourcetracker.request.service
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.Year
 
 @Service
 class RequestNumberService(
-    private val jdbcTemplate: JdbcTemplate
+    private val jdbcTemplate: JdbcTemplate,
+    private val clock: Clock
 ) {
 
     @Transactional
     fun generateRequestNumber(): String {
-        val year = Year.now().value
+        val year = Year.now(clock).value
 
         jdbcTemplate.update(
             """
