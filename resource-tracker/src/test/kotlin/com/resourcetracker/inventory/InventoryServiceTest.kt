@@ -4,6 +4,8 @@ import com.resourcetracker.resource.Resource
 import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
+import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.user.Role
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -21,6 +23,13 @@ class InventoryServiceTest {
     private val users = mock(com.resourcetracker.user.UserRepository::class.java)
     private val events = mock(ApplicationEventPublisher::class.java)
     private val service = InventoryService(inventories, audits, resources, users, events)
+    private val caller = AuthenticatedUser(
+        id = 1,
+        username = "admin",
+        role = Role.ADMIN,
+        jti = "test",
+        tokenExpiresAt = java.time.Instant.MAX,
+    )
     private val resource = Resource(
         id = UUID.randomUUID(), code = "R-1", name = "Printer paper",
         type = ResourceType.INTERNAL, category = ResourceCategory.CONSUMABLE, unitOfMeasure = "ream",
@@ -32,11 +41,27 @@ class InventoryServiceTest {
         `when`(inventories.findAllByResourceIdOrderByLocation(resource.id)).thenReturn(listOf(inventory))
         `when`(inventories.findForUpdate(resource.id, "HQ")).thenReturn(inventory)
 
-        service.reserve(resource.id, 1)
+        service.transact(
+            resource.id,
+            InventoryTransactionRequest(
+                type = InventoryTransactionType.RESERVE,
+                quantity = 1,
+                location = "HQ",
+            ),
+            caller,
+        )
 
         assertEquals(0, inventory.availableQuantity)
         assertThrows<com.resourcetracker.common.BusinessRuleException> {
-            service.reserve(resource.id, 1)
+            service.transact(
+                resource.id,
+                InventoryTransactionRequest(
+                    type = InventoryTransactionType.RESERVE,
+                    quantity = 1,
+                    location = "HQ",
+                ),
+                caller,
+            )
         }
         assertEquals(1, inventory.reservedQuantity)
         assertTrue(inventory.availableQuantity >= 0)
