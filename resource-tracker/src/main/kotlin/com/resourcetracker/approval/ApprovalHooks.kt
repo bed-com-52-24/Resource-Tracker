@@ -9,10 +9,12 @@ data class LineDecision(
     val line: ApprovalLineItem,
     val approved: Boolean,
     val comment: String?,
-    val actorId: Int
+    val actorId: Int,
+    /** True if the manager chose to approve short-stock internal lines as waitlisted. */
+    val waitlist: Boolean = false
 )
 
-/** To be implemented by issue #39 (reservation, availability review). Runs per INTERNAL line, in the same transaction. */
+/** Implemented by issue #39 (reservation, availability review). Runs per INTERNAL line, in the same transaction. */
 interface InternalApprovalHandler {
     fun handle(decision: LineDecision)
 }
