@@ -1,6 +1,9 @@
 package com.resourcetracker.approval
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
+import java.util.UUID
 
 /** A reservation of stock for one approved internal line item. */
 @Entity(name = "ResourceAllocation")
@@ -18,8 +21,9 @@ class ResourceAllocation(
     @Column(name = "line_id", nullable = false)
     val lineId: Int,
 
+    @JdbcTypeCode(SqlTypes.BINARY)
     @Column(name = "resource_id", nullable = false)
-    val resourceId: Int,
+    val resourceId: UUID,
 
     @Column(name = "quantity", nullable = false)
     val quantity: Int,

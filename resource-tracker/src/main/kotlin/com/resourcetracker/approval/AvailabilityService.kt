@@ -4,11 +4,12 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import java.util.UUID
 
 data class LineAvailability(
     val lineId: Int,
     val description: String,
-    val resourceId: Int?,
+    val resourceId: UUID?,
     val requested: Int,
     val total: Int?,
     val available: Int?,

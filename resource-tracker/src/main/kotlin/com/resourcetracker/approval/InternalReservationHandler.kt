@@ -20,31 +20,42 @@ class InternalReservationHandler(
 
         val line = decision.line
         val resourceId = line.resourceId ?: throw ResponseStatusException(
-            HttpStatus.BAD_REQUEST, "Internal line ${line.id} is not linked to an inventory item"
+            HttpStatus.BAD_REQUEST, "Internal line ${line.id} is not linked to a catalogue resource"
         )
         val before = inventory.availability(resourceId) ?: throw ResponseStatusException(
-            HttpStatus.NOT_FOUND, "Inventory item $resourceId not found"
+            HttpStatus.NOT_FOUND, "No inventory found for resource $resourceId"
         )
 
+        val reason = "Request ${decision.requestId}, line ${line.id}"
+        val reservation = inventory.tryReserve(resourceId, line.quantity, decision.actorId, reason)
+
         when {
-            inventory.tryReserve(resourceId, line.quantity) -> {
-                allocations.save(ResourceAllocation(
-                    requestId = decision.requestId, lineId = line.id,
-                    resourceId = resourceId, quantity = line.quantity, status = "RESERVED"
-                ))
-                val after = inventory.availability(resourceId)
-                audit(decision, "RESOURCE_RESERVED", "RESERVED",
-                    "Line ${line.id}, item $resourceId: reserved ${before.reserved} -> ${after?.reserved}, " +
-                            "available ${before.available} -> ${after?.available}")
+            reservation != null -> {
+                allocations.save(
+                    ResourceAllocation(
+                        requestId = decision.requestId, lineId = line.id,
+                        resourceId = resourceId, quantity = line.quantity, status = "RESERVED"
+                    )
+                )
+                audit(
+                    decision, "RESOURCE_RESERVED", "RESERVED",
+                    "Line ${line.id}, resource $resourceId: reserved ${reservation.before.reserved} -> " +
+                            "${reservation.after.reserved}, available ${reservation.before.available} -> " +
+                            "${reservation.after.available}"
+                )
             }
             decision.waitlist -> {
                 // Waitlist hand-off to RT-19: record the allocation as WAITLISTED.
-                allocations.save(ResourceAllocation(
-                    requestId = decision.requestId, lineId = line.id,
-                    resourceId = resourceId, quantity = line.quantity, status = "WAITLISTED"
-                ))
-                audit(decision, "RESOURCE_WAITLISTED", "WAITLISTED",
-                    "Line ${line.id}, item $resourceId: wanted ${line.quantity}, available ${before.available}")
+                allocations.save(
+                    ResourceAllocation(
+                        requestId = decision.requestId, lineId = line.id,
+                        resourceId = resourceId, quantity = line.quantity, status = "WAITLISTED"
+                    )
+                )
+                audit(
+                    decision, "RESOURCE_WAITLISTED", "WAITLISTED",
+                    "Line ${line.id}, resource $resourceId: wanted ${line.quantity}, available ${before.available}"
+                )
             }
             else -> throw ResponseStatusException(
                 HttpStatus.CONFLICT,
@@ -55,9 +66,11 @@ class InternalReservationHandler(
     }
 
     private fun audit(decision: LineDecision, action: String, newState: String, comment: String) {
-        auditRepository.save(ApprovalAudit(
-            requestId = decision.requestId, actorId = decision.actorId,
-            previousState = null, newState = newState, action = action, comment = comment
-        ))
+        auditRepository.save(
+            ApprovalAudit(
+                requestId = decision.requestId, actorId = decision.actorId,
+                previousState = null, newState = newState, action = action, comment = comment
+            )
+        )
     }
 }
