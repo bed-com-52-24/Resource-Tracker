@@ -31,6 +31,7 @@ class ApprovalService(
         val comment = optionalComment(body?.comment)
         val approvedIds = body?.approvedLineIds.orEmpty()
         val rejectedLines = body?.rejectedLines.orEmpty()
+        val waitlist = body?.waitlist == true
         val lines = lineRepository.findByRequestId(requestId)
         val hasLineDecisions = approvedIds.isNotEmpty() || rejectedLines.isNotEmpty()
 
@@ -52,7 +53,7 @@ class ApprovalService(
         for (line in lines) {
             val rejectedComment = rejectedComments[line.id]
             if (rejectedComment == null) {
-                decideLine(requestId, line, true, comment, actorId)
+                decideLine(requestId, line, true, comment, actorId, waitlist)
                 approvedResult.add(line.id)
             } else {
                 decideLine(requestId, line, false, rejectedComment, actorId)
@@ -137,12 +138,19 @@ class ApprovalService(
     }
 
     /** Marks one line, then calls the internal or external handler for it. */
-    private fun decideLine(requestId: Int, line: ApprovalLineItem, approved: Boolean, comment: String?, actorId: Int) {
+    private fun decideLine(
+        requestId: Int,
+        line: ApprovalLineItem,
+        approved: Boolean,
+        comment: String?,
+        actorId: Int,
+        waitlist: Boolean = false
+    ) {
         line.status = if (approved) "APPROVED" else "REJECTED"
         line.decisionComment = comment
         lineRepository.save(line)
 
-        val decision = LineDecision(requestId, line, approved, comment, actorId)
+        val decision = LineDecision(requestId, line, approved, comment, actorId, waitlist)
         if (line.source == "INTERNAL") {
             internalHandlers.orderedStream().forEach { it.handle(decision) }
         } else {

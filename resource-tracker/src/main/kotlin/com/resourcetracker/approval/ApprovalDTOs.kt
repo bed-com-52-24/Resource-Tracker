@@ -22,6 +22,9 @@ data class ApproveRequest(
     @field:Size(max = 500, message = "Comment must be at most 500 characters")
     val comment: String? = null,
 
+    @field:Schema(description = "If true, internal lines with too little stock are approved as waitlisted instead of failing with 409.")
+    val waitlist: Boolean = false,
+
     @field:Schema(description = "Line items to approve. For partial approval, list every line item once, either here or in rejectedLines.")
     val approvedLineIds: List<Int> = emptyList(),
 
