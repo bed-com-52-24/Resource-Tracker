@@ -28,13 +28,13 @@ class NotificationServiceTest {
 
         service.notify(userIds, NotificationType.SUBMITTED, payload)
 
-        val captor = argumentCaptor<Notification>()
+        val captor = argumentCaptor<Iterable<Notification>>()
         verify(repository).saveAll(captor.capture())
-        val notifications = captor.allValues
+        val notifications = captor.firstValue.toList()
         assertEquals(2, notifications.size)
         assertEquals(NotificationType.SUBMITTED, notifications[0].type)
         assertEquals("req-42", notifications[0].requestId)
-        assertEquals("Request submitted", notifications[0].message)
+        assertEquals("Request req-42 has been submitted.", notifications[0].message)
         assertFalse(notifications[0].read)
     }
 
@@ -48,7 +48,7 @@ class NotificationServiceTest {
             message = "Approved",
             createdAt = Instant.now()
         )
-        `when`(repository.findByRecipientIdOrderByCreatedAtDesc(1, Pageable.unpaged())).thenReturn(listOf(item))
+        `when`(repository.findByRecipientIdOrderByCreatedAtDesc(1, Pageable.unpaged())).thenReturn(PageImpl(listOf(item)))
 
         val result = service.listForUser(caller.id, unreadOnly = false, search = null, Pageable.unpaged())
 
@@ -68,6 +68,7 @@ class NotificationServiceTest {
             createdAt = Instant.now()
         )
         `when`(repository.findByIdAndRecipientId(77, 2)).thenReturn(item)
+        `when`(repository.save(item)).thenReturn(item)
 
         service.markRead(caller.id, 77)
 
@@ -79,7 +80,7 @@ class NotificationServiceTest {
         val caller = AuthenticatedUser(2, "bob", Role.TEAM_LEAD, "jti", Instant.now())
         `when`(repository.findByIdAndRecipientId(77, 2)).thenReturn(null)
 
-        assertThrows(IllegalArgumentException::class.java) {
+        assertThrows<IllegalArgumentException> {
             service.markRead(caller.id, 77)
         }
     }
