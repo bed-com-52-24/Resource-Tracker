@@ -1,6 +1,9 @@
 package com.resourcetracker.approval
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
+import java.util.UUID
 
 /** One item inside a request. Each item is approved or rejected separately. */
 @Entity(name = "ApprovalLineItem")
@@ -30,7 +33,8 @@ class ApprovalLineItem(
     @Column(name = "decision_comment", length = 500)
     var decisionComment: String?,
 
-    /** The inventory item an INTERNAL line asks for (column added in V9). */
+    /** The catalogue resource an INTERNAL line asks for (resources.id, a 16-byte UUID). */
+    @JdbcTypeCode(SqlTypes.BINARY)
     @Column(name = "resource_id")
-    val resourceId: Int? = null
+    val resourceId: UUID? = null
 )
