@@ -13,12 +13,12 @@ interface DepartmentRepository : JpaRepository<Department, Int> {
     @Query(
         """
         SELECT d FROM Department d
-        WHERE (:status IS NULL OR UPPER(d.status) = UPPER(:status))
+        WHERE (:active IS NULL OR d.status = CASE WHEN :active = true THEN 'ACTIVE' ELSE 'INACTIVE' END)
           AND (:keyword IS NULL OR LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
         """
     )
     fun search(
-        @Param("status") status: String?,
+        @Param("active") active: Boolean?,
         @Param("keyword") keyword: String?,
         pageable: Pageable
     ): Page<Department>

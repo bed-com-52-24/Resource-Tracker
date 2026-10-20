@@ -3,6 +3,7 @@ package com.resourcetracker.team
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -26,31 +27,53 @@ class TeamController(private val service: TeamService) {
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Update a team", description = "Admin only. Returns 200, 400, 401, 403, 404 or 409.")
-    fun update(@PathVariable id: Int, @Valid @RequestBody body: TeamRequest): TeamResponse =
+    @Operation(
+        summary = "Update a team",
+        description = "Admin only. Updates name, department, manager and projects. " +
+                "If `isActive` is false, the team is deactivated; if true, it is reactivated. " +
+                "Omit `isActive` to leave the value unchanged. Returns 200, 400, 401, 403, 404 or 409."
+    )
+    fun update(@PathVariable id: Int, @Valid @RequestBody body: UpdateTeamRequest): TeamResponse =
         service.update(id, body)
-
-    @PostMapping("/{id}/deactivate")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Deactivate a team", description = "Admin only. The team is kept and marked INACTIVE.")
-    fun deactivate(@PathVariable id: Int): TeamResponse = service.deactivate(id)
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a team", description = "Any authenticated user.")
     fun get(@PathVariable id: Int): TeamResponse = service.get(id)
 
-    // Sort format: ?sort=name:asc&sort=createdAt:desc (max 3)
     @GetMapping
-    @Operation(summary = "List teams", description = "Any authenticated user. Filters, keyword search, sorting and pagination.")
+    @Operation(
+        summary = "List teams",
+        description = "Any authenticated user. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
+    )
     fun list(
+        @Parameter(description = "Filter by department ID", example = "1")
         @RequestParam(required = false) departmentId: Int?,
+        @Parameter(description = "Filter by manager ID", example = "7")
         @RequestParam(required = false) managerId: Int?,
+        @Parameter(description = "Filter by project ID")
         @RequestParam(required = false) projectId: UUID?,
-        @RequestParam(required = false) status: String?,
+        @Parameter(description = "Filter by active state. Omit to return both active and inactive teams.", example = "true")
+        @RequestParam(required = false) isActive: Boolean?,
+        @Parameter(description = "Search team names", example = "alpha")
         @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
         @RequestParam(defaultValue = "0") page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
         @RequestParam(defaultValue = "20") size: Int,
-        @RequestParam(defaultValue = "name:asc") sort: List<String>
+        @Parameter(description = "Sort field: name, isActive, or createdAt", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String
     ): Page<TeamResponse> =
-        service.list(departmentId, managerId, projectId, status, search, page, size, sort)
+        service.list(
+            departmentId, managerId, projectId, isActive, search, page, size,
+            listOf(
+                "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
+                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
+            )
+        )
+
+    companion object {
+        private val ALLOWED_SORT_FIELDS = setOf("name", "isActive", "createdAt")
+    }
 }

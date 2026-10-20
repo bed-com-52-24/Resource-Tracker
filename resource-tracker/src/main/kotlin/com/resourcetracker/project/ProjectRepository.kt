@@ -9,4 +9,5 @@ interface ProjectRepository : JpaRepository<Project, UUID>, JpaSpecificationExec
     fun existsByDepartmentIdAndNameIgnoreCaseAndIdNot(departmentId: Int, name: String, id: UUID): Boolean
     fun existsByCodeIgnoreCase(code: String): Boolean
     fun existsByCodeIgnoreCaseAndIdNot(code: String, id: UUID): Boolean
+     fun existsByDepartmentIdAndActiveTrue(departmentId: Int): Boolean
 }

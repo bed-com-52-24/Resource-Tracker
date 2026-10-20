@@ -84,7 +84,7 @@ class TeamServiceTest {
 
         assertEquals("Alpha", response.name)
         assertEquals(7, response.managerId)
-        assertEquals("ACTIVE", response.status)
+        assertEquals(true, response.isActive)
     }
 
     @Test
@@ -94,7 +94,7 @@ class TeamServiceTest {
 
         service.deactivate(3)
 
-        assertEquals("INACTIVE", team.status)
+        assertEquals(false, team.isActive)
     }
 
     @Test
@@ -107,7 +107,7 @@ class TeamServiceTest {
     fun `list rejects more than three sort fields`() {
         assertThrows<InvalidTeamRequestException> {
             service.list(null, null, null, null, null, 0, 20,
-                listOf("name", "status", "createdAt", "name"))
+                listOf("name", "isActive", "createdAt", "name"))
         }
     }
 

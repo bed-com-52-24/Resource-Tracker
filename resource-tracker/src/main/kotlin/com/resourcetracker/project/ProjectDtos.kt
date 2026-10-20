@@ -1,5 +1,6 @@
 package com.resourcetracker.project
 
+import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
@@ -11,7 +12,10 @@ data class CreateProjectRequest(
     @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String,
 
-    @field:NotBlank @field:Pattern(regexp = "^[A-Z0-9]{2,20}$", message = "Code must be 2-20 uppercase letters or digits")
+    @field:NotBlank @field:Pattern(
+        regexp = "^[A-Z0-9]{2,20}$",
+        message = "Code must be 2-20 uppercase letters or digits"
+    )
     val code: String,
 
     @field:NotNull
@@ -27,7 +31,10 @@ data class UpdateProjectRequest(
     @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String,
 
-    @field:NotBlank @field:Pattern(regexp = "^[A-Z0-9]{2,20}$", message = "Code must be 2-20 uppercase letters or digits")
+    @field:NotBlank @field:Pattern(
+        regexp = "^[A-Z0-9]{2,20}$",
+        message = "Code must be 2-20 uppercase letters or digits"
+    )
     val code: String,
 
     @field:NotNull
@@ -36,7 +43,10 @@ data class UpdateProjectRequest(
     @field:NotNull
     val startDate: LocalDate,
 
-    val endDate: LocalDate? = null
+    val endDate: LocalDate? = null,
+
+    @field:Schema(description = "Set to false to deactivate the project, true to reactivate it. Omit to leave unchanged.",nullable = true)
+    val active: Boolean? = null,
 )
 
 data class ProjectResponse(

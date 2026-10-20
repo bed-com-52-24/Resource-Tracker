@@ -26,7 +26,7 @@ class JdbcRoutingReferenceValidator(
 
     override fun requireActiveTeam(id: Int) {
         requireReference(
-            "SELECT COUNT(*) FROM teams WHERE team_id = ? AND status = 'ACTIVE'",
+            "SELECT COUNT(*) FROM teams WHERE team_id = ? AND is_active = TRUE",
             id,
             "Team is missing or inactive"
         )

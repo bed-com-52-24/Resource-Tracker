@@ -76,37 +76,19 @@ class UserService(
         user.teams.clear()
         user.teams.addAll(cleanTeams(request.teams))
 
+        request.role?.let { newRole ->
+            if(newRole != user.role){
+                applyRole(user, newRole)
+            }
+        }
+        
+        request.active?.let{applyActive(user, it)}
+
         return try {
-            users.saveAndFlush(user).toResponse()
+            users.save(user).toResponse()
         } catch (e: DataIntegrityViolationException) {
             throw DuplicateResourceException("Email '$email' is already in use")
         }
-    }
-
-    @Transactional
-    fun changeRole(id: Int, newRole: Role): UserResponse {
-        requireAssignable(newRole)
-        val user = find(id)
-
-        if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
-            ensureAnotherActiveAdmin(user)
-        }
-        user.role = newRole
-        return users.save(user).toResponse()
-    }
-
-    @Transactional
-    fun deactivate(id: Int): UserResponse {
-        val user = find(id)
-        if (!user.active) return user.toResponse()
-
-        if (user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
-
-        user.active = false
-        users.save(user)
-
-        refreshTokens.revokeAllByUserId(user.id)
-        return user.toResponse()
     }
 
     @Transactional(readOnly = true)
@@ -131,6 +113,26 @@ class UserService(
     private fun requireAssignable(role: Role) {
         if (role !in ASSIGNABLE_ROLES) {
             throw BusinessRuleException("Role must be one of: ${ASSIGNABLE_ROLES.joinToString()}")
+        }
+    }
+
+    private fun applyRole(user: User, newRole: Role) {
+    requireAssignable(newRole)
+    if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
+        ensureAnotherActiveAdmin(user)
+    }
+    user.role = newRole
+    }
+    
+    private fun applyActive(user: User, active: Boolean){
+        if(user.active == active) return
+        
+        if(!active){
+            if(user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
+            user.active = false
+            refreshTokens.revokeAllByUserId(user.id)
+        }else{
+            user.active = true
         }
     }
 

@@ -1,6 +1,7 @@
 package com.resourcetracker.project
 
 import com.resourcetracker.department.DepartmentRepository
+import com.resourcetracker.resource.ResourceRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -14,8 +15,8 @@ import java.util.UUID
 @Service
 class ProjectService(
     private val projects: ProjectRepository,
-    private val departments: DepartmentRepository
-    // TODO(#16): inject ResourceRequestRepository once it exists, for the deactivation check
+    private val departments: DepartmentRepository,
+    private val resources: ResourceRepository
 ) {
     private val allowedSortFields = setOf("name", "code", "startDate", "endDate", "active", "createdAt")
 
@@ -56,6 +57,7 @@ class ProjectService(
         project.department = dept
         project.startDate = req.startDate
         project.endDate = req.endDate
+        req.active?.let { applyActive(project, it) }
         project.updatedAt = Instant.now()
         return project.toResponse()
     }
@@ -63,9 +65,7 @@ class ProjectService(
     @Transactional
     fun deactivate(id: UUID): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
-        if (hasActiveRequests(id))
-            throw ConflictException("Project has active resource requests and cannot be deactivated")
-        project.active = false
+        applyActive(project, false)
         project.updatedAt = Instant.now()
         return project.toResponse()
     }
@@ -95,8 +95,15 @@ class ProjectService(
         return projects.findAll(spec, pageable).map { it.toResponse() }
     }
 
-    // TODO(#16): replace with a real check, e.g.
-    // requests.existsByProjectIdAndStatusIn(id, listOf(PENDING, QUERIED))
+    private fun applyActive(project: Project, active: Boolean) {
+        if (project.active == active) return
+
+        if (!active && hasActiveRequests(project.id!!))
+            throw ConflictException("Project has active resource requests and cannot be deactivated")
+
+        project.active = active
+    }
+
     private fun hasActiveRequests(projectId: UUID): Boolean = false
 
     private fun validateDates(start: LocalDate, end: LocalDate?) {

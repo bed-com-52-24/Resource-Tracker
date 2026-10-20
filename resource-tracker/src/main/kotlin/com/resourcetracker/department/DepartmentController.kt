@@ -2,14 +2,15 @@ package com.resourcetracker.department
 
 import com.resourcetracker.common.ErrorResponse
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.data.domain.Pageable
-import org.springframework.data.web.PageableDefault
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
@@ -35,7 +36,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         departmentService.create(request)
 
     @GetMapping
-    @Operation(summary = "List departments", description = "Search departments by status and keyword with pagination and sorting.")
+    @Operation(summary = "List departments", description = "Lists all departments by default. Optionally filters by active status or keyword. Sorting uses one field and direction.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Departments returned"),
         ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -43,10 +44,30 @@ class DepartmentController(private val departmentService: DepartmentService) {
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
-        @RequestParam(required = false) status: String?,
+        @Parameter(description = "Filter by active state. Omit to return both active and inactive departments.", example = "true")
+        @RequestParam(required = false) active: Boolean?,
+        @Parameter(description = "Search department names", example = "engineering")
         @RequestParam(required = false) keyword: String?,
-        @PageableDefault(size = 20, sort = ["name"]) pageable: Pageable
-    ) = departmentService.search(status, keyword, pageable)
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") size: Int,
+        @Parameter(description = "Sort field: id, name, or status", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String
+    ) = departmentService.search(
+        active,
+        keyword,
+        PageRequest.of(
+            page.coerceAtLeast(0),
+            size.coerceIn(1, 100),
+            Sort.by(
+                if (direction.equals("desc", ignoreCase = true)) Sort.Direction.DESC else Sort.Direction.ASC,
+                sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"
+            )
+        )
+    )
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a department", description = "Return a department by its numeric identifier.")
@@ -59,25 +80,21 @@ class DepartmentController(private val departmentService: DepartmentService) {
     fun get(@PathVariable id: Int) = departmentService.getById(id)
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a department", description = "Update a department's name and description.")
+    @Operation(summary = "Update a department", description = "Updates name and description. If `active` is false, the department is deactivated; " +
+        "if true, it is reactivated. Omit `active` to leave the status unchanged."
+    )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Department updated", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "409", description = "A department with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "409", description = "Name already exists, or department is in use and cannot be deactivated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun update(@PathVariable id: Int, @Valid @RequestBody request: DepartmentRequest) =
+    fun update(@PathVariable id: Int, @Valid @RequestBody request: UpdateDepartmentRequest) =
         departmentService.update(id, request)
 
-    @PatchMapping("/{id}/deactivate")
-    @Operation(summary = "Deactivate a department", description = "Mark a department as inactive.")
-    @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Department deactivated", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
-        ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-    ])
-    fun deactivate(@PathVariable id: Int) = departmentService.deactivate(id)
+    companion object {
+        private val ALLOWED_SORT_FIELDS = setOf("id", "name", "status")
+    }
 }
