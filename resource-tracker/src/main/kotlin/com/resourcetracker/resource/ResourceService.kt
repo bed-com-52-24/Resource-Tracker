@@ -44,16 +44,12 @@ class ResourceService(
         resource.description = request.description
         resource.department = request.departmentId?.let(::findDepartment)
         resource.preferredVendor = request.preferredVendorId?.let(::findVendor)
+        request.active?.let { applyActive(resource, it) }
         return resourceRepository.save(resource).toResponse()
     }
 
-    @Transactional
-    fun deactivate(id: UUID): ResourceResponse {
-        val resource = resourceRepository.findById(id)
-            .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }
-
-        resource.active = false
-        return resourceRepository.save(resource).toResponse()
+    private fun applyActive(resource: Resource, active: Boolean) {
+        resource.active = active
     }
 
     private fun validateTypeRules(type: ResourceType, departmentId: Int?, vendorId: Int?) {

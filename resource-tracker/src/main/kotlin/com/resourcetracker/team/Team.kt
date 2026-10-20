@@ -33,6 +33,9 @@ class Team(
     )
     var projects: MutableSet<Project> = mutableSetOf(),
 
+    @ManyToMany(mappedBy = "teams")
+    var users: MutableSet<User> = mutableSetOf(),
+
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean = true,
 

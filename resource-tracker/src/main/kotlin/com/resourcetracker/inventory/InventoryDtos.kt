@@ -59,12 +59,14 @@ data class InventoryResponse(
     val lastUpdated: Instant,
 )
 
-data class AvailableQuantityResponse(
+data class InventoryListResponse(
     val resourceId: UUID,
-    val availableQuantity: Int,
+    val totalAvailable: Int,
+    val items: List<InventoryResponse>,
 )
 
 enum class InventoryTransactionType{
+    ADJUST,
     RESERVE,
     RELEASE,
     ISSUE,
@@ -77,8 +79,8 @@ data class InventoryTransactionRequest(
     val type: InventoryTransactionType,
 
     @field:Min(1)
-    @Schema(description = "Quantity involved in the command", example = "5")
-    val quantity: Int,
+    @Schema(description = "Quantity involved in the command. Required except for ADJUST.", example = "5")
+    val quantity: Int? = null,
 
     @field:Size(max = 120)
     @Schema(description = "Required when the resource has multiple inventory locations")
@@ -87,11 +89,19 @@ data class InventoryTransactionRequest(
     @field:Size(max = 500)
     @Schema(description = "Optional reason recorded in the audit log")
     val reason: String? = null,
+
+    @field:Min(0)
+    @Schema(description = "New total quantity. Required for ADJUST.")
+    val totalQuantity: Int? = null,
+
+    @field:Min(0)
+    @Schema(description = "New reorder level. Required for ADJUST.")
+    val reorderLevel: Int? = null,
 )
 
 data class InventoryTransactionResponse(
     val resourceId: UUID,
     val type: InventoryTransactionType,
-    val quantity: Int,
+    val quantity: Int?,
     val inventory: InventoryResponse,
 )

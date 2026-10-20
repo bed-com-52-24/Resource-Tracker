@@ -3,12 +3,15 @@ package com.resourcetracker.request.service
 import com.resourcetracker.request.dto.CreateResourceRequestDto
 import com.resourcetracker.request.dto.RequestLineItemDto
 import com.resourcetracker.request.dto.UpdateResourceRequestDto
+import com.resourcetracker.request.dto.RequesterUpdateStatus
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.http.HttpStatus
+import org.springframework.web.server.ResponseStatusException
 import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 
@@ -83,7 +86,7 @@ class ResourceRequestService(
         )
 
     @Transactional
-    fun editRequest(
+    fun updateRequest(
         requestId: Int,
         requesterId: Int,
         dto: UpdateResourceRequestDto
@@ -93,8 +96,14 @@ class ResourceRequestService(
             requesterId
         ) ?: throw NoSuchElementException("Request not found")
 
-        check(request.status == RequestStatus.QUERIED) {
-            "Only queried requests can be edited"
+        if (dto.status == RequesterUpdateStatus.CANCELLED) {
+            requireTransition(request.status, RequestStatus.CANCELLED)
+            request.status = RequestStatus.CANCELLED
+            return requestRepository.save(request)
+        }
+
+        if (request.status != RequestStatus.QUERIED) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Only queried requests can be edited")
         }
 
         validationService.validateLineItems(dto.lineItems)
@@ -133,50 +142,24 @@ class ResourceRequestService(
             }
         )
 
+        if (dto.status == RequesterUpdateStatus.PENDING) {
+            requireTransition(request.status, RequestStatus.PENDING)
+            request.status = RequestStatus.PENDING
+            request.editedAfterQuery = false
+            request.queriedAt = null
+        }
         return requestRepository.save(request)
     }
 
-    @Transactional
-    fun resubmitRequest(
-        requestId: Int,
-        requesterId: Int
-    ): ResourceRequest {
-        val request = requestRepository.findOwnedRequest(
-            requestId,
-            requesterId
-        ) ?: throw NoSuchElementException("Request not found")
-
-        check(
-            request.status == RequestStatus.QUERIED &&
-            request.editedAfterQuery
-        ) {
-            "Only edited, queried requests can be resubmitted"
+    private fun requireTransition(from: RequestStatus, to: RequestStatus) {
+        val allowed = when (from) {
+            RequestStatus.PENDING -> setOf(RequestStatus.CANCELLED)
+            RequestStatus.QUERIED -> setOf(RequestStatus.PENDING, RequestStatus.CANCELLED)
+            else -> emptySet()
         }
-
-        request.status = RequestStatus.PENDING
-        request.editedAfterQuery = false
-        request.queriedAt = null
-
-        return requestRepository.save(request)
-    }
-
-    @Transactional
-    fun cancelRequest(
-        requestId: Int,
-        requesterId: Int
-    ): ResourceRequest {
-        val request = requestRepository.findOwnedRequest(
-            requestId,
-            requesterId
-        ) ?: throw NoSuchElementException("Request not found")
-
-        check(request.status == RequestStatus.PENDING) {
-            "Only pending requests can be cancelled"
+        if (to !in allowed) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Cannot change a request from $from to $to")
         }
-
-        request.status = RequestStatus.CANCELLED
-
-        return requestRepository.save(request)
     }
     @Transactional
     fun createRequestIdempotently(

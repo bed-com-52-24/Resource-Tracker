@@ -62,7 +62,8 @@ class ProjectController(private val service: ProjectService) {
     @PutMapping("/{id}")
     @Operation(
         summary = "Update a project",
-        description = "Updates an existing project. If `active` is false, the project is deactivated " +
+        description = "Updates an existing project. All fields are optional; null or omitted fields preserve their current values. " +
+                "If `active` is false, the project is deactivated " +
                 "(refused while it has active resource requests); if true, it is reactivated. " +
                 "Omit `active` to leave the status unchanged."
     )

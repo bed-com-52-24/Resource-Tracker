@@ -21,10 +21,12 @@ data class DepartmentResponse(
 )
 
 data class UpdateDepartmentRequest(
+    @field:Schema(description = "Optional department name. Null or omitted preserves the current name.")
     @field:NotBlank(message = "Department name is required")
     @field:Size(min = 2, max = 100, message = "Department name must be 2 to 100 characters")
-    val name: String,
+    val name: String? = null,
 
+    @field:Schema(description = "Optional description. Null or omitted preserves the current description.")
     @field:Size(max = 255, message = "Description must be at most 255 characters")
     val description: String? = null,
 

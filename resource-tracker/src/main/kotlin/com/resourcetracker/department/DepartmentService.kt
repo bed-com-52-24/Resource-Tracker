@@ -57,15 +57,17 @@ class DepartmentService(
     @Transactional
     fun update(id: Int, request: UpdateDepartmentRequest): DepartmentResponse {
         val department = findOrThrow(id)
-        val name = request.name.trim()
-        if (!department.name.equals(name, ignoreCase = true) &&
-            departmentRepository.existsByNameIgnoreCase(name)
-        ) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "A department with this name already exists")
+        request.name?.let {
+            val name = it.trim()
+            if (!department.name.equals(name, ignoreCase = true) &&
+                departmentRepository.existsByNameIgnoreCase(name)
+            ) {
+                throw ResponseStatusException(HttpStatus.CONFLICT, "A department with this name already exists")
+            }
+            department.name = name
         }
-        department.name = name
-        department.description = request.description
         request.active?.let { applyActive(department, it) }
+        request.description?.let { department.description = it }
         return departmentRepository.save(department).toResponse()
     }
 

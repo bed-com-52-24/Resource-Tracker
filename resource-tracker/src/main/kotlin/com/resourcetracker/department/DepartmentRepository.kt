@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param
 interface DepartmentRepository : JpaRepository<Department, Int> {
 
     fun existsByNameIgnoreCase(name: String): Boolean
+    fun findByNameIgnoreCase(name: String): Department?
 
     @Query(
         """

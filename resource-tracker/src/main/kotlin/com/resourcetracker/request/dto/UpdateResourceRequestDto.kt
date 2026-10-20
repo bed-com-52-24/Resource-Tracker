@@ -5,6 +5,11 @@ import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import jakarta.validation.constraints.NotEmpty
 
+enum class RequesterUpdateStatus {
+    PENDING,
+    CANCELLED,
+}
+
 data class UpdateResourceRequestDto(
     @field:Positive
     val departmentId: Int,
@@ -23,5 +28,7 @@ data class UpdateResourceRequestDto(
 
     @field:NotEmpty
     @field:Valid
-    val lineItems: List<RequestLineItemDto>
+    val lineItems: List<RequestLineItemDto>,
+
+    val status: RequesterUpdateStatus? = null,
 )

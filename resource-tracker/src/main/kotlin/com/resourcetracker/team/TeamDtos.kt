@@ -19,14 +19,18 @@ data class TeamRequest(
 data class ProjectSummary(val id: UUID, val name: String, val code: String)
 
 data class UpdateTeamRequest(
+    @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
     @field:NotBlank @field:Size(min = 2, max = 100)
-    val name: String,
+    val name: String? = null,
 
-    val departmentId: Int,
+    @field:Schema(description = "Optional department ID. Null or omitted preserves the current department.")
+    val departmentId: Int? = null,
 
-    val managerId: Int,
+    @field:Schema(description = "Optional manager ID. Null or omitted preserves the current manager.")
+    val managerId: Int? = null,
 
-    val projectIds: Set<UUID> = emptySet(),
+    @field:Schema(description = "Optional project IDs. Null or omitted preserves the current project assignments.")
+    val projectIds: Set<UUID>? = null,
 
     @field:Schema(
         description = "Set to false to deactivate the team, true to reactivate it. Omit to leave unchanged.",

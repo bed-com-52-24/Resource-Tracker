@@ -49,11 +49,13 @@ class RoutingRuleService(
     @Transactional
     fun update(
         id: Int,
-        request: RoutingRuleRequest,
+        request: UpdateRoutingRuleRequest,
         actor: String
     ): RoutingRule {
         val rule = get(id)
         validate(request)
+
+        if (request.active == false) applyActive(rule, false, actor)
 
         val before = snapshot(rule)
 
@@ -64,7 +66,7 @@ class RoutingRuleService(
         rule.priority = request.priority!!
         rule.updatedBy = actor
 
-        return try {
+        val saved = try {
             val saved = rules.saveAndFlush(rule)
             audit(saved, "UPDATE", actor, before, snapshot(saved))
             saved
@@ -73,11 +75,20 @@ class RoutingRuleService(
                 "An active rule already has this department/project/team"
             )
         }
+        if (request.active == true) applyActive(saved, true, actor)
+        return saved
     }
 
-    @Transactional
-    fun activate(id: Int, actor: String): RoutingRule {
-        val rule = get(id)
+    private fun applyActive(rule: RoutingRule, active: Boolean, actor: String): RoutingRule {
+        if (!active) {
+            if (!rule.active) return rule
+            val before = snapshot(rule)
+            rule.active = false
+            rule.updatedBy = actor
+            val saved = rules.saveAndFlush(rule)
+            audit(saved, "DEACTIVATE", actor, before, snapshot(saved))
+            return saved
+        }
 
         validator.requireActiveDepartment(rule.departmentId ?: 0)
         rule.projectId?.let { validator.requireActiveProject(it) }
@@ -113,35 +124,17 @@ class RoutingRuleService(
         }
     }
 
-    @Transactional
-    fun deactivate(id: Int, actor: String): RoutingRule {
-        val rule = get(id)
-        if (!rule.active) return rule
-
-        val before = snapshot(rule)
-        rule.active = false
-        rule.updatedBy = actor
-
-        val saved = rules.saveAndFlush(rule)
-        audit(saved, "DEACTIVATE", actor, before, snapshot(saved))
-        return saved
-    }
-
-    @Transactional
-    fun softDelete(id: Int, actor: String) {
-        val rule = get(id)
-        val before = snapshot(rule)
-
-        rule.active = false
-        rule.deleted = true
-        rule.deletedAt = LocalDateTime.now()
-        rule.updatedBy = actor
-
-        val saved = rules.saveAndFlush(rule)
-        audit(saved, "SOFT_DELETE", actor, before, snapshot(saved))
-    }
-
     private fun validate(request: RoutingRuleRequest) {
+        validateReferences(
+            request.departmentId ?: throw ValidationException("Department is required"),
+            request.projectId,
+            request.teamId,
+            request.managerId ?: throw ValidationException("Manager is required"),
+            request.priority ?: throw ValidationException("Priority is required")
+        )
+    }
+
+    private fun validate(request: UpdateRoutingRuleRequest) {
         val departmentId = request.departmentId
             ?: throw ValidationException("Department is required")
         val managerId = request.managerId
@@ -149,13 +142,22 @@ class RoutingRuleService(
         val priority = request.priority
             ?: throw ValidationException("Priority is required")
 
-        if (priority < 0) {
-            throw ValidationException("Priority must be >= 0")
+        if (request.active != false) {
+            validateReferences(departmentId, request.projectId, request.teamId, managerId, priority)
         }
+    }
 
+    private fun validateReferences(
+        departmentId: Int,
+        projectId: Int?,
+        teamId: Int?,
+        managerId: Int,
+        priority: Int,
+    ) {
+        if (priority < 0) throw ValidationException("Priority must be >= 0")
         validator.requireActiveDepartment(departmentId)
-        request.projectId?.let { validator.requireActiveProject(it) }
-        request.teamId?.let { validator.requireActiveTeam(it) }
+        projectId?.let { validator.requireActiveProject(it) }
+        teamId?.let { validator.requireActiveTeam(it) }
         validator.requireActiveDepartmentManager(managerId)
     }
 

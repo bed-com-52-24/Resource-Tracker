@@ -4,6 +4,9 @@ import jakarta.persistence.criteria.CriteriaBuilder
 import jakarta.persistence.criteria.Predicate
 import jakarta.persistence.criteria.Root
 import org.springframework.data.jpa.domain.Specification
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import java.time.LocalDate
 
 data class ListSort(
@@ -17,6 +20,51 @@ data class ListQuery(
     val sorts: List<ListSort> = emptyList(),
 ) {
     companion object {
+        fun pageable(
+            page: Int,
+            size: Int,
+            sort: String?,
+            direction: String?,
+            supportedSortFields: Set<String>,
+            defaultSort: String,
+            maxPageSize: Int = 100,
+        ): Pageable {
+            val safePage = page.coerceAtLeast(0)
+            val safeSize = size.coerceIn(1, maxPageSize)
+            val field = sort?.takeIf { it in supportedSortFields } ?: defaultSort
+            val order = if (direction.equals("desc", ignoreCase = true)) {
+                Sort.Order.desc(field)
+            } else {
+                Sort.Order.asc(field)
+            }
+            return PageRequest.of(safePage, safeSize, Sort.by(order))
+        }
+
+        fun sort(
+            values: List<String>,
+            supportedSortFields: Set<String>,
+            defaultSort: String,
+        ): Sort {
+            val requested = values.filter { it.isNotBlank() }.ifEmpty { listOf(defaultSort) }
+            if (requested.size > 3) {
+                throw IllegalArgumentException(
+                    "At most 3 sort fields are allowed. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
+                )
+            }
+            return Sort.by(requested.map { value ->
+                val parts = value.split(":")
+                val field = parts[0].trim().takeIf { it in supportedSortFields }
+                    ?: throw IllegalArgumentException(
+                        "Invalid sort field '${parts[0].trim()}'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
+                    )
+                val direction = parts.getOrNull(1)?.trim()?.lowercase() ?: "asc"
+                if (direction !in setOf("asc", "desc")) {
+                    throw IllegalArgumentException("Invalid sort direction '$direction' for '$field'. Use asc or desc.")
+                }
+                if (direction == "desc") Sort.Order.desc(field) else Sort.Order.asc(field)
+            })
+        }
+
         fun parse(
             params: Map<String, List<String>>,
             supportedFilters: Set<String>,

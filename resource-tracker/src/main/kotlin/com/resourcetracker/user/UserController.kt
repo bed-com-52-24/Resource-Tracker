@@ -39,7 +39,9 @@ class UserController(private val users: UserService) {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
         summary = "Create a user",
-        description = "Creates an account. MANAGING_DIRECTOR is reserved and cannot be assigned through this endpoint."
+        description = "Creates an account using existing department and team IDs. " +
+                "The department and every team must exist and be active. " +
+                "MANAGING_DIRECTOR is reserved and cannot be assigned through this endpoint."
     )
     @ApiResponses(
         value = [
@@ -75,7 +77,8 @@ class UserController(private val users: UserService) {
     @PutMapping("/{id}")
     @Operation(
         summary = "Update a user",
-        description = "Updates email, full name, department, and teams. Username cannot be changed. " +
+        description = "Partially updates a user. Null or omitted fields preserve their current values. " +
+                "Department and team fields use existing IDs. Username cannot be changed. " +
                 "If `role` is supplied, the role is changed as well. " +
                 "If `active` is false, the account is deactivated and its refresh tokens are revoked. " +
                 "The final active Admin cannot be demoted or deactivated."
@@ -122,7 +125,8 @@ class UserController(private val users: UserService) {
     @GetMapping
     @Operation(
         summary = "List users",
-        description = "Returns a paginated user list. Search matches username, email, or full name. Page size is capped at 100."
+        description = "Returns a paginated user list. Search matches username, email, or full name. " +
+                "Responses include department/team IDs and display names. Page size is capped at 100."
     )
     @ApiResponses(
         value = [

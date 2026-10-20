@@ -28,7 +28,7 @@ class TeamServiceTest {
 
     private fun user(role: Role = Role.DEPARTMENT_MANAGER, active: Boolean = true) = User(
         id = 7, username = "mgr", email = "mgr@example.com", fullName = "Manager One",
-        passwordHash = "hash", role = role, department = "Engineering", active = active
+        passwordHash = "hash", role = role, department = dept, active = active
     )
 
     private fun request() = TeamRequest(name = "Alpha", departmentId = 1, managerId = 7)

@@ -29,7 +29,8 @@ class TeamController(private val service: TeamService) {
     @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "Update a team",
-        description = "Admin only. Updates name, department, manager and projects. " +
+        description = "Admin only. All fields are optional; null or omitted fields preserve their current values. " +
+                "Updates name, department, manager and projects. " +
                 "If `isActive` is false, the team is deactivated; if true, it is reactivated. " +
                 "Omit `isActive` to leave the value unchanged. Returns 200, 400, 401, 403, 404 or 409."
     )

@@ -17,83 +17,41 @@ class ApprovalService(
     private val notifier: RequestNotifier
 ) {
 
-    /**
-     * Approve a PENDING request. With no line lists, every line is approved.
-     * With lists, every line must be named exactly once, and the result is
-     * APPROVED, REJECTED or PARTIALLY_APPROVED depending on the mix.
-     */
     @Transactional
-    fun approve(requestId: Int, actorId: Int, body: ApproveRequest?): DecisionResponse {
+    fun decide(requestId: Int, actorId: Int, body: DecisionRequest): DecisionResponse {
         val request = loadForManager(requestId, actorId)
         val current = currentStatus(request)
         RequestStateMachine.requirePending(current)
 
-        val comment = optionalComment(body?.comment)
-        val approvedIds = body?.approvedLineIds.orEmpty()
-        val rejectedLines = body?.rejectedLines.orEmpty()
-        val waitlist = body?.waitlist == true
         val lines = lineRepository.findByRequestId(requestId)
-        val hasLineDecisions = approvedIds.isNotEmpty() || rejectedLines.isNotEmpty()
-
-        if (hasLineDecisions) {
-            checkLineCoverage(lines, approvedIds, rejectedLines.map { it.lineId })
-        }
-
-        val target = when {
-            rejectedLines.isEmpty() -> RequestStatus.APPROVED
-            approvedIds.isEmpty() -> RequestStatus.REJECTED
-            else -> RequestStatus.PARTIALLY_APPROVED
-        }
-
-        saveStatus(request, target)
-
-        val rejectedComments = rejectedLines.associate { it.lineId to it.comment.trim() }
-        val approvedResult = mutableListOf<Int>()
-        val rejectedResult = mutableListOf<Int>()
-        for (line in lines) {
-            val rejectedComment = rejectedComments[line.id]
-            if (rejectedComment == null) {
-                decideLine(requestId, line, true, comment, actorId, waitlist)
-                approvedResult.add(line.id)
-            } else {
-                decideLine(requestId, line, false, rejectedComment, actorId)
-                rejectedResult.add(line.id)
+        when (body.decision) {
+            ApprovalDecision.APPROVE -> {
+                val comment = optionalComment(body.comment)
+                saveStatus(request, RequestStatus.APPROVED)
+                lines.forEach { decideLine(requestId, it, true, comment, actorId) }
+                return finish(
+                    request, actorId, current, RequestStatus.APPROVED, "APPROVE", comment,
+                    lines.map { it.id }, emptyList()
+                )
+            }
+            ApprovalDecision.REJECT -> {
+                val comment = requiredComment(body.comment, 10)
+                saveStatus(request, RequestStatus.REJECTED)
+                lines.forEach { decideLine(requestId, it, false, comment, actorId) }
+                return finish(
+                    request, actorId, current, RequestStatus.REJECTED, "REJECT", comment,
+                    emptyList(), lines.map { it.id }
+                )
+            }
+            ApprovalDecision.QUERY -> {
+                val comment = requiredComment(body.comment, 1)
+                saveStatus(request, RequestStatus.QUERIED)
+                return finish(
+                    request, actorId, current, RequestStatus.QUERIED, "QUERY", comment,
+                    emptyList(), emptyList()
+                )
             }
         }
-        return finish(request, actorId, current, target, "APPROVE", comment, approvedResult, rejectedResult)
-    }
-
-    /** Reject a PENDING request. A comment of 10 to 500 characters is required. */
-    @Transactional
-    fun reject(requestId: Int, actorId: Int, comment: String?): DecisionResponse {
-        val request = loadForManager(requestId, actorId)
-        val current = currentStatus(request)
-        RequestStateMachine.requirePending(current)
-
-        val clean = requiredComment(comment, 10)
-        saveStatus(request, RequestStatus.REJECTED)
-
-        val lines = lineRepository.findByRequestId(requestId)
-        lines.forEach { decideLine(requestId, it, false, clean, actorId) }
-        return finish(
-            request, actorId, current, RequestStatus.REJECTED, "REJECT", clean,
-            emptyList(), lines.map { it.id }
-        )
-    }
-
-    /** Send a PENDING request back to the team lead. A comment is required. */
-    @Transactional
-    fun query(requestId: Int, actorId: Int, comment: String?): DecisionResponse {
-        val request = loadForManager(requestId, actorId)
-        val current = currentStatus(request)
-        RequestStateMachine.requirePending(current)
-
-        val clean = requiredComment(comment, 1)
-        saveStatus(request, RequestStatus.QUERIED)
-        return finish(
-            request, actorId, current, RequestStatus.QUERIED, "QUERY", clean,
-            emptyList(), emptyList()
-        )
     }
 
     // ---------- helpers ----------
@@ -158,19 +116,6 @@ class ApprovalService(
         }
     }
 
-    /** Every line item must be listed exactly once, and must belong to this request. */
-    private fun checkLineCoverage(lines: List<ApprovalLineItem>, approvedIds: List<Int>, rejectedIds: List<Int>) {
-        val mentioned = approvedIds + rejectedIds
-        if (mentioned.size != mentioned.toSet().size) badRequest("A line item can only be listed once")
-
-        val known = lines.map { it.id }.toSet()
-        val unknown = mentioned.filter { it !in known }
-        if (unknown.isNotEmpty()) badRequest("Line items not found on this request: $unknown")
-
-        val missing = known - mentioned.toSet()
-        if (missing.isNotEmpty()) badRequest("Every line item must be approved or rejected. Missing: $missing")
-    }
-
     /** Writes the audit row and notifies the team lead, in the same transaction as the status change. */
     private fun finish(
         request: ApprovalRequest, actorId: Int, previous: RequestStatus, target: RequestStatus,
@@ -192,14 +137,14 @@ class ApprovalService(
 
     private fun optionalComment(comment: String?): String? {
         val trimmed = comment?.trim()?.ifBlank { null } ?: return null
-        if (trimmed.length > 500) badRequest("Comment must be at most 500 characters")
+        if (trimmed.length > 1000) badRequest("Comment must be at most 1000 characters")
         return trimmed
     }
 
     private fun requiredComment(comment: String?, minLength: Int): String {
         val trimmed = comment?.trim().orEmpty()
-        if (trimmed.length < minLength || trimmed.length > 500) {
-            badRequest("A comment of $minLength to 500 characters is required")
+        if (trimmed.length < minLength || trimmed.length > 1000) {
+            badRequest("A comment of $minLength to 1000 characters is required")
         }
         return trimmed
     }

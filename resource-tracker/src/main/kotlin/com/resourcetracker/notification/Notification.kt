@@ -68,4 +68,8 @@ interface NotificationRepository : JpaRepository<Notification, Long> {
     ): Page<Notification>
 
     fun findByIdAndRecipientId(id: Long, recipientId: Int): Notification?
+
+    fun findAllByIdInAndRecipientId(ids: Collection<Long>, recipientId: Int): List<Notification>
+
+    fun findByRecipientId(recipientId: Int): List<Notification>
 }

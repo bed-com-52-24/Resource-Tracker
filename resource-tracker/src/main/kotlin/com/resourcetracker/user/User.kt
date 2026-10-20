@@ -7,12 +7,17 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.JoinColumn
+import jakarta.persistence.JoinTable
 import jakarta.persistence.LockModeType
 import jakarta.persistence.FetchType
+import jakarta.persistence.ManyToMany
+import jakarta.persistence.ManyToOne
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import com.resourcetracker.department.Department
+import com.resourcetracker.team.Team
 import jakarta.validation.Constraint
 import jakarta.validation.ConstraintValidator
 import jakarta.validation.ConstraintValidatorContext
@@ -37,11 +42,16 @@ class User(
     @Column(nullable = false) var fullName: String,
     @Column(nullable = false) var passwordHash: String,
     @Enumerated(EnumType.STRING) @Column(nullable = false) var role: Role,
-    @Column(nullable = false) var department: String,
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "user_teams", joinColumns = [JoinColumn(name = "user_id")])
-    @Column(name = "team")
-    var teams: MutableSet<String> = mutableSetOf(),
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "department_id", nullable = false)
+    var department: Department,
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "user_teams",
+        joinColumns = [JoinColumn(name = "user_id")],
+        inverseJoinColumns = [JoinColumn(name = "team_id")]
+    )
+    var teams: MutableSet<Team> = mutableSetOf(),
     @Column(nullable = false) var active: Boolean = true,
     @Column(nullable = false) var failedAttempts: Int = 0,
     var failedWindowStart: Instant? = null,

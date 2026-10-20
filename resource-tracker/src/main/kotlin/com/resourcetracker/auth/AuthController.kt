@@ -101,7 +101,7 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         val u = users.findById(caller.id).orElseThrow{ UnauthenticatedException() }
         return ProfileResponse(
             u.id.toString(), u.username, u.email, u.fullName,
-            u.role.name, u.department, u.teams.sorted(), u.active,
+            u.role.name, u.department.name, u.teams.map { it.name }.sorted(), u.active,
         )
     }
 }

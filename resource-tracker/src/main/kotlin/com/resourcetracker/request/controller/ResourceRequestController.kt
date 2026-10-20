@@ -6,16 +6,27 @@ import com.resourcetracker.request.service.RequestCreationFacade
 import com.resourcetracker.request.service.ResourceRequestService
 import com.resourcetracker.common.UnauthenticatedException
 import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.request.dto.ResourceRequestResponseDto
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
-import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.Size
 import org.springframework.data.domain.Pageable
+import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/requests")
+@RequestMapping("/api/v1/requests")
+@Tag(name = "Resource Requests", description = "Create and manage the authenticated user's resource requests")
+@SecurityRequirement(name = "bearerAuth")
 class ResourceRequestController(
     private val requestService: ResourceRequestService,
     private val requestCreationFacade: RequestCreationFacade
@@ -28,8 +39,23 @@ class ResourceRequestController(
             ?: throw UnauthenticatedException()
 
     @PostMapping
-fun create(
+    @Operation(
+        summary = "Create a resource request",
+        description = "Creates a pending resource request for the authenticated user. " +
+                "Requires a unique Idempotency-Key header; repeated submissions with the same key are safely replayed."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "201", description = "Resource request created"),
+            ApiResponse(responseCode = "200", description = "Existing idempotent request replayed"),
+            ApiResponse(responseCode = "400", description = "Invalid request, line items, or idempotency key", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "409", description = "Idempotency key conflicts with another request", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ]
+    )
+    fun create(
     @Valid @RequestBody dto: CreateResourceRequestDto,
+    @Parameter(description = "Unique key used to make request creation idempotent", required = true, example = "req-20261021-0001")
     @RequestHeader("Idempotency-Key") idempotencyKey: String,
     authentication: Authentication
 ): org.springframework.http.ResponseEntity<String> {
@@ -57,8 +83,18 @@ fun create(
 }
 
     @GetMapping
+    @Operation(
+        summary = "List my resource requests",
+        description = "Returns only resource requests belonging to the authenticated user. Supports standard pageable parameters."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Resource requests returned"),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ]
+    )
     fun list(
-        pageable: Pageable,
+        @PageableDefault(size = 20, sort = ["createdAt"]) pageable: Pageable,
         authentication: Authentication
     ) = requestService.listMyRequests(
         requesterId = currentUserId(authentication),
@@ -66,31 +102,27 @@ fun create(
     )
 
     @PutMapping("/{id}")
+    @Operation(
+        summary = "Edit a resource request",
+        description = "Edits an owned request while QUERIED. Set status to PENDING to resubmit or CANCELLED to cancel; omit status to only edit."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Resource request updated"),
+            ApiResponse(responseCode = "400", description = "Invalid request data", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "404", description = "Request not found or not owned by the authenticated user", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "409", description = "Requested status transition is not allowed", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ]
+    )
     fun edit(
+        @Parameter(description = "Resource request ID", example = "42")
         @PathVariable id: Int,
         @Valid @RequestBody dto: UpdateResourceRequestDto,
         authentication: Authentication
-    ) = requestService.editRequest(
+    ) = requestService.updateRequest(
         id,
         currentUserId(authentication),
         dto
-    )
-
-    @PostMapping("/{id}/resubmit")
-    fun resubmit(
-        @PathVariable id: Int,
-        authentication: Authentication
-    ) = requestService.resubmitRequest(
-        id,
-        currentUserId(authentication)
-    )
-
-    @PostMapping("/{id}/cancel")
-    fun cancel(
-        @PathVariable id: Int,
-        authentication: Authentication
-    ) = requestService.cancelRequest(
-        id,
-        currentUserId(authentication)
     )
 }

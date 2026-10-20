@@ -44,7 +44,7 @@ class ResourceController(private val resources: ResourceService) {
         resources.create(request)
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a resource", description = "Updates an existing resource.")
+    @Operation(summary = "Update a resource", description = "Updates an existing resource. Set active to true or false to change its state; omit it to leave the state unchanged.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource updated", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -58,14 +58,4 @@ class ResourceController(private val resources: ResourceService) {
         @Valid @RequestBody request: UpdateResourceRequest,
     ): ResourceResponse = resources.update(id, request)
 
-    @PatchMapping("/{id}/deactivate")
-    @Operation(summary = "Deactivate a resource", description = "Marks a resource as inactive without deleting it.")
-    @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Resource deactivated", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
-        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-    ])
-    fun deactivate(@PathVariable id: UUID): ResourceResponse =
-        resources.deactivate(id)
 }

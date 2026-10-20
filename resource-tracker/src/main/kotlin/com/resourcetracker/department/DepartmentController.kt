@@ -80,7 +80,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     fun get(@PathVariable id: Int) = departmentService.getById(id)
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a department", description = "Updates name and description. If `active` is false, the department is deactivated; " +
+    @Operation(summary = "Update a department", description = "All fields are optional; null or omitted fields preserve their current values. Updates name and description. If `active` is false, the department is deactivated; " +
         "if true, it is reactivated. Omit `active` to leave the status unchanged."
     )
     @ApiResponses(value = [

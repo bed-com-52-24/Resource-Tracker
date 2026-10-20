@@ -1,9 +1,11 @@
 package com.resourcetracker.notification
 
 import org.springframework.data.domain.Pageable
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
 
 @Service
 class NotificationService(
@@ -40,18 +42,23 @@ class NotificationService(
     }
 
     @Transactional
-    fun markRead(userId: Int, notificationId: Long): NotificationResponse {
-        val notification = notifications.findByIdAndRecipientId(notificationId, userId)
-            ?: throw IllegalArgumentException("Notification not found for the current user")
-        notification.read = true
-        return notifications.save(notification).toResponse()
-    }
+    fun updateReadState(userId: Int, request: NotificationUpdateRequest): NotificationUpdateResponse {
+        val hasIds = request.ids != null
+        if ((hasIds && request.all) || (!hasIds && !request.all) || request.ids?.isEmpty() == true) {
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Provide non-empty ids or set all=true, but not both"
+            )
+        }
 
-    @Transactional
-    fun markAllRead(userId: Int) {
-        val unread = notifications.findByRecipientIdAndReadOrderByCreatedAtDesc(userId, false, Pageable.unpaged())
-        unread.content.forEach { it.read = true }
-        notifications.saveAll(unread.content)
+        val items = if (request.all) {
+            notifications.findByRecipientId(userId)
+        } else {
+            notifications.findAllByIdInAndRecipientId(requireNotNull(request.ids), userId)
+        }
+        items.forEach { it.read = request.read }
+        notifications.saveAll(items)
+        return NotificationUpdateResponse(items.size)
     }
 
     @Transactional(readOnly = true)

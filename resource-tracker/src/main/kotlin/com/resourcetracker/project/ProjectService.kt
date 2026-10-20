@@ -1,10 +1,10 @@
 package com.resourcetracker.project
 
 import com.resourcetracker.department.DepartmentRepository
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.resource.ResourceRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -43,20 +43,27 @@ class ProjectService(
     @Transactional
     fun update(id: UUID, req: UpdateProjectRequest): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
-        val dept = departments.findByIdOrNull(req.departmentId)?.takeIf { it.status == "ACTIVE" }
-            ?: throw NotFoundException("Department not found or inactive")
-        validateDates(req.startDate, req.endDate)
-        val name = req.name.trim()
-        if (projects.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id!!, name, id))
-            throw ConflictException("Project name already exists in this department")
-        if (projects.existsByCodeIgnoreCaseAndIdNot(req.code, id))
-            throw ConflictException("Project code already in use")
-
-        project.name = name
-        project.code = req.code
+        val dept = req.departmentId?.let {
+            departments.findByIdOrNull(it)?.takeIf { department -> department.status == "ACTIVE" }
+                ?: throw NotFoundException("Department not found or inactive")
+        } ?: project.department
+        val startDate = req.startDate ?: project.startDate
+        val endDate = req.endDate ?: project.endDate
+        validateDates(startDate, endDate)
+        req.name?.let {
+            val name = it.trim()
+            if (projects.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id!!, name, id))
+                throw ConflictException("Project name already exists in this department")
+            project.name = name
+        }
+        req.code?.let {
+            if (projects.existsByCodeIgnoreCaseAndIdNot(it, id))
+                throw ConflictException("Project code already in use")
+            project.code = it
+        }
         project.department = dept
-        project.startDate = req.startDate
-        project.endDate = req.endDate
+        project.startDate = startDate
+        req.endDate?.let { project.endDate = it }
         req.active?.let { applyActive(project, it) }
         project.updatedAt = Instant.now()
         return project.toResponse()
@@ -91,7 +98,11 @@ class ProjectService(
             throw BadRequestException("page must be >= 0 and size must be between 1 and 100")
 
         val spec = ProjectSpecifications.filter(departmentId, active, startFrom, startTo, keyword)
-        val pageable = PageRequest.of(page, size, buildSort(sort))
+        val pageable = PageRequest.of(page, size, try {
+            ListQuery.sort(sort, allowedSortFields, "name")
+        } catch (e: IllegalArgumentException) {
+            throw BadRequestException(e.message ?: "Invalid sort")
+        })
         return projects.findAll(spec, pageable).map { it.toResponse() }
     }
 
@@ -111,18 +122,4 @@ class ProjectService(
             throw BadRequestException("End date must not be before start date")
     }
 
-    private fun buildSort(sort: List<String>): Sort {
-        if (sort.size > 3) throw BadRequestException("At most 3 sort fields are allowed")
-        val orders = sort.map { s ->
-            val parts = s.split(":")
-            val field = parts[0].trim()
-            if (field !in allowedSortFields)
-                throw BadRequestException("Invalid sort field '" + field + "'. Allowed: " + allowedSortFields.joinToString())
-            val dir = parts.getOrNull(1)?.trim()?.lowercase() ?: "asc"
-            if (dir != "asc" && dir != "desc")
-                throw BadRequestException("Invalid sort direction '" + dir + "'. Use asc or desc")
-            if (dir == "desc") Sort.Order.desc(field) else Sort.Order.asc(field)
-        }
-        return Sort.by(orders)
-    }
 }

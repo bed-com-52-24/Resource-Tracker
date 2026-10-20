@@ -67,7 +67,7 @@ class SecurityConfig {
             ).permitAll()
                 .requestMatchers(
                     "/api/departments/**",
-                    "/api/vendors/**",
+                    "/api/v1/vendors/**",
                     "/api/v1/projects/**",
                 ).hasRole("ADMIN")
                 .anyRequest().authenticated()
