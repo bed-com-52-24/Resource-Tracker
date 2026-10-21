@@ -10,16 +10,18 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
-import java.util.UUID
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/projects")
 @Tag(name = "Projects", description = "Create, search, update, and deactivate projects")
 @SecurityRequirement(name = "bearerAuth")
@@ -101,11 +103,11 @@ class ProjectController(private val service: ProjectService) {
             ),
         ]
     )
-    fun update(@PathVariable id: UUID, @Valid @RequestBody body: UpdateProjectRequest): ProjectResponse =
+    fun update(@PathVariable @Min(1) id: Int, @Valid @RequestBody body: UpdateProjectRequest): ProjectResponse =
         service.update(id, body)
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get a project", description = "Return a project by its UUID.")
+    @Operation(summary = "Get a project", description = "Return a project by its integer ID.")
     @ApiResponses(
         value = [
             ApiResponse(
@@ -130,7 +132,7 @@ class ProjectController(private val service: ProjectService) {
             ),
         ]
     )
-    fun get(@PathVariable id: UUID): ProjectResponse = service.get(id)
+    fun get(@PathVariable @Min(1) id: Int): ProjectResponse = service.get(id)
 
     @GetMapping
     @Operation(

@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
-import java.util.UUID
 
 @Schema(description = "Information required to create a resource")
 data class CreateResourceRequest(
@@ -69,7 +68,7 @@ data class UpdateResourceRequest(
 )
 
 data class ResourceResponse(
-    val id: UUID,
+    val id: Int,
     val code: String,
     val name: String,
     val type: ResourceType,

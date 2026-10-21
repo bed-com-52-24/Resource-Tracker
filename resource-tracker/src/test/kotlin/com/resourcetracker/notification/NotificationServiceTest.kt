@@ -26,7 +26,7 @@ class NotificationServiceTest {
     @Test
     fun `notify creates one notification per user`() {
         val userIds = listOf(1, 2)
-        val payload = mapOf("requestId" to "req-42", "message" to "Request submitted")
+        val payload = mapOf("requestId" to 42, "message" to "Request submitted")
 
         service.notify(userIds, NotificationType.SUBMITTED, payload)
 
@@ -35,8 +35,8 @@ class NotificationServiceTest {
         val notifications = captor.firstValue.toList()
         assertEquals(2, notifications.size)
         assertEquals(NotificationType.SUBMITTED, notifications[0].type)
-        assertEquals("req-42", notifications[0].requestId)
-        assertEquals("Request req-42 has been submitted.", notifications[0].message)
+        assertEquals(42, notifications[0].requestId)
+        assertEquals("Request 42 has been submitted.", notifications[0].message)
         assertFalse(notifications[0].read)
     }
 
@@ -46,7 +46,7 @@ class NotificationServiceTest {
         val item = Notification(
             recipientId = 1,
             type = NotificationType.APPROVED,
-            requestId = "req-9",
+            requestId = 9,
             message = "Approved",
             createdAt = Instant.now()
         )
@@ -65,17 +65,17 @@ class NotificationServiceTest {
             id = 77,
             recipientId = 2,
             type = NotificationType.QUERIED,
-            requestId = "req-3",
+            requestId = 3,
             message = "Query",
             createdAt = Instant.now()
         )
-        `when`(repository.findAllByIdInAndRecipientId(setOf(77L), 2)).thenReturn(listOf(item))
+        `when`(repository.findAllByIdInAndRecipientId(setOf(77), 2)).thenReturn(listOf(item))
 
-        val result = service.updateReadState(caller.id, NotificationUpdateRequest(ids = setOf(77L)))
+        val result = service.updateReadState(caller.id, NotificationUpdateRequest(ids = setOf(77)))
 
         assertTrue(item.read)
         assertEquals(1, result.updatedCount)
-        verify(repository).findAllByIdInAndRecipientId(setOf(77L), caller.id)
+        verify(repository).findAllByIdInAndRecipientId(setOf(77), caller.id)
     }
 
     @Test
@@ -83,7 +83,7 @@ class NotificationServiceTest {
         val item = Notification(
             recipientId = 2,
             type = NotificationType.QUERIED,
-            requestId = "req-3",
+            requestId = 3,
             message = "Query",
         )
         `when`(repository.findByRecipientId(2)).thenReturn(listOf(item))
@@ -99,7 +99,7 @@ class NotificationServiceTest {
     fun `read-state update rejects missing or conflicting targets`() {
         listOf(
             NotificationUpdateRequest(),
-            NotificationUpdateRequest(ids = setOf(77L), all = true),
+            NotificationUpdateRequest(ids = setOf(77), all = true),
             NotificationUpdateRequest(ids = emptySet()),
         ).forEach { request ->
             val error = assertThrows<ResponseStatusException> {
