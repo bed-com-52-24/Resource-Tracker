@@ -21,7 +21,7 @@ class Notification(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "notification_id")
-    var id: Long = 0,
+    var id: Int = 0,
 
     @Column(name = "recipient_id", nullable = false)
     var recipientId: Int,
@@ -30,8 +30,8 @@ class Notification(
     @Column(name = "type", nullable = false, length = 40)
     var type: NotificationType,
 
-    @Column(name = "request_id", length = 64)
-    var requestId: String? = null,
+    @Column(name = "request_id")
+    var requestId: Int? = null,
 
     @Column(name = "message", nullable = false, columnDefinition = "TEXT")
     var message: String,
@@ -43,7 +43,7 @@ class Notification(
     val createdAt: Instant = Instant.now(),
 )
 
-interface NotificationRepository : JpaRepository<Notification, Long> {
+interface NotificationRepository : JpaRepository<Notification, Int> {
     fun findByRecipientIdOrderByCreatedAtDesc(recipientId: Int, pageable: Pageable): Page<Notification>
 
     fun findByRecipientIdAndReadOrderByCreatedAtDesc(recipientId: Int, read: Boolean, pageable: Pageable): Page<Notification>
@@ -67,9 +67,9 @@ interface NotificationRepository : JpaRepository<Notification, Long> {
         pageable: Pageable,
     ): Page<Notification>
 
-    fun findByIdAndRecipientId(id: Long, recipientId: Int): Notification?
+    fun findByIdAndRecipientId(id: Int, recipientId: Int): Notification?
 
-    fun findAllByIdInAndRecipientId(ids: Collection<Long>, recipientId: Int): List<Notification>
+    fun findAllByIdInAndRecipientId(ids: Collection<Int>, recipientId: Int): List<Notification>
 
     fun findByRecipientId(recipientId: Int): List<Notification>
 }

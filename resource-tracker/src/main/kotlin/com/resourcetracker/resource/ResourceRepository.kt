@@ -7,9 +7,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import com.resourcetracker.resource.ResourceCategory
-import java.util.UUID
 
-interface ResourceRepository : JpaRepository<Resource, UUID>, JpaSpecificationExecutor<Resource> {
+interface ResourceRepository : JpaRepository<Resource, Int>, JpaSpecificationExecutor<Resource> {
     fun findByName(name: String): Resource?
 
     fun findByCode(code: String): Resource?
@@ -21,14 +20,14 @@ interface ResourceRepository : JpaRepository<Resource, UUID>, JpaSpecificationEx
     fun existsByNameIgnoreCaseAndDepartmentIdAndIdNot(
         name: String,
         departmentId: Int,
-        id: UUID
+        id: Int
     ): Boolean
 
-    fun findByIdAndActiveTrue(id: UUID): Resource?
+    fun findByIdAndActiveTrue(id: Int): Resource?
 
     fun findAllByTypeAndActiveTrue(type: ResourceType, pageable: Pageable): Page<Resource>
 
-    fun findAllByIdInAndActiveTrue(ids: Collection<UUID>): List<Resource>
+    fun findAllByIdInAndActiveTrue(ids: Collection<Int>): List<Resource>
 
     @Query(
         """
@@ -38,7 +37,7 @@ interface ResourceRepository : JpaRepository<Resource, UUID>, JpaSpecificationEx
         where r.id = :id
         """
     )
-    fun findWithRelationsById(@Param("id") id: UUID): Resource?
+    fun findWithRelationsById(@Param("id") id: Int): Resource?
 
     fun existsByDepartmentIdAndActiveTrue(departmentId: Int): Boolean
 

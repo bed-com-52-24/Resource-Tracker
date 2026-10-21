@@ -5,10 +5,10 @@ import java.time.Instant
 
 @Schema(name = "NotificationResponse")
 data class NotificationResponse(
-    val id: Long,
+    val id: Int,
     val recipientId: Int,
     val type: NotificationType,
-    val requestId: String?,
+    val requestId: Int?,
     val message: String,
     val read: Boolean,
     val createdAt: Instant,
@@ -19,7 +19,7 @@ data class NotificationCountResponse(
 )
 
 data class NotificationUpdateRequest(
-    val ids: Set<Long>? = null,
+    val ids: Set<Int>? = null,
     val all: Boolean = false,
     val read: Boolean = true,
 )

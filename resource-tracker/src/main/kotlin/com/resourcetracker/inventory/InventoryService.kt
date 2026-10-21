@@ -9,7 +9,6 @@ import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
-import java.util.UUID
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
@@ -24,7 +23,7 @@ class InventoryService(
         private val events: ApplicationEventPublisher,
 ) {
     @Transactional(readOnly = true)
-    fun availability(resourceId: UUID): ResourceAvailabilityResponse {
+    fun availability(resourceId: Int): ResourceAvailabilityResponse {
         val resource = internalResource(resourceId)
         val totals = inventories.totalsForResource(resourceId)
         return availabilityResponse(resource, totals?.getAvailable() ?: 0L,
@@ -48,7 +47,7 @@ class InventoryService(
 
     @Transactional
     fun create(
-            resourceId: UUID,
+            resourceId: Int,
             request: CreateInventoryRequest,
             caller: AuthenticatedUser
     ): InventoryResponse {
@@ -75,7 +74,7 @@ class InventoryService(
     }
 
     private fun adjust(
-            resourceId: UUID,
+            resourceId: Int,
             request: AdjustInventoryRequest,
             caller: AuthenticatedUser
     ): InventoryResponse {
@@ -98,7 +97,7 @@ class InventoryService(
 
     @Transactional
     fun transact(
-            resourceId: UUID,
+            resourceId: Int,
             request: InventoryTransactionRequest,
             caller: AuthenticatedUser,
     ): InventoryTransactionResponse {
@@ -171,7 +170,7 @@ class InventoryService(
     }
 
     @Transactional(readOnly = true)
-    fun list(resourceId: UUID): InventoryListResponse {
+    fun list(resourceId: Int): InventoryListResponse {
         val items = inventories.findAllByResourceIdOrderByLocation(resourceId).map { it.toResponse() }
         return InventoryListResponse(resourceId, items.sumOf { it.availableQuantity }, items)
     }
@@ -186,7 +185,7 @@ class InventoryService(
             }
 
    private fun mutate(
-        resourceId: UUID,
+        resourceId: Int,
         quantity: Int,
         action: String,
         reason: String,
@@ -211,13 +210,13 @@ class InventoryService(
         return inventory
     }
 
-    private fun locked(resourceId: UUID, location: String): Inventory =
+    private fun locked(resourceId: Int, location: String): Inventory =
             inventories.findForUpdate(resourceId, location)
                     ?: throw ResourceNotFoundException(
                             "Inventory not found for resource $resourceId at $location"
                     )
 
-    private fun internalResource(id: UUID): Resource {
+    private fun internalResource(id: Int): Resource {
         val resource =
                 resources.findById(id).orElseThrow {
                     ResourceNotFoundException("Resource not found with id $id")

@@ -9,7 +9,6 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.util.UUID
 
 @Service
 class ResourceService(
@@ -35,7 +34,7 @@ class ResourceService(
     }
 
     @Transactional
-    fun update(id: UUID, request: UpdateResourceRequest): ResourceResponse {
+    fun update(id: Int, request: UpdateResourceRequest): ResourceResponse {
         validateTypeRules(request.type, request.departmentId, request.preferredVendorId)
         val resource = resourceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }

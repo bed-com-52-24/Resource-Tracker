@@ -8,6 +8,8 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.FetchType
 import jakarta.persistence.Id
+import jakarta.persistence.GeneratedValue
+import jakarta.persistence.GenerationType
 import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
@@ -15,7 +17,6 @@ import jakarta.persistence.PreUpdate
 import jakarta.persistence.Table
 import jakarta.persistence.Version
 import java.time.Instant
-import java.util.UUID
 
 @Entity
 @Table(
@@ -27,8 +28,8 @@ import java.util.UUID
 )
 class Resource(
     @Id
-    @Column(columnDefinition = "BINARY(16)")
-    var id: UUID = UUID.randomUUID(),
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    var id: Int = 0,
 
     @Column(nullable = false, unique = true, updatable = false, length = 20)
     var code: String,

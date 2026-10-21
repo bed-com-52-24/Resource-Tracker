@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.time.Instant
-import java.util.UUID
 import com.resourcetracker.resource.ResourceCategory
 
 enum class AvailabilityStatus {
@@ -15,7 +14,7 @@ enum class AvailabilityStatus {
 
 @Schema(description = "Availability for an internal resource. AVAILABLE means stock is wholly free; PARTIALLY_AVAILABLE means some but not all stock is free; FULLY_RESERVED means no stock is free and at least one unit is reserved; OUT_OF_STOCK means no stock is free and none is reserved (including stock currently issued).")
 data class ResourceAvailabilityResponse(
-    val resourceId: UUID,
+    val resourceId: Int,
     val name: String,
     val category: ResourceCategory,
     val department: String?,
@@ -48,7 +47,7 @@ data class AdjustInventoryRequest(
 
 data class InventoryResponse(
     val id: Long,
-    val resourceId: UUID,
+    val resourceId: Int,
     val location: String,
     val totalQuantity: Int,
     val reservedQuantity: Int,
@@ -60,7 +59,7 @@ data class InventoryResponse(
 )
 
 data class InventoryListResponse(
-    val resourceId: UUID,
+    val resourceId: Int,
     val totalAvailable: Int,
     val items: List<InventoryResponse>,
 )
@@ -100,7 +99,7 @@ data class InventoryTransactionRequest(
 )
 
 data class InventoryTransactionResponse(
-    val resourceId: UUID,
+    val resourceId: Int,
     val type: InventoryTransactionType,
     val quantity: Int?,
     val inventory: InventoryResponse,

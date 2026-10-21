@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.util.Optional
-import java.util.UUID
 
 class ResourceServiceTest {
     private val resources = mock(ResourceRepository::class.java)
@@ -17,7 +16,7 @@ class ResourceServiceTest {
     private val service = ResourceService(resources, codes, departments, vendors)
 
     private fun resource(active: Boolean) = Resource(
-        id = UUID.randomUUID(),
+        id = 1,
         code = "R-1",
         name = "Projector",
         type = ResourceType.EXTERNAL,

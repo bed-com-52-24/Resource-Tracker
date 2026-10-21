@@ -15,7 +15,6 @@ import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
-import java.util.UUID
 
 @RestController
 @RequestMapping("/api/v1/resources/{resourceId}/inventory")
@@ -37,14 +36,14 @@ class InventoryController(private val inventory: InventoryService) {
             content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun create(
-        @PathVariable resourceId: UUID,
+        @PathVariable resourceId: Int,
         @Valid @RequestBody request: CreateInventoryRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = inventory.create(resourceId, request, caller)
 
     @GetMapping
     @Operation(summary = "List inventory by location")
-    fun list(@PathVariable resourceId: UUID) = inventory.list(resourceId)
+    fun list(@PathVariable resourceId: Int) = inventory.list(resourceId)
 
     @PostMapping("/transactions")
     @Operation(
@@ -72,7 +71,7 @@ class InventoryController(private val inventory: InventoryService) {
             content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun transact(
-        @PathVariable resourceId: UUID,
+        @PathVariable resourceId: Int,
         @Valid @RequestBody request: InventoryTransactionRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ): InventoryTransactionResponse = inventory.transact(resourceId, request, caller)

@@ -13,7 +13,6 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.springframework.context.ApplicationEventPublisher
 import java.util.Optional
-import java.util.UUID
 import kotlin.test.assertTrue
 
 class InventoryServiceTest {
@@ -40,7 +39,7 @@ class InventoryServiceTest {
         tokenExpiresAt = java.time.Instant.MAX,
     )
     private val resource = Resource(
-        id = UUID.randomUUID(), code = "R-1", name = "Printer paper",
+        id = 1, code = "R-1", name = "Printer paper",
         type = ResourceType.INTERNAL, category = ResourceCategory.CONSUMABLE, unitOfMeasure = "ream",
     )
     private val inventory = Inventory(resource = resource, location = "HQ", totalQuantity = 1)

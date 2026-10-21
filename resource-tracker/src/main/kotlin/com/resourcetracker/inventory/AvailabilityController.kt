@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import java.util.UUID
 
 @RestController
 @RequestMapping("/api/v1/resources")
@@ -29,7 +28,7 @@ class AvailabilityController(private val inventory: InventoryService) {
         ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Resource is not INTERNAL", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun one(@PathVariable id: UUID) = inventory.availability(id)
+    fun one(@PathVariable id: Int) = inventory.availability(id)
 
     @GetMapping("/availability")
     @Operation(summary = "List resource availability", description = "Lists active INTERNAL resources. AVAILABLE means all units are free; PARTIALLY_AVAILABLE means some units are free while some are reserved or issued; FULLY_RESERVED means none are free and some are reserved; OUT_OF_STOCK means none are free and none are reserved. Filter by status, department id, or category.")
