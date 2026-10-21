@@ -50,6 +50,7 @@ data class UpdateResourceRequest(
 
     val departmentId: Int? = null,
     val preferredVendorId: Int? = null,
+    val active: Boolean? = null,
 )
 
 data class ResourceResponse(

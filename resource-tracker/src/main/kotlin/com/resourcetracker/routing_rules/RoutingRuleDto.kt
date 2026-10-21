@@ -19,6 +19,23 @@ data class RoutingRuleRequest(
     val priority: Int?
 )
 
+data class UpdateRoutingRuleRequest(
+    @field:NotNull
+    val departmentId: Int?,
+
+    val projectId: Int? = null,
+    val teamId: Int? = null,
+
+    @field:NotNull
+    val managerId: Int?,
+
+    @field:NotNull
+    @field:Min(0)
+    val priority: Int?,
+
+    val active: Boolean? = null,
+)
+
 data class RoutingRuleResponse(
     val id: Int,
     val departmentId: Int,

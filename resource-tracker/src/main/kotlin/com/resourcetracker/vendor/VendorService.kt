@@ -40,7 +40,7 @@ class VendorService(private val vendorRepository: VendorRepository) {
     fun getById(id: Int): VendorResponse = findOrThrow(id).toResponse()
 
     @Transactional
-    fun update(id: Int, request: VendorRequest): VendorResponse {
+    fun update(id: Int, request: UpdateVendorRequest): VendorResponse {
         val vendor = findOrThrow(id)
         val name = request.name.trim()
         if (!vendor.name.equals(name, ignoreCase = true) &&
@@ -50,13 +50,7 @@ class VendorService(private val vendorRepository: VendorRepository) {
         }
         vendor.name = name
         vendor.contactInformation = request.contactInformation
-        return vendorRepository.save(vendor).toResponse()
-    }
-
-    @Transactional
-    fun deactivate(id: Int): VendorResponse {
-        val vendor = findOrThrow(id)
-        vendor.status = "INACTIVE"
+        request.active?.let { vendor.status = if (it) "ACTIVE" else "INACTIVE" }
         return vendorRepository.save(vendor).toResponse()
     }
 

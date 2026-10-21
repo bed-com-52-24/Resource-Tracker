@@ -28,7 +28,7 @@ class TeamServiceTest {
 
     private fun user(role: Role = Role.DEPARTMENT_MANAGER, active: Boolean = true) = User(
         id = 7, username = "mgr", email = "mgr@example.com", fullName = "Manager One",
-        passwordHash = "hash", role = role, department = "Engineering", active = active
+        passwordHash = "hash", role = role, department = dept, active = active
     )
 
     private fun request() = TeamRequest(name = "Alpha", departmentId = 1, managerId = 7)
@@ -84,7 +84,7 @@ class TeamServiceTest {
 
         assertEquals("Alpha", response.name)
         assertEquals(7, response.managerId)
-        assertEquals("ACTIVE", response.status)
+        assertEquals(true, response.isActive)
     }
 
     @Test
@@ -94,7 +94,7 @@ class TeamServiceTest {
 
         service.deactivate(3)
 
-        assertEquals("INACTIVE", team.status)
+        assertEquals(false, team.isActive)
     }
 
     @Test
@@ -107,7 +107,7 @@ class TeamServiceTest {
     fun `list rejects more than three sort fields`() {
         assertThrows<InvalidTeamRequestException> {
             service.list(null, null, null, null, null, 0, 20,
-                listOf("name", "status", "createdAt", "name"))
+                listOf("name", "isActive", "createdAt", "name"))
         }
     }
 

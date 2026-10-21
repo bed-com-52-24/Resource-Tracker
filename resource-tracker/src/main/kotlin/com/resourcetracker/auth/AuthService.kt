@@ -55,7 +55,7 @@ class AuthService(
         user.lockedUntil = null
         return LoginResponse(
             user = UserSummary(user.id.toString(),
-                user.username, user.role.name,user.department),
+                user.username, user.role.name, user.department.name),
             tokens = issueTokens(user, now),
         )
     }

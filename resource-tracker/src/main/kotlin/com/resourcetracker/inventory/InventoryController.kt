@@ -42,42 +42,17 @@ class InventoryController(private val inventory: InventoryService) {
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = inventory.create(resourceId, request, caller)
 
-    @PatchMapping
-    @RequiresRoles(Role.ADMIN, Role.DEPARTMENT_MANAGER)
-    @Operation(
-        summary = "Adjust inventory quantity",
-        description = "Location is now part of the request body to avoid URL-encoding user-supplied locations.",
-    )
-    @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Adjusted"),
-        ApiResponse(responseCode = "400", description = "Invalid adjustment",
-            content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Inventory row not found",
-            content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-    ])
-    fun adjust(
-        @PathVariable resourceId: UUID,
-        @Valid @RequestBody request: AdjustInventoryRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = inventory.adjust(resourceId, request, caller)
-
     @GetMapping
     @Operation(summary = "List inventory by location")
     fun list(@PathVariable resourceId: UUID) = inventory.list(resourceId)
-
-    @GetMapping("/available")
-    @Operation(summary = "Get total available quantity")
-    fun available(@PathVariable resourceId: UUID): AvailableQuantityResponse =
-        AvailableQuantityResponse(
-            resourceId = resourceId,
-            availableQuantity = inventory.available(resourceId),
-        )
 
     @PostMapping("/transactions")
     @Operation(
         summary = "Execute an inventory command",
         description = """
-            Unified endpoint for reserve / release / issue / return.
+            Unified endpoint for adjust / reserve / release / issue / return.
+
+            - ADJUST  : set `totalQuantity` and `reorderLevel` for a location
 
             - RESERVE : hold quantity from available stock
             - RELEASE : release previously reserved quantity back to available
@@ -92,6 +67,8 @@ class InventoryController(private val inventory: InventoryService) {
         ApiResponse(responseCode = "400", description = "Invalid quantity or location required",
             content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Insufficient stock / business rule violation",
+            content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Inventory row not found",
             content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun transact(

@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 
 open class ApiException(val status : HttpStatus, val code: String, message: String?) : RuntimeException(message)
@@ -86,4 +87,20 @@ class GlobalExceptionHandler{
             ErrorResponse(400, "MALFORMED_REQUEST", "Malformed request body"),
         )
     }
+
+    @ExceptionHandler(ResponseStatusException::class)
+    fun status(ex: ResponseStatusException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(ex.statusCode).body(
+            ErrorResponse(
+                status = ex.statusCode.value(),
+                code = "REQUEST_FAILED",
+                message = ex.reason ?: "Request failed",
+            ),
+        )
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun illegalArgument(ex: IllegalArgumentException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.badRequest().body(
+            ErrorResponse(400, "INVALID_REQUEST", ex.message ?: "Invalid request"),
+        )
 }

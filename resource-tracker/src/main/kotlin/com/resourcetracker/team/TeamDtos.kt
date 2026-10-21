@@ -1,5 +1,6 @@
 package com.resourcetracker.team
 
+import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.util.UUID
@@ -17,6 +18,27 @@ data class TeamRequest(
 
 data class ProjectSummary(val id: UUID, val name: String, val code: String)
 
+data class UpdateTeamRequest(
+    @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
+    @field:NotBlank @field:Size(min = 2, max = 100)
+    val name: String? = null,
+
+    @field:Schema(description = "Optional department ID. Null or omitted preserves the current department.")
+    val departmentId: Int? = null,
+
+    @field:Schema(description = "Optional manager ID. Null or omitted preserves the current manager.")
+    val managerId: Int? = null,
+
+    @field:Schema(description = "Optional project IDs. Null or omitted preserves the current project assignments.")
+    val projectIds: Set<UUID>? = null,
+
+    @field:Schema(
+        description = "Set to false to deactivate the team, true to reactivate it. Omit to leave unchanged.",
+        nullable = true
+    )
+    val isActive: Boolean? = null,
+)
+
 data class TeamResponse(
     val id: Int,
     val name: String,
@@ -25,7 +47,7 @@ data class TeamResponse(
     val managerId: Int?,
     val managerName: String?,
     val projects: List<ProjectSummary>,
-    val status: String
+    val isActive: Boolean
 )
 
 fun Team.toResponse() = TeamResponse(
@@ -36,5 +58,5 @@ fun Team.toResponse() = TeamResponse(
     managerId = manager?.id,
     managerName = manager?.fullName,
     projects = projects.map { ProjectSummary(it.id!!, it.name, it.code) }.sortedBy { it.name },
-    status = status
+    isActive = isActive
 )

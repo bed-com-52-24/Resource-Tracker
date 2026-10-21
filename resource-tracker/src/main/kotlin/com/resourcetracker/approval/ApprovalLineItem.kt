@@ -27,7 +27,7 @@ class ApprovalLineItem(
     @Column(name = "status", nullable = false, length = 20)
     var status: String,
 
-    @Column(name = "decision_comment", length = 500)
+    @Column(name = "decision_comment", length = 1000)
     var decisionComment: String?,
 
     /** The inventory item an INTERNAL line asks for (column added in V9). */

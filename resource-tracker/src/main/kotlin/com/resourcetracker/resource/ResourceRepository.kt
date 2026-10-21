@@ -3,12 +3,13 @@ package com.resourcetracker.resource
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import com.resourcetracker.resource.ResourceCategory
 import java.util.UUID
 
-interface ResourceRepository : JpaRepository<Resource, UUID> {
+interface ResourceRepository : JpaRepository<Resource, UUID>, JpaSpecificationExecutor<Resource> {
     fun findByName(name: String): Resource?
 
     fun findByCode(code: String): Resource?

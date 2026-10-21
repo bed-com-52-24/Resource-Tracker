@@ -2,6 +2,7 @@ package com.resourcetracker.routing_rules
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import com.resourcetracker.security.AuthenticatedUser
@@ -12,8 +13,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/routing-rules")
+@RequestMapping("/api/v1/routing-rules")
 @Tag(name = "Routing Rules")
+@SecurityRequirement(name = "bearerAuth")
 class RoutingRuleController(
     private val service: RoutingRuleService
 ) {
@@ -50,36 +52,7 @@ class RoutingRuleController(
     @ApiResponse(responseCode = "409", description = "Duplicate active combination")
     fun update(
         @PathVariable id: Int,
-        @Valid @RequestBody request: RoutingRuleRequest,
+        @Valid @RequestBody request: UpdateRoutingRuleRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser
     ) = RoutingRuleResponse.from(service.update(id, request, caller.username))
-
-    @PatchMapping("/{id}/activate")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Activate routing rule")
-    @ApiResponse(responseCode = "409", description = "Duplicate active combination")
-    fun activate(
-        @PathVariable id: Int,
-        @AuthenticationPrincipal caller: AuthenticatedUser
-    ) = RoutingRuleResponse.from(service.activate(id, caller.username))
-
-    @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Deactivate routing rule")
-    fun deactivate(
-        @PathVariable id: Int,
-        @AuthenticationPrincipal caller: AuthenticatedUser
-    ) = RoutingRuleResponse.from(service.deactivate(id, caller.username))
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Soft-delete routing rule")
-    @ApiResponse(responseCode = "204", description = "Soft-deleted")
-    fun delete(
-        @PathVariable id: Int,
-        @AuthenticationPrincipal caller: AuthenticatedUser
-    ): ResponseEntity<Void> {
-        service.softDelete(id, caller.username)
-        return ResponseEntity.noContent().build()
-    }
 }

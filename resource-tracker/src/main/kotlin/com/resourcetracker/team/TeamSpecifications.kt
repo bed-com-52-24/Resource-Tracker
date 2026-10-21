@@ -11,7 +11,7 @@ object TeamSpecifications {
         departmentId: Int?,
         managerId: Int?,
         projectId: UUID?,
-        status: String?,
+        isActive: Boolean?,
         keyword: String?
     ): Specification<Team> = Specification { root, query, cb ->
         val predicates = mutableListOf<Predicate>()
@@ -22,7 +22,7 @@ object TeamSpecifications {
             query.distinct(true)
             predicates.add(cb.equal(root.join<Team, Project>("projects").get<UUID>("id"), it))
         }
-        status?.let { predicates.add(cb.equal(cb.upper(root.get<String>("status")), it.uppercase())) }
+        isActive?.let { predicates.add(cb.equal(root.get<Boolean>("isActive"), it)) }
 
         keyword?.trim()?.takeIf { it.length >= 2 }?.let {
             predicates.add(cb.like(cb.lower(root.get<String>("name")), "%" + it.lowercase() + "%"))

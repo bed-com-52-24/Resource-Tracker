@@ -3,6 +3,7 @@ package com.resourcetracker.team
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.project.Project
 import com.resourcetracker.project.ProjectRepository
@@ -11,7 +12,6 @@ import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -25,7 +25,7 @@ class TeamService(
     private val users: UserRepository,
     private val projects: ProjectRepository
 ) {
-    private val allowedSortFields = setOf("name", "status", "createdAt")
+    private val allowedSortFields = setOf("name", "isActive", "createdAt")
 
     @Transactional
     fun create(req: TeamRequest): TeamResponse {
@@ -43,20 +43,23 @@ class TeamService(
     }
 
     @Transactional
-    fun update(id: Int, req: TeamRequest): TeamResponse {
+    fun update(id: Int, req: UpdateTeamRequest): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
-        val dept = activeDepartment(req.departmentId)
-        val name = req.name.trim()
-        if (teams.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
-            throw DuplicateResourceException("Team name already exists in this department")
-        val manager = validManager(req.managerId)
-        val teamProjects = activeProjects(req.projectIds)
-
-        team.name = name
+        val dept = req.departmentId?.let(::activeDepartment) ?: team.department
+        req.name?.let {
+            val name = it.trim()
+            if (teams.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
+                throw DuplicateResourceException("Team name already exists in this department")
+            team.name = name
+        }
         team.department = dept
-        team.manager = manager
-        team.projects.clear()
-        team.projects.addAll(teamProjects)
+        req.managerId?.let { team.manager = validManager(it) }
+        req.projectIds?.let {
+            val teamProjects = projectsForUpdate(team, it)
+            team.projects.clear()
+            team.projects.addAll(teamProjects)
+        }
+        req.isActive?.let { applyActive(team, it) }
         team.updatedAt = Instant.now()
         return team.toResponse()
     }
@@ -64,7 +67,7 @@ class TeamService(
     @Transactional
     fun deactivate(id: Int): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
-        team.status = "INACTIVE"
+        applyActive(team, false)
         team.updatedAt = Instant.now()
         return team.toResponse()
     }
@@ -78,7 +81,7 @@ class TeamService(
         departmentId: Int?,
         managerId: Int?,
         projectId: UUID?,
-        status: String?,
+        isActive: Boolean?,
         keyword: String?,
         page: Int,
         size: Int,
@@ -89,9 +92,29 @@ class TeamService(
         if (page < 0 || size < 1 || size > 100)
             throw InvalidTeamRequestException("page must be >= 0 and size must be between 1 and 100")
 
-        val spec = TeamSpecifications.filter(departmentId, managerId, projectId, status, keyword)
-        val pageable = PageRequest.of(page, size, buildSort(sort))
+        val spec = TeamSpecifications.filter(departmentId, managerId, projectId, isActive, keyword)
+        val pageable = PageRequest.of(page, size, try {
+            ListQuery.sort(sort, allowedSortFields, "name")
+        } catch (e: IllegalArgumentException) {
+            throw InvalidTeamRequestException(e.message ?: "Invalid sort")
+        })
         return teams.findAll(spec, pageable).map { it.toResponse() }
+    }
+    
+    
+    private fun applyActive(team: Team, active: Boolean) {
+        team.isActive = active
+    }
+
+    // Only newly added projects must be active, so a team can still be edited or deactivated after one of its existing projects was deactivated.
+    private fun projectsForUpdate(team: Team, ids: Set<UUID>): List<Project> {
+        if (ids.isEmpty()) return emptyList()
+        val found = projects.findAllById(ids)
+        if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")
+        val existing = team.projects.mapNotNull { it.id }.toSet()
+        if (found.any { it.id !in existing && !it.active })
+            throw InvalidTeamRequestException("Inactive projects cannot be assigned to a team")
+        return found
     }
 
     private fun activeDepartment(id: Int): Department =
@@ -113,18 +136,4 @@ class TeamService(
         return found
     }
 
-    private fun buildSort(sort: List<String>): Sort {
-        if (sort.size > 3) throw InvalidTeamRequestException("At most 3 sort fields are allowed")
-        val orders = sort.map { s ->
-            val parts = s.split(":")
-            val field = parts[0].trim()
-            if (field !in allowedSortFields)
-                throw InvalidTeamRequestException("Invalid sort field '" + field + "'. Allowed: " + allowedSortFields.joinToString())
-            val dir = parts.getOrNull(1)?.trim()?.lowercase() ?: "asc"
-            if (dir != "asc" && dir != "desc")
-                throw InvalidTeamRequestException("Invalid sort direction '" + dir + "'. Use asc or desc")
-            if (dir == "desc") Sort.Order.desc(field) else Sort.Order.asc(field)
-        }
-        return Sort.by(orders)
-    }
 }

@@ -74,8 +74,7 @@ class InventoryService(
         return inventory.toResponse()
     }
 
-    @Transactional
-    fun adjust(
+    private fun adjust(
             resourceId: UUID,
             request: AdjustInventoryRequest,
             caller: AuthenticatedUser
@@ -105,63 +104,81 @@ class InventoryService(
     ): InventoryTransactionResponse {
         val action = request.type.name
         val reason = request.reason?.takeIf { it.isNotBlank() } ?: defaultReasonFor(request.type)
+        if (request.type == InventoryTransactionType.ADJUST) {
+            if (request.quantity != null) throw BusinessRuleException("quantity must be omitted for ADJUST")
+            val totalQuantity = request.totalQuantity
+                ?: throw BusinessRuleException("totalQuantity is required for ADJUST")
+            val reorderLevel = request.reorderLevel
+                ?: throw BusinessRuleException("reorderLevel is required for ADJUST")
+            val location = request.location?.takeIf { it.isNotBlank() }
+                ?: throw BusinessRuleException("location is required for ADJUST")
+            val updated = adjust(
+                resourceId,
+                AdjustInventoryRequest(location, totalQuantity, reorderLevel, reason),
+                caller,
+            )
+            return InventoryTransactionResponse(resourceId, request.type, null, updated)
+        }
+        if (request.totalQuantity != null || request.reorderLevel != null) {
+            throw BusinessRuleException("totalQuantity and reorderLevel are only valid for ADJUST")
+        }
+        val quantity = request.quantity
+            ?: throw BusinessRuleException("quantity is required for ${request.type}")
         val inventory =
-                mutate(resourceId, request.quantity, action, reason, request.location, caller) { inv
+                mutate(resourceId, quantity, action, reason, request.location, caller) { inv
                     ->
                     when (request.type) {
+                        InventoryTransactionType.ADJUST -> error("ADJUST is handled before quantity transactions")
                         InventoryTransactionType.RESERVE -> {
-                            if (inv.availableQuantity < request.quantity) {
+                            if (inv.availableQuantity < quantity) {
                                 throw BusinessRuleException("Insufficient available inventory")
                             }
-                            inv.reservedQuantity += request.quantity
+                            inv.reservedQuantity += quantity
                         }
                         InventoryTransactionType.RELEASE -> {
-                            if (inv.reservedQuantity < request.quantity) {
+                            if (inv.reservedQuantity < quantity) {
                                 throw BusinessRuleException(
                                         "Cannot release more than the reserved quantity"
                                 )
                             }
-                            inv.reservedQuantity -= request.quantity
+                            inv.reservedQuantity -= quantity
                         }
                         InventoryTransactionType.ISSUE -> {
-                            if (inv.reservedQuantity < request.quantity) {
+                            if (inv.reservedQuantity < quantity) {
                                 throw BusinessRuleException(
                                         "Cannot issue more than the reserved quantity"
                                 )
                             }
-                            inv.reservedQuantity -= request.quantity
-                            inv.issuedQuantity += request.quantity
+                            inv.reservedQuantity -= quantity
+                            inv.issuedQuantity += quantity
                         }
                         InventoryTransactionType.RETURN -> {
-                            if (inv.issuedQuantity < request.quantity) {
+                            if (inv.issuedQuantity < quantity) {
                                 throw BusinessRuleException(
                                         "Cannot return more than the issued quantity"
                                 )
                             }
-                            inv.issuedQuantity -= request.quantity
+                            inv.issuedQuantity -= quantity
                         }
                     }
                 }
         return InventoryTransactionResponse(
                 resourceId = resourceId,
                 type = request.type,
-                quantity = request.quantity,
+                quantity = quantity,
                 inventory = inventory.toResponse(),
         )
     }
 
     @Transactional(readOnly = true)
-    fun available(resourceId: UUID): Int =
-            inventories.findAllByResourceIdOrderByLocation(resourceId).sumOf {
-                it.availableQuantity
-            }
-
-    @Transactional(readOnly = true)
-    fun list(resourceId: UUID): List<InventoryResponse> =
-            inventories.findAllByResourceIdOrderByLocation(resourceId).map { it.toResponse() }
+    fun list(resourceId: UUID): InventoryListResponse {
+        val items = inventories.findAllByResourceIdOrderByLocation(resourceId).map { it.toResponse() }
+        return InventoryListResponse(resourceId, items.sumOf { it.availableQuantity }, items)
+    }
 
     private fun defaultReasonFor(type: InventoryTransactionType): String =
             when (type) {
+                InventoryTransactionType.ADJUST -> "Inventory adjustment"
                 InventoryTransactionType.RESERVE -> "Reservation"
                 InventoryTransactionType.RELEASE -> "Reservation release"
                 InventoryTransactionType.ISSUE -> "Issue"
@@ -216,7 +233,7 @@ class InventoryService(
                 users.findById(caller.id).orElseThrow {
                     ResourceNotFoundException("User not found")
                 }
-        if (caller.role.name != "DEPARTMENT_MANAGER" || user.department != resource.department?.name
+        if (caller.role.name != "DEPARTMENT_MANAGER" || user.department.id != resource.department?.id
         ) {
             throw BusinessRuleException(
                     "Department manager does not own this resource's department"

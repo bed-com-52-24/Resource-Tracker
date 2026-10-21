@@ -31,6 +31,6 @@ class ApprovalAudit(
     @Column(name = "action", nullable = false, length = 50)
     val action: String,
 
-    @Column(name = "comment", length = 500)
+    @Column(name = "comment", length = 1000)
     val comment: String?
 )

@@ -1,14 +1,15 @@
 package com.resourcetracker.user
 
 import com.resourcetracker.auth.RefreshTokenRepository
+import com.resourcetracker.department.DepartmentRepository
+import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.common.WeakPasswordException
+import com.resourcetracker.common.ListQuery
 import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
-import org.springframework.data.domain.Sort
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -19,6 +20,8 @@ class UserService(
     private val users: UserRepository,
     private val refreshTokens: RefreshTokenRepository,
     private val encoder: PasswordEncoder,
+    private val departments: DepartmentRepository,
+    private val teams: TeamRepository,
 ) {
     companion object {
         val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
@@ -50,8 +53,8 @@ class UserService(
             fullName = request.fullName.trim(),
             passwordHash = encoder.encode(request.password)!!,
             role = request.role,
-            department = cleanDepartment(request.department) ?: "",
-            teams = cleanTeams(request.teams),
+            department = activeDepartment(request.departmentId),
+            teams = activeTeams(request.teamIds ?: emptySet()),
         )
 
         return try {
@@ -64,59 +67,46 @@ class UserService(
     @Transactional
     fun update(id: Int, request: UpdateUserRequest): UserResponse {
         val user = find(id)
-        val email = request.email.trim()
+        val email = request.email?.trim()
 
-        if (!user.email.equals(email, ignoreCase = true) && users.existsByEmailIgnoreCase(email)) {
+        if (email != null && !user.email.equals(email, ignoreCase = true) && users.existsByEmailIgnoreCase(email)) {
             throw DuplicateResourceException("Email '$email' is already in use")
         }
 
-        user.email = email
-        user.fullName = request.fullName.trim()
-        user.department = cleanDepartment(request.department) ?: ""
-        user.teams.clear()
-        user.teams.addAll(cleanTeams(request.teams))
+        email?.let { user.email = it }
+        request.fullName?.let { user.fullName = it.trim() }
+        request.departmentId?.let { user.department = activeDepartment(it) }
+        request.teamIds?.let {
+            user.teams.clear()
+            user.teams.addAll(activeTeams(it))
+        }
+
+        request.role?.let { newRole ->
+            if(newRole != user.role){
+                applyRole(user, newRole)
+            }
+        }
+        
+        request.active?.let{applyActive(user, it)}
 
         return try {
-            users.saveAndFlush(user).toResponse()
+            users.save(user).toResponse()
         } catch (e: DataIntegrityViolationException) {
-            throw DuplicateResourceException("Email '$email' is already in use")
+            throw DuplicateResourceException("Email '${email ?: user.email}' is already in use")
         }
-    }
-
-    @Transactional
-    fun changeRole(id: Int, newRole: Role): UserResponse {
-        requireAssignable(newRole)
-        val user = find(id)
-
-        if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
-            ensureAnotherActiveAdmin(user)
-        }
-        user.role = newRole
-        return users.save(user).toResponse()
-    }
-
-    @Transactional
-    fun deactivate(id: Int): UserResponse {
-        val user = find(id)
-        if (!user.active) return user.toResponse()
-
-        if (user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
-
-        user.active = false
-        users.save(user)
-
-        refreshTokens.revokeAllByUserId(user.id)
-        return user.toResponse()
     }
 
     @Transactional(readOnly = true)
     fun list(search: String?, pageable: Pageable): Page<UserResponse> {
-        val safe = PageRequest.of(
-            pageable.pageNumber.coerceAtLeast(0),
-            pageable.pageSize.coerceIn(1, MAX_PAGE_SIZE),
-            pageable.sort.filter { it.property in SORTABLE }
-                .toList()
-                .let { if (it.isNotEmpty()) Sort.by(it) else Sort.by("username") },
+        val requestedSort = pageable.sort.firstOrNull()
+        val safe = ListQuery.pageable(
+            pageable.pageNumber,
+            pageable.pageSize,
+            requestedSort?.property,
+            requestedSort?.direction?.name,
+            SORTABLE,
+            "username",
+            MAX_PAGE_SIZE,
         )
 
         val term = search?.trim()?.takeIf { it.isNotEmpty() }
@@ -134,6 +124,26 @@ class UserService(
         }
     }
 
+    private fun applyRole(user: User, newRole: Role) {
+    requireAssignable(newRole)
+    if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
+        ensureAnotherActiveAdmin(user)
+    }
+    user.role = newRole
+    }
+    
+    private fun applyActive(user: User, active: Boolean){
+        if(user.active == active) return
+        
+        if(!active){
+            if(user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
+            user.active = false
+            refreshTokens.revokeAllByUserId(user.id)
+        }else{
+            user.active = true
+        }
+    }
+
     private fun ensureAnotherActiveAdmin(target: User) {
         val admins = users.findActiveByRoleForUpdate(Role.ADMIN)
         if (admins.none { it.id != target.id }) {
@@ -141,18 +151,22 @@ class UserService(
         }
     }
 
-    private fun cleanDepartment(value: String?): String? =
-        value?.trim()?.takeIf { it.isNotEmpty() }?.also {
-            if (it.length > 100) throw BusinessRuleException("Department must be at most 100 characters")
-        }
-
-    private fun cleanTeams(values: Set<String>): MutableSet<String> =
-        values.map { it.trim() }.filter { it.isNotEmpty() }
-            .onEach { if (it.length > 100) throw BusinessRuleException("Team names must be at most 100 characters") }
-            .toMutableSet()
-
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName,
-        role = role, department = department, teams = teams.sorted(), active = active,
+        role = role,
+        departmentId = department.id,
+        departmentName = department.name,
+        teamIds = teams.map { it.id }.sorted(),
+        teamNames = teams.map { it.name }.sorted(),
+        active = active,
     )
+
+    private fun activeDepartment(id: Int) =
+        departments.findById(id).orElseThrow { ResourceNotFoundException("Department $id not found") }
+            .also { if (it.status != "ACTIVE") throw BusinessRuleException("Department $id is inactive") }
+
+    private fun activeTeams(ids: Set<Int>) =
+        ids.map { teams.findById(it).orElseThrow { ResourceNotFoundException("Team $it not found") } }
+            .also { found -> if (found.any { !it.isActive }) throw BusinessRuleException("Inactive teams cannot be assigned") }
+            .toMutableSet()
 }

@@ -62,12 +62,12 @@ class SecurityConfig {
         .exceptionHandling { it.authenticationEntryPoint(entryPoint) }
         .authorizeHttpRequests {
             it.requestMatchers(
-                "/api/v1/auth/login", "/api/v1/auth/refresh", "/error",
+                "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/health", "/error",
                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
             ).permitAll()
                 .requestMatchers(
                     "/api/departments/**",
-                    "/api/vendors/**",
+                    "/api/v1/vendors/**",
                     "/api/v1/projects/**",
                 ).hasRole("ADMIN")
                 .anyRequest().authenticated()

@@ -17,3 +17,13 @@ data class NotificationResponse(
 data class NotificationCountResponse(
     val count: Long,
 )
+
+data class NotificationUpdateRequest(
+    val ids: Set<Long>? = null,
+    val all: Boolean = false,
+    val read: Boolean = true,
+)
+
+data class NotificationUpdateResponse(
+    val updatedCount: Int,
+)

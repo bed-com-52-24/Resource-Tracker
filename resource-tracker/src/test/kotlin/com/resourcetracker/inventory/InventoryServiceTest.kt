@@ -75,4 +75,29 @@ class InventoryServiceTest {
         assertEquals(1, inventory.reservedQuantity)
         assertTrue(inventory.availableQuantity >= 0)
     }
+
+    @Test
+    fun `ADJUST transaction updates target total and list includes total available`() {
+        `when`(inventories.findForUpdate(resource.id, "HQ")).thenReturn(inventory)
+        `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
+        `when`(inventories.findAllByResourceIdOrderByLocation(resource.id)).thenReturn(listOf(inventory))
+
+        val result = service.transact(
+            resource.id,
+            InventoryTransactionRequest(
+                type = InventoryTransactionType.ADJUST,
+                location = "HQ",
+                reason = "Stocktake",
+                totalQuantity = 8,
+                reorderLevel = 2,
+            ),
+            caller,
+        )
+
+        assertEquals(InventoryTransactionType.ADJUST, result.type)
+        assertEquals(null, result.quantity)
+        assertEquals(8, inventory.totalQuantity)
+        assertEquals(2, inventory.reorderLevel)
+        assertEquals(8, service.list(resource.id).totalAvailable)
+    }
 }

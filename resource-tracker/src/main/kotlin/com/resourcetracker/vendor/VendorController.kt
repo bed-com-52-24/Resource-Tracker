@@ -15,7 +15,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/api/vendors")
+@RequestMapping("/api/v1/vendors")
 @Tag(name = "Vendors", description = "Create, search, update, and deactivate vendors")
 @SecurityRequirement(name = "bearerAuth")
 class VendorController(private val vendorService: VendorService) {
@@ -58,7 +58,7 @@ class VendorController(private val vendorService: VendorService) {
     fun get(@PathVariable id: Int) = vendorService.getById(id)
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a vendor", description = "Update a vendor's name and contact information.")
+    @Operation(summary = "Update a vendor", description = "Update a vendor's name and contact information. Set active to true or false to change its status; omit it to leave status unchanged.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Vendor updated", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -67,16 +67,6 @@ class VendorController(private val vendorService: VendorService) {
         ApiResponse(responseCode = "404", description = "Vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "A vendor with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun update(@PathVariable id: Int, @Valid @RequestBody request: VendorRequest) =
+    fun update(@PathVariable id: Int, @Valid @RequestBody request: UpdateVendorRequest) =
         vendorService.update(id, request)
-
-    @PatchMapping("/{id}/deactivate")
-    @Operation(summary = "Deactivate a vendor", description = "Mark a vendor as inactive.")
-    @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Vendor deactivated", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
-        ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-    ])
-    fun deactivate(@PathVariable id: Int) = vendorService.deactivate(id)
 }
