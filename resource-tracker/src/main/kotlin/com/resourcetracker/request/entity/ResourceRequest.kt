@@ -65,12 +65,6 @@ class ResourceRequest(
     @Column(name = "total_amount", nullable = false, precision = 19, scale = 2)
     var totalAmount: BigDecimal = BigDecimal.ZERO,
 
-    @Column(name = "edited_after_query", nullable = false)
-    var editedAfterQuery: Boolean = false,
-
-    @Column(name = "queried_at")
-    var queriedAt: LocalDateTime? = null,
-
     @Column(name = "created_at", insertable = false, updatable = false)
     var createdAt: LocalDateTime? = null,
 

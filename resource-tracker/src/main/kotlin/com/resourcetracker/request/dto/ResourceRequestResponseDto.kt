@@ -27,7 +27,6 @@ data class ResourceRequestResponseDto(
     val justification: String?,
     val totalAmount: BigDecimal,
     val status: RequestStatus,
-    val editedAfterQuery: Boolean,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
     val lineItems: List<RequestLineItemResponseDto>
