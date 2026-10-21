@@ -24,7 +24,7 @@ class UserService(
     private val teams: TeamRepository,
 ) {
     companion object {
-        val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
+        val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MEMBER)
 
         private val SORTABLE = setOf("username", "email", "fullName", "role", "department", "active")
         private const val MAX_PAGE_SIZE = 100

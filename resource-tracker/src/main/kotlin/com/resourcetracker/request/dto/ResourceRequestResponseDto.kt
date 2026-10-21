@@ -4,6 +4,7 @@ import com.resourcetracker.request.entity.RequestCategory
 import com.resourcetracker.request.entity.RequestStatus
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.LocalDate
 
 data class RequestLineItemResponseDto(
     val lineItemId: Int,
@@ -12,7 +13,15 @@ data class RequestLineItemResponseDto(
     val unitPrice: BigDecimal,
     val quantity: Int,
     val category: RequestCategory,
-    val batchNumber: String?
+    val batchNumber: String?,
+    val resourceId: Int? = null,
+    val fulfillmentPreference: String = "INTERNAL",
+    val unitOfMeasure: String? = null,
+    val approvedQuantity: Int? = null,
+    val physicalQuantity: Int? = null,
+    val reservedQuantity: Int? = null,
+    val unavailableQuantity: Int? = null,
+    val availableQuantity: Int? = null,
 )
 
 data class ResourceRequestResponseDto(
@@ -21,14 +30,18 @@ data class ResourceRequestResponseDto(
     val departmentId: Int,
     val projectId: Int,
     val teamId: Int,
-    val vendorId: Int,
+    val vendorId: Int?,
     val requesterId: Int,
-    val assignedManagerId: Int,
+    val assignedManagerId: Int?,
+    val needsReassignment: Boolean = false,
+    val requiredDate: LocalDate? = null,
     val justification: String?,
     val totalAmount: BigDecimal,
     val status: RequestStatus,
     val editedAfterQuery: Boolean,
     val createdAt: LocalDateTime,
     val updatedAt: LocalDateTime,
-    val lineItems: List<RequestLineItemResponseDto>
+    val lineItems: List<RequestLineItemResponseDto>,
+    val warnings: List<String> = emptyList(),
+    val fulfillmentStatus: String = "NOT_STARTED",
 )

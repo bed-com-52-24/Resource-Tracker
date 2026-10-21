@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -108,6 +109,12 @@ class GlobalExceptionHandler{
                 code = "REQUEST_FAILED",
                 message = ex.reason ?: "Request failed",
             ),
+        )
+
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun optimisticLock(ex: OptimisticLockingFailureException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.CONFLICT).body(
+            ErrorResponse(409, "CONCURRENT_MODIFICATION", "This record changed while you were acting. Reload and try again."),
         )
 
     @ExceptionHandler(IllegalArgumentException::class)

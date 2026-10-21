@@ -4,9 +4,16 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
+import jakarta.persistence.LockModeType
 import com.resourcetracker.resource.ResourceCategory
 
 interface ResourceRepository : JpaRepository<Resource, Int>, JpaSpecificationExecutor<Resource> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Resource r where r.id = :id")
+    fun findForUpdateById(@Param("id") id: Int): Resource?
     fun findByName(name: String): Resource?
 
     fun findByCode(code: String): Resource?

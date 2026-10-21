@@ -1,27 +1,33 @@
 package com.resourcetracker.request.dto
 
+import com.resourcetracker.request.entity.FulfillmentPreference
+import com.resourcetracker.request.entity.RequestCategory
 import jakarta.validation.Valid
+import jakarta.validation.constraints.FutureOrPresent
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
+import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
+import java.time.LocalDate
 
 data class CreateResourceRequestDto(
-    @field:Positive
-    val departmentId: Int,
+    @field:Positive val teamId: Int,
+    @field:Positive val projectId: Int,
+    @field:Positive val vendorId: Int? = null,
+    @field:NotBlank @field:Size(max = 500) val justification: String,
+    @field:NotNull @field:FutureOrPresent val requiredDate: LocalDate,
+    @field:NotEmpty @field:Valid val lineItems: List<RequestLineItemDto>,
+)
 
-    @field:Positive
-    val projectId: Int,
-
-    @field:Positive
-    val teamId: Int,
-
-    @field:Positive
-    val vendorId: Int,
-
-    @field:Size(max = 500)
-    val justification: String? = null,
-
-    @field:NotEmpty
-    @field:Valid
-    val lineItems: List<RequestLineItemDto>
+data class RequestLineItemDto(
+    val resourceId: Int? = null,
+    @field:Size(max = 255) val description: String = "",
+    @field:Size(max = 120) val manufacturer: String = "N/A",
+    val unitPrice: java.math.BigDecimal = java.math.BigDecimal.ZERO,
+    @field:Positive val quantity: Int,
+    val category: RequestCategory = RequestCategory.OTHER,
+    @field:Size(max = 50) val batchNumber: String? = null,
+    val unitOfMeasure: String? = null,
+    val fulfillmentPreference: FulfillmentPreference = FulfillmentPreference.INTERNAL,
 )

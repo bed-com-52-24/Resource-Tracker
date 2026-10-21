@@ -77,6 +77,10 @@ class NotificationService(
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
             NotificationType.OVERDUE_RETURN -> "An overdue return needs attention${if (resource != null) " for $resource" else ""}."
             NotificationType.PROCUREMENT -> "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."
+            NotificationType.REASSIGNMENT_REQUIRED -> payload["message"]?.toString()
+                ?: "Request ${requestId ?: "unknown"} needs manager reassignment."
+            NotificationType.REASSIGNED -> "Request ${requestId ?: "unknown"} has a new assigned manager."
+            NotificationType.CANCELLED -> "Request ${requestId ?: "unknown"} was cancelled."
         }
     }
 

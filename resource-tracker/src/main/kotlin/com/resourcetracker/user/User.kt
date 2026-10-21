@@ -31,7 +31,7 @@ import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import kotlin.reflect.KClass
 
-enum class Role { ADMIN, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR }
+enum class Role { ADMIN, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR, MEMBER }
 
 @Entity
 @Table(name = "users")
@@ -63,6 +63,12 @@ interface UserRepository : JpaRepository<User, Int> {
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByEmailIgnoreCase(email: String): Boolean
     fun existsByEmailIgnoreCaseAndIdNot(email: String, id: Int): Boolean
+
+    @Query("select u from User u where u.role = :role and u.department.id = :departmentId and u.active = true")
+    fun findActiveByRoleAndDepartmentId(@Param("role") role: Role, @Param("departmentId") departmentId: Int): List<User>
+
+    @Query("select u from User u where u.role = :role and u.active = true")
+    fun findActiveByRole(@Param("role") role: Role): List<User>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.role = :role and u.active = true")

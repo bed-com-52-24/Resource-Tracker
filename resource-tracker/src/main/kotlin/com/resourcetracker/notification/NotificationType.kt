@@ -9,4 +9,7 @@ enum class NotificationType {
     RESUBMITTED,
     OVERDUE_RETURN,
     PROCUREMENT,
+    REASSIGNMENT_REQUIRED,
+    REASSIGNED,
+    CANCELLED,
 }
