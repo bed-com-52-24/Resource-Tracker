@@ -54,7 +54,7 @@ class UserService(
             passwordHash = encoder.encode(request.password)!!,
             role = request.role,
             department = activeDepartment(request.departmentId),
-            teams = activeTeams(request.teamIds),
+            teams = activeTeams(request.teamIds ?: emptySet()),
         )
 
         return try {

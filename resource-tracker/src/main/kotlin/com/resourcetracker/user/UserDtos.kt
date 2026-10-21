@@ -14,8 +14,13 @@ data class CreateUserRequest(
     @field:Schema(example = "TEAM_LEAD", allowableValues = ["TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN"]) val role: Role,
     @field:Schema(description = "Existing active department ID. The department must exist.", example = "1")
     val departmentId: Int,
-    @field:Schema(description = "Existing active team IDs. Each team must exist and be active.", example = "[3, 4]")
-    val teamIds: Set<Int> = emptySet(),
+    @field:Schema(
+        description = "Existing active team IDs. Each team must exist and be active. " +
+                "Optional for ADMIN and DEPARTMENT_MANAGER users.",
+        example = "[3, 4]",
+        nullable = true,
+    )
+    val teamIds: Set<Int>? = null,
 )
 
 @Schema(description = "Editable profile fields for a user")

@@ -40,7 +40,8 @@ class UserController(private val users: UserService) {
     @Operation(
         summary = "Create a user",
         description = "Creates an account using existing department and team IDs. " +
-                "The department and every team must exist and be active. " +
+                "The department and every supplied team must exist and be active. " +
+                "Team IDs are optional for ADMIN and DEPARTMENT_MANAGER users. " +
                 "MANAGING_DIRECTOR is reserved and cannot be assigned through this endpoint."
     )
     @ApiResponses(

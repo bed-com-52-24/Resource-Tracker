@@ -1,6 +1,5 @@
 package com.resourcetracker.request.service
 
-import com.resourcetracker.request.RequestIdempotencyService
 import com.resourcetracker.request.dto.RequestLineItemDto
 import com.resourcetracker.request.dto.RequesterUpdateStatus
 import com.resourcetracker.request.dto.UpdateResourceRequestDto
