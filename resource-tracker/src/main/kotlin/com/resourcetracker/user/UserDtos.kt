@@ -11,12 +11,12 @@ data class CreateUserRequest(
     @field:NotBlank @field:Email @field:Size(max = 150) @field:Schema(example = "jdoe@example.com") val email: String,
     @field:NotBlank @field:Size(max = 255) @field:Schema(example = "Jane Doe") val fullName: String,
     @field:NotBlank @field:Schema(example = "StrongPass1!", format = "password", description = "At least 8 characters, with uppercase, digit, and special character") val password: String,
-    @field:Schema(example = "TEAM_LEAD", allowableValues = ["TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN"]) val role: Role,
+    @field:Schema(example = "TEAM_LEAD", allowableValues = ["TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MEMBER"]) val role: Role,
     @field:Schema(description = "Existing active department ID. The department must exist.", example = "1")
     val departmentId: Int,
     @field:Schema(
         description = "Existing active team IDs. Each team must exist and be active. " +
-                "Optional for ADMIN and DEPARTMENT_MANAGER users.",
+                "Required for MEMBER users; optional for ADMIN and DEPARTMENT_MANAGER users.",
         example = "[3, 4]",
         nullable = true,
     )

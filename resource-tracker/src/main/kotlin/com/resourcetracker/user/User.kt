@@ -23,6 +23,7 @@ import jakarta.validation.ConstraintValidator
 import jakarta.validation.ConstraintValidatorContext
 import jakarta.validation.Payload
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -31,7 +32,7 @@ import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import kotlin.reflect.KClass
 
-enum class Role { ADMIN, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR }
+enum class Role { ADMIN, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR, MEMBER }
 
 @Entity
 @Table(name = "users")
@@ -58,11 +59,12 @@ class User(
     var lockedUntil: Instant? = null,
 )
 
-interface UserRepository : JpaRepository<User, Int> {
+interface UserRepository : JpaRepository<User, Int>, JpaSpecificationExecutor<User> {
     fun findByUsername(username: String): User?
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByEmailIgnoreCase(email: String): Boolean
     fun existsByEmailIgnoreCaseAndIdNot(email: String, id: Int): Boolean
+    fun findDistinctByTeams_Id(teamId: Int, pageable: Pageable): Page<User>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.role = :role and u.active = true")

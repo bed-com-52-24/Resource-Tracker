@@ -24,7 +24,7 @@ class UserService(
     private val teams: TeamRepository,
 ) {
     companion object {
-        val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
+        val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MEMBER)
 
         private val SORTABLE = setOf("username", "email", "fullName", "role", "department", "active")
         private const val MAX_PAGE_SIZE = 100
@@ -47,6 +47,7 @@ class UserService(
         val violations = PasswordPolicy.violations(request.password)
         if (violations.isNotEmpty()) throw WeakPasswordException(violations)
 
+        val userTeams = activeTeams(request.teamIds ?: emptySet())
         val user = User(
             username = username,
             email = email,
@@ -54,8 +55,9 @@ class UserService(
             passwordHash = encoder.encode(request.password)!!,
             role = request.role,
             department = activeDepartment(request.departmentId),
-            teams = activeTeams(request.teamIds ?: emptySet()),
+            teams = userTeams,
         )
+        requireMemberHasTeam(user)
 
         return try {
             users.saveAndFlush(user).toResponse()
@@ -86,8 +88,9 @@ class UserService(
                 applyRole(user, newRole)
             }
         }
-        
+
         request.active?.let{applyActive(user, it)}
+        requireMemberHasTeam(user)
 
         return try {
             users.save(user).toResponse()
@@ -130,6 +133,12 @@ class UserService(
         ensureAnotherActiveAdmin(user)
     }
     user.role = newRole
+    }
+
+    private fun requireMemberHasTeam(user: User) {
+        if (user.role == Role.MEMBER && user.teams.isEmpty()) {
+            throw BusinessRuleException("MEMBER users must belong to at least one active team")
+        }
     }
     
     private fun applyActive(user: User, active: Boolean){

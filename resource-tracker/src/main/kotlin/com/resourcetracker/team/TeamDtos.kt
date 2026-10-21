@@ -50,6 +50,24 @@ data class TeamResponse(
     val isActive: Boolean
 )
 
+data class AddTeamMembersRequest(
+    val userIds: Set<Int>
+)
+
+data class TransferTeamMemberRequest(
+    val toTeamId: Int
+)
+
+data class TeamMemberResponse(
+    val id: Int,
+    val username: String,
+    val email: String,
+    val fullName: String,
+    val role: com.resourcetracker.user.Role,
+    val active: Boolean,
+    val teamIds: List<Int>,
+)
+
 fun Team.toResponse() = TeamResponse(
     id = id,
     name = name,
