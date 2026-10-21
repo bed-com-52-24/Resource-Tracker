@@ -29,7 +29,6 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @Validated
 @RequestMapping("/api/v1/resources")
-@RequiresRoles(Role.ADMIN)
 @Tag(name = "Resources", description = "Create, update, and deactivate resources")
 @SecurityRequirement(name = "bearerAuth")
 class ResourceController(private val resources: ResourceService) {
@@ -49,6 +48,8 @@ class ResourceController(private val resources: ResourceService) {
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) type: ResourceType?,
         @RequestParam(required = false) category: ResourceCategory?,
+        @RequestParam(required = false) status: ResourceStatus?,
+        @RequestParam(required = false) departmentId: Int?,
         @RequestParam(required = false) search: String?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
@@ -58,6 +59,8 @@ class ResourceController(private val resources: ResourceService) {
         active = active,
         type = type,
         category = category,
+        status = status,
+        departmentId = departmentId,
         keyword = search,
         page = page,
         size = size,
@@ -68,6 +71,7 @@ class ResourceController(private val resources: ResourceService) {
     )
 
     @PostMapping
+    @RequiresRoles(Role.ADMIN)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a resource", description = "Creates a new active resource.")
     @ApiResponses(value = [
@@ -82,6 +86,7 @@ class ResourceController(private val resources: ResourceService) {
         resources.create(request)
 
     @PutMapping("/{id}")
+    @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Update a resource", description = "Updates an existing resource. Set active to true or false to change its state; omit it to leave the state unchanged.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource updated", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
@@ -96,7 +101,10 @@ class ResourceController(private val resources: ResourceService) {
         @Valid @RequestBody request: UpdateResourceRequest,
     ): ResourceResponse = resources.update(id, request)
 
+    @GetMapping("/{id}")
+    fun get(@PathVariable id: UUID): ResourceResponse = resources.get(id)
+
     companion object {
-        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt")
+        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")
     }
 }

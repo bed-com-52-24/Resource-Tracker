@@ -19,7 +19,7 @@ class ResourceService(
 ) {
     @Transactional
     fun create(request: CreateResourceRequest): ResourceResponse {
-        validateTypeRules(request.type, request.departmentId, request.preferredVendorId)
+        validateTypeRules(request.type, request.departmentId, request.preferredVendorId, request.quantity)
         val resource = Resource(
             code = resourceCodeGenerator.next(),
             name = request.name,
@@ -29,23 +29,27 @@ class ResourceService(
             description = request.description,
             department = request.departmentId?.let(::findDepartment),
             preferredVendor = request.preferredVendorId?.let(::findVendor),
+            quantity = request.quantity,
+            location = request.location,
+            reorderLevel = request.reorderLevel,
         )
+        resource.create()
         return resourceRepository.save(resource).toResponse()
     }
 
     @Transactional
     fun update(id: Int, request: UpdateResourceRequest): ResourceResponse {
-        validateTypeRules(request.type, request.departmentId, request.preferredVendorId)
+        validateTypeRules(request.type, request.departmentId, request.preferredVendorId, request.quantity)
         val resource = resourceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }
 
         resource.name = request.name
-        resource.type = request.type
         resource.category = request.category
         resource.unitOfMeasure = request.unitOfMeasure
         resource.description = request.description
         resource.department = request.departmentId?.let(::findDepartment)
         resource.preferredVendor = request.preferredVendorId?.let(::findVendor)
+        resource.update(request.type, request.quantity, request.location, request.reorderLevel)
         request.active?.let { applyActive(resource, it) }
         return resourceRepository.save(resource).toResponse()
     }
@@ -55,6 +59,8 @@ class ResourceService(
         active: Boolean?,
         type: ResourceType?,
         category: ResourceCategory?,
+        status: ResourceStatus?,
+        departmentId: Int?,
         keyword: String?,
         page: Int,
         size: Int,
@@ -69,16 +75,22 @@ class ResourceService(
 
         val pageable = PageRequest.of(page, size, ListQuery.sort(sort, ALLOWED_SORT_FIELDS, "name"))
         return resourceRepository.findAll(
-            ResourceSpecifications.filter(active, type, category, keyword),
+            ResourceSpecifications.filter(active, type, category, status, departmentId, keyword),
             pageable,
         ).map { it.toResponse() }
     }
+
+    @Transactional(readOnly = true)
+    fun get(id: Int): ResourceResponse =
+        resourceRepository.findWithRelationsById(id)
+            ?.toResponse()
+            ?: throw ResourceNotFoundException("Resource not found with id $id")
 
     private fun applyActive(resource: Resource, active: Boolean) {
         resource.active = active
     }
 
-    private fun validateTypeRules(type: ResourceType, departmentId: Int?, vendorId: Int?) {
+    private fun validateTypeRules(type: ResourceType, departmentId: Int?, vendorId: Int?, quantity: Int?) {
         when (type) {
             ResourceType.INTERNAL -> {
                 if (departmentId == null) {
@@ -87,10 +99,16 @@ class ResourceService(
                 if (vendorId != null) {
                     throw BusinessRuleException("preferredVendorId is not allowed for INTERNAL resources")
                 }
+                if (quantity == null) {
+                    throw BusinessRuleException("quantity is required for INTERNAL resources")
+                }
             }
             ResourceType.EXTERNAL -> {
                 if (departmentId != null) {
                     throw BusinessRuleException("departmentId is not allowed for EXTERNAL resources")
+                }
+                if (quantity != null) {
+                    throw BusinessRuleException("quantity is not allowed for EXTERNAL resources")
                 }
             }
         }
@@ -113,11 +131,15 @@ class ResourceService(
         unitOfMeasure = unitOfMeasure,
         description = description,
         active = active,
+        quantity = quantity,
+        location = location,
+        reorderLevel = reorderLevel,
+        status = status,
         departmentId = department?.id,
         preferredVendorId = preferredVendor?.id,
     )
 
     companion object {
-        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt")
+        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")
     }
 }
