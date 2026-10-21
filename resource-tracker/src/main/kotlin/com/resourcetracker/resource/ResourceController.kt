@@ -11,7 +11,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -28,6 +31,39 @@ import java.util.UUID
 @Tag(name = "Resources", description = "Create, update, and deactivate resources")
 @SecurityRequirement(name = "bearerAuth")
 class ResourceController(private val resources: ResourceService) {
+
+    @GetMapping
+    @Operation(
+        summary = "List resources",
+        description = "Lists resources with optional active-state, type, category, and name/code search filters."
+    )
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Resources returned"),
+        ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
+    fun list(
+        @RequestParam(required = false) active: Boolean?,
+        @RequestParam(required = false) type: ResourceType?,
+        @RequestParam(required = false) category: ResourceCategory?,
+        @RequestParam(required = false) search: String?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(defaultValue = "name") sort: String,
+        @RequestParam(defaultValue = "asc") direction: String,
+    ): Page<ResourceResponse> = resources.list(
+        active = active,
+        type = type,
+        category = category,
+        keyword = search,
+        page = page,
+        size = size,
+        sort = listOf(
+            "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
+                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
+        ),
+    )
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -58,4 +94,7 @@ class ResourceController(private val resources: ResourceService) {
         @Valid @RequestBody request: UpdateResourceRequest,
     ): ResourceResponse = resources.update(id, request)
 
+    companion object {
+        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt")
+    }
 }

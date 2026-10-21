@@ -4,6 +4,9 @@ import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
+import com.resourcetracker.common.ListQuery
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -48,6 +51,30 @@ class ResourceService(
         return resourceRepository.save(resource).toResponse()
     }
 
+    @Transactional(readOnly = true)
+    fun list(
+        active: Boolean?,
+        type: ResourceType?,
+        category: ResourceCategory?,
+        keyword: String?,
+        page: Int,
+        size: Int,
+        sort: List<String>,
+    ): Page<ResourceResponse> {
+        if (keyword != null && keyword.length > 200) {
+            throw BusinessRuleException("Keyword must not exceed 200 characters")
+        }
+        if (page < 0 || size < 1 || size > 100) {
+            throw BusinessRuleException("page must be >= 0 and size must be between 1 and 100")
+        }
+
+        val pageable = PageRequest.of(page, size, ListQuery.sort(sort, ALLOWED_SORT_FIELDS, "name"))
+        return resourceRepository.findAll(
+            ResourceSpecifications.filter(active, type, category, keyword),
+            pageable,
+        ).map { it.toResponse() }
+    }
+
     private fun applyActive(resource: Resource, active: Boolean) {
         resource.active = active
     }
@@ -90,4 +117,8 @@ class ResourceService(
         departmentId = department?.id,
         preferredVendorId = preferredVendor?.id,
     )
+
+    companion object {
+        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt")
+    }
 }
