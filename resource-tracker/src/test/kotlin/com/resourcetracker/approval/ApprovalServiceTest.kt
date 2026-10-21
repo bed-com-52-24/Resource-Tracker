@@ -52,6 +52,8 @@ class ApprovalServiceTest {
 
     @Test
     fun `reject and query require comments`() {
+        configureRequest(request())
+
         val rejectError = assertThrows<ResponseStatusException> {
             service.decide(9, 8, DecisionRequest(ApprovalDecision.REJECT))
         }

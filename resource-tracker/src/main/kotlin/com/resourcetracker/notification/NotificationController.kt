@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/v1/notifications")
-@Tag(name = "Notifications", description = "Read-only user notifications for workflow actions")
+@Tag(name = "Notifications", description = "User notifications for workflow actions")
 @SecurityRequirement(name = "bearerAuth")
 class NotificationController(
     private val service: NotificationService,
@@ -38,13 +38,13 @@ class NotificationController(
     )
     fun list(
         @AuthenticationPrincipal caller: AuthenticatedUser,
-        @RequestParam(required = false) unreadOnly: Boolean = false,
+        @RequestParam(required = false) status: NotificationStatus? = null,
         @RequestParam(required = false) search: String? = null,
         @ParameterObject @PageableDefault(size = 20, sort = ["createdAt"]) pageable: Pageable,
-    ) = service.listForUser(caller.id, unreadOnly, search, pageable)
+    ) = service.listForUser(caller.id, status, search, pageable)
 
     @PatchMapping
-    @Operation(summary = "Update notification read state", description = "Set read on selected notification ids or all notifications owned by the current user.")
+    @Operation(summary = "Update notification status", description = "Set status on selected notification ids or all notifications owned by the current user.")
     @ApiResponses(
         value = [
             ApiResponse(responseCode = "200", description = "Notification read state updated", content = [Content(schema = Schema(implementation = NotificationUpdateResponse::class))]),
