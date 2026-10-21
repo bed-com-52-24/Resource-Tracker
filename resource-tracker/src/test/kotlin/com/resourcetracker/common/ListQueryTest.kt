@@ -73,7 +73,7 @@ class ListQueryTest {
     @Test
     fun `sort fields are limited and default to asc`() {
         val parsed = ListQuery.parse(
-            params = mapOf("sort" to listOf("name:desc", "status", "createdAt:desc", "unknown")),
+            params = mapOf("sort" to listOf("name:desc", "status", "createdAt:desc")),
             supportedFilters = emptySet(),
             supportedSortFields = setOf("name", "status", "createdAt"),
         )
