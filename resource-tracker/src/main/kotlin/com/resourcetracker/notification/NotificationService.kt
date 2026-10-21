@@ -75,10 +75,8 @@ class NotificationService(
             NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
-            NotificationType.WAITLIST_FULFILLABLE -> "A waitlist item is now fulfillable${if (resource != null) " for $resource" else ""}."
             NotificationType.OVERDUE_RETURN -> "An overdue return needs attention${if (resource != null) " for $resource" else ""}."
             NotificationType.PROCUREMENT -> "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."
-            NotificationType.LOW_STOCK -> "Low stock alert${if (item != null) " for $item" else ""}."
         }
     }
 

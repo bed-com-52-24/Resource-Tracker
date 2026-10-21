@@ -2,7 +2,9 @@ package com.resourcetracker.resource
 
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
+import com.resourcetracker.common.BusinessRuleException
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
@@ -34,6 +36,15 @@ class ResourceServiceTest {
         active = active,
     )
 
+    private fun internalRequest(quantity: Int?) = CreateResourceRequest(
+        name = "Projector",
+        type = ResourceType.INTERNAL,
+        category = ResourceCategory.EQUIPMENT,
+        unitOfMeasure = "unit",
+        quantity = quantity,
+        departmentId = 1,
+    )
+
     @Test
     fun `update without active preserves current state`() {
         val resource = resource(active = false)
@@ -54,5 +65,68 @@ class ResourceServiceTest {
         val response = service.update(resource.id, request(active = true))
 
         assertEquals(true, response.active)
+    }
+
+    @Test
+    fun `internal create requires quantity`() {
+        assertThrows(BusinessRuleException::class.java) {
+            service.create(internalRequest(null))
+        }
+    }
+
+    @Test
+    fun `external create rejects quantity`() {
+        val request = CreateResourceRequest(
+            name = "Projector",
+            type = ResourceType.EXTERNAL,
+            category = ResourceCategory.EQUIPMENT,
+            unitOfMeasure = "unit",
+            quantity = 1,
+        )
+
+        assertThrows(BusinessRuleException::class.java) {
+            service.create(request)
+        }
+    }
+
+    @Test
+    fun `zero quantity is out of stock`() {
+        `when`(codes.next()).thenReturn("R-2")
+        `when`(departments.findById(1)).thenReturn(Optional.of(mock(com.resourcetracker.department.Department::class.java)))
+        `when`(resources.save(org.mockito.ArgumentMatchers.any())).thenAnswer { it.arguments[0] }
+
+        val response = service.create(internalRequest(0))
+
+        assertEquals(ResourceStatus.OUT_OF_STOCK, response.status)
+    }
+
+    @Test
+    fun `updating quantity from zero to five makes resource available`() {
+        val resource = Resource(
+            code = "R-1",
+            name = "Projector",
+            type = ResourceType.INTERNAL,
+            category = ResourceCategory.EQUIPMENT,
+            unitOfMeasure = "unit",
+            quantity = 0,
+            status = ResourceStatus.OUT_OF_STOCK,
+        )
+        `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
+        `when`(departments.findById(1)).thenReturn(Optional.of(mock(com.resourcetracker.department.Department::class.java)))
+        `when`(resources.save(resource)).thenReturn(resource)
+
+        val response = service.update(
+            resource.id,
+            UpdateResourceRequest(
+                name = "Projector",
+                type = ResourceType.INTERNAL,
+                category = ResourceCategory.EQUIPMENT,
+                unitOfMeasure = "unit",
+                quantity = 5,
+                departmentId = 1,
+            ),
+        )
+
+        assertEquals(ResourceStatus.AVAILABLE, response.status)
     }
 }

@@ -53,6 +53,19 @@ class Resource(
     @Column(name = "is_active", nullable = false)
     var active: Boolean = true,
 
+    @Column
+    var quantity: Int? = null,
+
+    @Column(length = 120)
+    var location: String? = null,
+
+    @Column(name = "reorder_level", nullable = false)
+    var reorderLevel: Int = 0,
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    var status: ResourceStatus? = null,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
     var department: Department? = null,
@@ -71,6 +84,31 @@ class Resource(
     @Column(nullable = false)
     var version: Long = 0
 ) {
+    fun create() {
+        recomputeStatus()
+    }
+
+    fun update(
+        type: ResourceType,
+        quantity: Int?,
+        location: String?,
+        reorderLevel: Int,
+    ) {
+        this.type = type
+        this.quantity = quantity
+        this.location = location
+        this.reorderLevel = reorderLevel
+        recomputeStatus()
+    }
+
+    private fun recomputeStatus() {
+        status = if (type == ResourceType.INTERNAL) {
+            if (quantity!! > 0) ResourceStatus.AVAILABLE else ResourceStatus.OUT_OF_STOCK
+        } else {
+            null
+        }
+    }
+
     @PreUpdate
     fun touch() {
         updatedAt = Instant.now()
