@@ -39,8 +39,6 @@ data class LogoutRequest(@field:NotBlank @field:Schema(description = "Refresh to
     override fun toString() = "LogoutRequest(refreshToken=***)"
 }
 
-data class UserSummary(val id: String, val username: String, val role: String, val department: String)
-
 data class TokenPair(
     val accessToken: String,
     val refreshToken: String,
@@ -51,11 +49,9 @@ data class TokenPair(
     override fun toString() = "TokenPair(***)"
 }
 
-data class LoginResponse(val user: UserSummary, val tokens: TokenPair)
-
 data class ProfileResponse(
-    val id: String, val username:String, val email: String, val fullName: String,
-    val role: String, val department: String, val teams: List<String>, val active: Boolean,
+    val id: Int, val username:String, val email: String, val fullName: String,
+    val role: String, val department: String, val teams: List<String>, val teamIds: List<Int>, val active: Boolean,
 )
 
 @RestController
@@ -64,14 +60,14 @@ data class ProfileResponse(
 class AuthController(private val auth: AuthService, private val users: UserRepository){
 
     @PostMapping("/login")
-    @Operation(summary = "Log in", description = "Authenticate with username and password. Returns an access JWT and refresh token.")
+    @Operation(summary = "Log in", description = "Authenticate with username and password. Returns token data only; retrieve the user profile from GET /api/v1/auth/me.")
     @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Login successful", content = [Content(schema = Schema(implementation = LoginResponse::class))]),
+        ApiResponse(responseCode = "200", description = "Login successful", content = [Content(schema = Schema(implementation = TokenPair::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Invalid credentials", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
         ApiResponse(responseCode = "423", description = "Account temporarily locked", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
     ])
-    fun login(@Valid @RequestBody req: LoginRequest): LoginResponse = auth.login(req)
+    fun login(@Valid @RequestBody req: LoginRequest): TokenPair = auth.login(req)
 
     @PostMapping("/refresh")
     @Operation(summary = "Refresh tokens", description = "Rotate a valid refresh token and return a new access token and refresh token.")
@@ -100,8 +96,8 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
     fun me(@AuthenticationPrincipal caller: AuthenticatedUser) : ProfileResponse{
         val u = users.findById(caller.id).orElseThrow{ UnauthenticatedException() }
         return ProfileResponse(
-            u.id.toString(), u.username, u.email, u.fullName,
-            u.role.name, u.department.name, u.teams.map { it.name }.sorted(), u.active,
+            u.id, u.username, u.email, u.fullName,
+            u.role.name, u.department.name, u.teams.map { it.name }.sorted(), u.teams.map { it.id }.sorted(), u.active,
         )
     }
 }

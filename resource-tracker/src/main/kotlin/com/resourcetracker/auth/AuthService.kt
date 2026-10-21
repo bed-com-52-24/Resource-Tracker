@@ -33,7 +33,7 @@ class AuthService(
     private val dummyHash: String = encoder.encode("not-a-ral-password-for-timing")!!
 
     @Transactional(noRollbackFor = [ApiException::class])
-    fun login(req: LoginRequest): LoginResponse{
+    fun login(req: LoginRequest): TokenPair{
         val now = clock.instant()
         val user = users.findForUpdateByUsername(req.username)
         if(user == null){
@@ -53,11 +53,7 @@ class AuthService(
         user.failedAttempts = 0
         user.failedWindowStart = null
         user.lockedUntil = null
-        return LoginResponse(
-            user = UserSummary(user.id.toString(),
-                user.username, user.role.name, user.department.name),
-            tokens = issueTokens(user, now),
-        )
+        return issueTokens(user, now)
     }
 
     @Transactional(noRollbackFor = [ApiException::class])
