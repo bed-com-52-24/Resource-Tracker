@@ -1,35 +1,38 @@
-version: '3.8'
 services:
-  #databse
   mysql:
-    image: mysql:latest
+    image: mysql:8.4
     container_name: resource-tracker-dbms
     environment:
-      MYSQL_DATABASE: resource_tracker
-      MYSQL_PASSWORD: 123456789
+      MYSQL_DATABASE: ${DB_NAME:-resource_tracker}
+      MYSQL_USER: ${DB_USER:?Set DB_USER in resource-tracker/.env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in resource-tracker/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in resource-tracker/.env}
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       timeout: 20s
       retries: 10
+      interval: 5s
+      start_period: 20s
 
-
-  #backend
   backend:
-    image: jeckman/resource-tracker-backend:v1
+    build: .
     container_name: resource-tracker-backend
     depends_on:
-      mysql-db:
+      mysql:
         condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATABASE_URL: jdbc:mysql://mysql-db:3306/resource_tracker?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: 123456789
+      APP_SECURITY_JWT_SECRET: ${APP_SECURITY_JWT_SECRET:?Set APP_SECURITY_JWT_SECRET in resource-tracker/.env}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-resource_tracker}
+      DB_USER: ${DB_USER:?Set DB_USER in resource-tracker/.env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in resource-tracker/.env}
 
 volumes:
   mysql_data:
