@@ -47,9 +47,18 @@ class Notification(
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
 ) {
+    fun markRead(at: Instant = Instant.now()) {
+        status = NotificationStatus.READ
+        readAt = at
+    }
+
+    fun markUnread() {
+        status = NotificationStatus.UNREAD
+        readAt = null
+    }
+
     fun setStatus(status: NotificationStatus, at: Instant = Instant.now()) {
-        this.status = status
-        readAt = if (status == NotificationStatus.READ) at else null
+        if (status == NotificationStatus.READ) markRead(at) else markUnread()
     }
 }
 

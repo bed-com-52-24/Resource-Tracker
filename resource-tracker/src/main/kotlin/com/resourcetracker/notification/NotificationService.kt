@@ -76,7 +76,6 @@ class NotificationService(
 
     private fun buildMessage(type: NotificationType, payload: Map<String, Any?>): String {
         val requestId = payload["requestId"]?.toString()
-        val resource = payload["resource"]?.toString()
         return when (type) {
             NotificationType.SUBMITTED -> "Request ${requestId ?: "unknown"} has been submitted."
             NotificationType.QUERIED -> "Request ${requestId ?: "unknown"} requires additional information."
@@ -84,8 +83,6 @@ class NotificationService(
             NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
-            NotificationType.OVERDUE_RETURN -> "An overdue return needs attention${if (resource != null) " for $resource" else ""}."
-            NotificationType.PROCUREMENT -> "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."
         }
     }
 

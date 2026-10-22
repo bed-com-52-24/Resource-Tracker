@@ -7,6 +7,4 @@ enum class NotificationType {
     REJECTED,
     PARTIALLY_APPROVED,
     RESUBMITTED,
-    OVERDUE_RETURN,
-    PROCUREMENT,
 }

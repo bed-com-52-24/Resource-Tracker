@@ -49,13 +49,31 @@ data class TeamResponse(
     val isActive: Boolean
 )
 
+data class AddTeamMembersRequest(
+    val userIds: Set<Int>
+)
+
+data class TransferTeamMemberRequest(
+    val toTeamId: Int
+)
+
+data class TeamMemberResponse(
+    val id: Int,
+    val username: String,
+    val email: String,
+    val fullName: String,
+    val role: com.resourcetracker.user.Role,
+    val active: Boolean,
+    val teamIds: List<Int>,
+)
+
 fun Team.toResponse() = TeamResponse(
     id = id,
     name = name,
     departmentId = department.id,
     departmentName = department.name,
     managerId = manager?.id,
-    managerName = manager?.fullName,
+    managerName = manager?.let { it.fullName ?: it.username },
     projects = projects.map { ProjectSummary(it.id, it.name, it.code) }.sortedBy { it.name },
     isActive = isActive
 )

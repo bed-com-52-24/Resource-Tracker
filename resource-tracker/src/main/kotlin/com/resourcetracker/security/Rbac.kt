@@ -19,13 +19,18 @@ annotation class RequiresRoles(vararg val value: Role)
 class RoleAuthorizationInterceptor : HandlerInterceptor {
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         if(handler !is HandlerMethod) return true
+
         val required = handler.getMethodAnnotation(RequiresRoles::class.java)
             ?: AnnotatedElementUtils.findMergedAnnotation(handler.beanType, RequiresRoles::class.java)
-            ?: return true
 
         val caller = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
-            ?: throw com.resourcetracker.common.UnauthenticatedException()
-        if(caller.role !in required.value) throw ForbiddenRoleException(required.value.toList(),caller.role)
+        if (caller == null) {
+            return required == null || request.requestURI.startsWith("/api/v1/auth/")
+        }
+        if (required == null) {
+            throw ForbiddenRoleException(listOf(Role.ADMIN), caller.role)
+        }
+        if (caller.role !in required.value) throw ForbiddenRoleException(required.value.toList(), caller.role)
         return true
     }
 }
