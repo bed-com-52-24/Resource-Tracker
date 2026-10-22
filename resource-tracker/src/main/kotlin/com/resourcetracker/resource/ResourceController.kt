@@ -4,6 +4,7 @@ import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.request.service.StockCorrectionRequest
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -35,7 +36,10 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/resources")
 @Tag(name = "Resources", description = "Create, update, and deactivate resources")
 @SecurityRequirement(name = "bearerAuth")
-class ResourceController(private val resources: ResourceService) {
+class ResourceController(
+    private val resources: ResourceService,
+    private val stockOperations: com.resourcetracker.request.service.StockOperationsService,
+) {
 
     @GetMapping
     @Operation(
@@ -109,6 +113,15 @@ class ResourceController(private val resources: ResourceService) {
 
     @GetMapping("/{id}")
     fun get(@PathVariable @Min(1) id: Int): ResourceResponse = resources.get(id)
+
+    @PostMapping("/{id}/corrections")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "Correct resource stock", description = "Sets the resource quantity to the supplied value and records the reason.")
+    fun correctStock(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: CorrectionRequestDto,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.correctResource(id, caller.id, StockCorrectionRequest(request.newQuantity, request.reason))
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

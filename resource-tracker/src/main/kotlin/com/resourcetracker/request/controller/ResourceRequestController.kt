@@ -4,9 +4,8 @@ import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.RequestStatus
-import com.resourcetracker.request.service.ResourceRequestService
-import com.resourcetracker.request.service.ReservationService
-import com.resourcetracker.request.service.CreateReservationRequest
+import com.resourcetracker.request.service.*
+import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
@@ -30,12 +29,16 @@ import java.time.LocalDate
 
 @RestController
 @Validated
-@RequestMapping("/api/v1/requests")
 @Tag(name = "Resource Requests", description = "Submit and manage resource requests")
 @SecurityRequirement(name = "bearerAuth")
-class ResourceRequestController(private val service: ResourceRequestService, private val reservationService: ReservationService) {
+class ResourceRequestController(
+    private val service: ResourceRequestService,
+    private val reservationService: ReservationService,
+    private val stockOperations: StockOperationsService,
+    private val procurements: ProcurementService,
+) {
 
-    @PostMapping
+    @PostMapping("/api/v1/requests")
     @RequiresRoles(Role.TEAM_LEAD)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
@@ -113,7 +116,7 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
     fun create(@Valid @RequestBody dto: CreateResourceRequestDto, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.createRequest(dto, caller.id)
 
-    @PostMapping("/{id}/decision")
+    @PostMapping("/api/v1/requests/{id}/decision")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Query, approve, or reject a request")
     fun decide(
@@ -122,7 +125,7 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.decide(id, serviceUser(caller), dto)
 
-    @PostMapping("/{id}/reservations")
+    @PostMapping("/api/v1/requests/{id}/reservations")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Reserve approved internal stock")
     fun reserve(
@@ -131,7 +134,7 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = reservationService.reserve(id, caller.id, dto)
 
-    @PutMapping("/{id}/lines/{lineItemId}/approved-quantity")
+    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/approved-quantity")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Adjust approved line quantity")
     fun adjustApprovedQuantity(
@@ -141,7 +144,7 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.adjustApprovedQuantity(id, lineItemId, serviceUser(caller), dto)
 
-    @PutMapping("/{id}")
+    @PutMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD)
     @Operation(summary = "Clarify or cancel an owned request")
     fun edit(
@@ -150,7 +153,7 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.updateRequest(id, serviceUser(caller), dto)
 
-    @GetMapping
+    @GetMapping("/api/v1/requests")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "List requests visible to the current role")
     fun list(
@@ -182,19 +185,19 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         ),
     )
 
-    @GetMapping("/{id}")
+    @GetMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a visible request with its line items")
     fun get(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.get(id, serviceUser(caller))
 
-    @GetMapping("/{id}/history")
+    @GetMapping("/api/v1/requests/{id}/history")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get append-only request history")
     fun history(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.history(id, serviceUser(caller))
 
-    @PutMapping("/{id}/manager")
+    @PutMapping("/api/v1/requests/{id}/manager")
     @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Assign or reassign a department manager")
     fun reassign(
@@ -202,6 +205,63 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         @Valid @RequestBody dto: ManagerReassignmentDto,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.reassign(id, serviceUser(caller), dto.managerId)
+
+    @PostMapping("/api/v1/requests/{id}/issues")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Issue approved stock for a request")
+    fun issue(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: StockIssueRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.issue(id, caller.id, request)
+
+    @PostMapping("/api/v1/issues/{issueId}/returns")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Request a return for an issued resource")
+    fun returnStock(
+        @PathVariable @Min(1) issueId: Int,
+        @Valid @RequestBody request: CreateReturnRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.requestReturn(issueId, caller.id, request)
+
+    @PutMapping("/api/v1/returns/{returnId}")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Verify a resource return")
+    fun verifyReturn(
+        @PathVariable @Min(1) returnId: Int,
+        @Valid @RequestBody request: VerifyReturnRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.verifyReturn(returnId, caller.id, request)
+
+    @GetMapping("/api/v1/procurements")
+    @RequiresRoles(Role.ADMIN, Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
+    fun procurements(
+        @Parameter(description = "Search associated request numbers", example = "REQ-2026")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: id, requestId, lineItemId, vendorId, estimatedCost, expectedDelivery, status, or receivedQuantity", example = "id")
+        @RequestParam(defaultValue = "id") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "desc")
+        @RequestParam(defaultValue = "desc") direction: String,
+        @Parameter(description = "Filter by procurement status", example = "ORDERED")
+        @RequestParam(required = false) status: ProcurementStatus?,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = procurements.list(caller.id, status, search, page, size, sort, direction)
+
+    @PutMapping("/api/v1/procurements/{id}")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Update a procurement")
+    fun updateProcurement(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: UpdateProcurementRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = procurements.update(id, caller.id, request)
 
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }
