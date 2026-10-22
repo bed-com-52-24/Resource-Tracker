@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import java.time.Instant
 
 @Service
 class NotificationService(
@@ -31,11 +32,16 @@ class NotificationService(
     }
 
     @Transactional(readOnly = true)
-    fun listForUser(userId: Int, unreadOnly: Boolean = false, search: String?, pageable: Pageable): List<NotificationResponse> {
+    fun listForUser(
+        userId: Int,
+        status: NotificationStatus? = null,
+        search: String?,
+        pageable: Pageable,
+    ): List<NotificationResponse> {
         val normalized = search?.trim()?.takeIf { it.isNotEmpty() }
         val page = when {
-            normalized != null -> notifications.searchForUser(userId, unreadOnly, normalized, pageable)
-            unreadOnly -> notifications.findByRecipientIdAndReadOrderByCreatedAtDesc(userId, false, pageable)
+            normalized != null -> notifications.searchForUser(userId, status, normalized, pageable)
+            status != null -> notifications.findByRecipientIdAndStatusOrderByCreatedAtDesc(userId, status, pageable)
             else -> notifications.findByRecipientIdOrderByCreatedAtDesc(userId, pageable)
         }
         return page.content.map { it.toResponse() }
@@ -51,23 +57,25 @@ class NotificationService(
             )
         }
 
-        val items = if (request.all) {
-            notifications.findByRecipientId(userId)
-        } else {
-            notifications.findAllByIdInAndRecipientId(requireNotNull(request.ids), userId)
+        if (request.all) {
+            val readAt = if (request.status == NotificationStatus.READ) Instant.now() else null
+            return NotificationUpdateResponse(
+                notifications.updateStatusForRecipient(userId, request.status, readAt),
+            )
         }
-        items.forEach { it.read = request.read }
+
+        val items = notifications.findAllByIdInAndRecipientId(requireNotNull(request.ids), userId)
+        items.forEach { it.setStatus(request.status) }
         notifications.saveAll(items)
         return NotificationUpdateResponse(items.size)
     }
 
     @Transactional(readOnly = true)
-    fun unreadCount(userId: Int): Long = notifications.countByRecipientIdAndRead(userId, false)
+    fun unreadCount(userId: Int): Long =
+        notifications.countByRecipientIdAndStatus(userId, NotificationStatus.UNREAD)
 
     private fun buildMessage(type: NotificationType, payload: Map<String, Any?>): String {
         val requestId = payload["requestId"]?.toString()
-        val resource = payload["resource"]?.toString()
-        val item = payload["item"]?.toString()
         return when (type) {
             NotificationType.SUBMITTED -> "Request ${requestId ?: "unknown"} has been submitted."
             NotificationType.QUERIED -> "Request ${requestId ?: "unknown"} requires additional information."
@@ -90,7 +98,8 @@ class NotificationService(
         type = type,
         requestId = requestId,
         message = message,
-        read = read,
+        status = status,
+        readAt = readAt,
         createdAt = createdAt,
     )
 }
