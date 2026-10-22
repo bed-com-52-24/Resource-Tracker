@@ -6,6 +6,8 @@ import com.resourcetracker.request.service.RequestCreationFacade
 import com.resourcetracker.request.service.ResourceRequestService
 import com.resourcetracker.common.UnauthenticatedException
 import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.user.Role
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.request.dto.ResourceRequestResponseDto
 import io.swagger.v3.oas.annotations.Operation
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/v1/requests")
+@RequiresRoles(Role.ADMIN, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
 @Tag(name = "Resource Requests", description = "Create and manage the authenticated user's resource requests")
 @SecurityRequirement(name = "bearerAuth")
 class ResourceRequestController(

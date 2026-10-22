@@ -50,6 +50,7 @@ class UserService(
             throw BusinessRuleException("${request.role} users must be assigned to at least one team")
         }
 
+        val userTeams = activeTeams(request.teamIds ?: emptySet())
         val user = User(
             username = username,
             email = email,
@@ -57,8 +58,9 @@ class UserService(
             passwordHash = null,
             role = request.role,
             department = activeDepartment(request.departmentId),
-            teams = activeTeams(request.teamIds ?: emptySet()),
+            teams = userTeams,
         )
+        requireMemberHasTeam(user)
 
         return try {
             val saved = users.saveAndFlush(user)
@@ -78,8 +80,9 @@ class UserService(
                 applyRole(user, newRole)
             }
         }
-        
+
         request.active?.let{applyActive(user, it)}
+        requireMemberHasTeam(user)
 
         return users.save(user).toResponse()
     }
@@ -135,6 +138,12 @@ class UserService(
         throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
     }
     user.role = newRole
+    }
+
+    private fun requireMemberHasTeam(user: User) {
+        if (user.role == Role.MEMBER && user.teams.isEmpty()) {
+            throw BusinessRuleException("MEMBER users must belong to at least one active team")
+        }
     }
     
     private fun applyActive(user: User, active: Boolean){

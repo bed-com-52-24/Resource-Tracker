@@ -14,7 +14,7 @@ data class CreateUserRequest(
     val departmentId: Int,
     @field:Schema(
         description = "Existing active team IDs. Each team must exist and be active. " +
-                "Optional for ADMIN and DEPARTMENT_MANAGER users.",
+                "Required for MEMBER users; optional for ADMIN and DEPARTMENT_MANAGER users.",
         example = "[3, 4]",
         nullable = true,
     )

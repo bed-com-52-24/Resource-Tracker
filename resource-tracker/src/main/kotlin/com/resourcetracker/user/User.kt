@@ -23,6 +23,7 @@ import jakarta.validation.ConstraintValidator
 import jakarta.validation.ConstraintValidatorContext
 import jakarta.validation.Payload
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -58,12 +59,13 @@ class User(
     var lockedUntil: Instant? = null,
 )
 
-interface UserRepository : JpaRepository<User, Int> {
+interface UserRepository : JpaRepository<User, Int>, JpaSpecificationExecutor<User> {
     fun findByUsername(username: String): User?
     fun findByEmailIgnoreCase(email: String): User?
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByEmailIgnoreCase(email: String): Boolean
     fun existsByEmailIgnoreCaseAndIdNot(email: String, id: Int): Boolean
+    fun findDistinctByTeams_Id(teamId: Int, pageable: Pageable): Page<User>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.role = :role and u.active = true")
