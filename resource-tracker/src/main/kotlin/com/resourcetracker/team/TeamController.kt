@@ -18,6 +18,82 @@ import org.springframework.web.bind.annotation.*
 @SecurityRequirement(name = "bearerAuth")
 class TeamController(private val service: TeamService) {
 
+    @GetMapping("/{id}/members")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "List team members", description = "Admin only. Returns a paginated list of team members with optional filters.")
+    fun members(
+        @PathVariable id: Int,
+        @RequestParam(required = false) role: Role?,
+        @RequestParam(required = false) active: Boolean?,
+        @RequestParam(required = false) search: String?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): Page<TeamMemberResponse> =
+        service.members(id, page, size, role, active, search).map { user ->
+            TeamMemberResponse(
+                id = user.id,
+                username = user.username,
+                email = user.email,
+                fullName = user.fullName ?: user.username,
+                role = user.role,
+                active = user.active,
+                teamIds = user.teams.map { it.id }.sorted(),
+            )
+        }
+
+    @PostMapping("/{id}/members")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "Add members to a team", description = "Admin only. Adds existing active users to the given team.")
+    fun addMembers(@PathVariable id: Int, @Valid @RequestBody body: AddTeamMembersRequest): List<TeamMemberResponse> =
+        service.addMembers(id, body.userIds).map { user ->
+            TeamMemberResponse(
+                id = user.id,
+                username = user.username,
+                email = user.email,
+                fullName = user.fullName ?: user.username,
+                role = user.role,
+                active = user.active,
+                teamIds = user.teams.map { it.id }.sorted(),
+            )
+        }
+
+    @PutMapping("/{id}/members/{userId}")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "Transfer a team member", description = "Admin only. Moves a member from one team to another and records a history row.")
+    fun transfer(@PathVariable id: Int, @PathVariable userId: Int, @Valid @RequestBody body: TransferTeamMemberRequest): TeamMemberResponse {
+        val user = service.transfer(id, userId, body.toTeamId)
+        return TeamMemberResponse(
+            id = user.id,
+            username = user.username,
+            email = user.email,
+            fullName = user.fullName ?: user.username,
+            role = user.role,
+            active = user.active,
+            teamIds = user.teams.map { it.id }.sorted(),
+        )
+    }
+
+    @DeleteMapping("/{id}/members/{userId}")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "Remove a member from a team", description = "Admin only. Removes a user from the team and records the removal event.")
+    fun removeMember(@PathVariable id: Int, @PathVariable userId: Int): TeamMemberResponse {
+        val user = service.removeMember(id, userId)
+        return TeamMemberResponse(
+            id = user.id,
+            username = user.username,
+            email = user.email,
+            fullName = user.fullName ?: user.username,
+            role = user.role,
+            active = user.active,
+            teamIds = user.teams.map { it.id }.sorted(),
+        )
+    }
+
+    @GetMapping("/{id}/members/history")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "List team member history", description = "Admin only. Returns the audit trail for a team.")
+    fun history(@PathVariable id: Int): List<TeamMemberHistory> = service.history(id)
+
     @PostMapping
     @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Create a team", description = "Admin only. Returns 201, 400, 401, 403, 404 or 409.")
