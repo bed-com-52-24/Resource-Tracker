@@ -55,7 +55,7 @@ fun Team.toResponse() = TeamResponse(
     departmentId = department.id,
     departmentName = department.name,
     managerId = manager?.id,
-    managerName = manager?.fullName,
+    managerName = manager?.let { it.fullName ?: it.username },
     projects = projects.map { ProjectSummary(it.id, it.name, it.code) }.sortedBy { it.name },
     isActive = isActive
 )
