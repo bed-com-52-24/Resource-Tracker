@@ -62,17 +62,9 @@ class ResourceRequestController(
     @RequestHeader("Idempotency-Key") idempotencyKey: String,
     authentication: Authentication
 ): org.springframework.http.ResponseEntity<String> {
-    val requesterId = currentUserId(authentication)
-
-    // Replace this TODO with your routing-rule service.
-    val assignedManagerId = TODO(
-        "Resolve the manager using your routing rules"
-    )
-
     val result = requestCreationFacade.create(
         dto = dto,
-        requesterId = requesterId,
-        assignedManagerId = assignedManagerId,
+        requester = authentication.principal as AuthenticatedUser,
         idempotencyKey = idempotencyKey
     )
 
@@ -107,7 +99,7 @@ class ResourceRequestController(
     @PutMapping("/{id}")
     @Operation(
         summary = "Edit a resource request",
-        description = "Edits an owned request while QUERIED. Set status to PENDING to resubmit or CANCELLED to cancel; omit status to only edit."
+        description = "Cancels an owned pending request. Submitted requests cannot be edited."
     )
     @ApiResponses(
         value = [

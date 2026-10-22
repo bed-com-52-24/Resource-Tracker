@@ -2,11 +2,8 @@ package com.resourcetracker.project
 
 import com.resourcetracker.department.Department
 import jakarta.persistence.*
-import org.hibernate.annotations.JdbcTypeCode
-import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
 
 @Entity
 @Table(
@@ -15,9 +12,9 @@ import java.util.UUID
 )
 class Project(
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @JdbcTypeCode(SqlTypes.CHAR)
-    var id: UUID? = null,
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "project_id")
+    var id: Int = 0,
 
     @Column(name = "project_name", nullable = false, length = 150)
     var name: String,

@@ -1,11 +1,13 @@
 package com.resourcetracker.request.service
 
 import com.resourcetracker.request.dto.CreateResourceRequestDto
-import com.resourcetracker.request.dto.RequestLineItemDto
 import com.resourcetracker.request.dto.UpdateResourceRequestDto
 import com.resourcetracker.request.dto.RequesterUpdateStatus
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
+import com.resourcetracker.team.TeamRepository
+import com.resourcetracker.common.BusinessRuleException
+import com.resourcetracker.common.ResourceNotFoundException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -22,15 +24,18 @@ class ResourceRequestService(
     private val numberService: RequestNumberService,
     private val validationService: RequestValidationService,
     private val objectMapper: ObjectMapper,
-    private val idempotencyService: RequestIdempotencyService
+    private val idempotencyService: RequestIdempotencyService,
+    private val teams: TeamRepository
 ) {
 
     @Transactional
     fun createRequest(
         dto: CreateResourceRequestDto,
-        requesterId: Int,
-        assignedManagerId: Int
+        requesterId: Int
     ): ResourceRequest {
+        val team = teams.findById(dto.teamId).orElseThrow { ResourceNotFoundException("Team not found") }
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val assignedManagerId = team.manager?.id ?: throw BusinessRuleException("Team has no manager")
         validationService.validateLineItems(dto.lineItems)
 
         val total = validationService.calculateTotal(dto.lineItems)
@@ -102,59 +107,12 @@ class ResourceRequestService(
             return requestRepository.save(request)
         }
 
-        if (request.status != RequestStatus.QUERIED) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "Only queried requests can be edited")
-        }
-
-        validationService.validateLineItems(dto.lineItems)
-
-        val total = validationService.calculateTotal(dto.lineItems)
-        val firstItem = dto.lineItems.first()
-
-        request.departmentId = dto.departmentId
-        request.projectId = dto.projectId
-        request.teamId = dto.teamId
-        request.vendorId = dto.vendorId
-        request.justification = dto.justification
-        request.totalAmount = total
-
-        // Keep the legacy single-item columns consistent.
-        request.itemDescription = firstItem.description
-        request.manufacturer = firstItem.manufacturer
-        request.unitPrice = firstItem.unitPrice
-        request.quantity = firstItem.quantity
-        request.batchNumber = firstItem.batchNumber
-        request.editedAfterQuery = true
-
-        lineItemRepository.deleteAllByRequestId(requestId)
-
-        lineItemRepository.saveAll(
-            dto.lineItems.map { item ->
-                ResourceRequestLineItem(
-                    requestId = requestId,
-                    description = item.description,
-                    manufacturer = item.manufacturer,
-                    unitPrice = item.unitPrice,
-                    quantity = item.quantity,
-                    category = item.category,
-                    batchNumber = item.batchNumber
-                )
-            }
-        )
-
-        if (dto.status == RequesterUpdateStatus.PENDING) {
-            requireTransition(request.status, RequestStatus.PENDING)
-            request.status = RequestStatus.PENDING
-            request.editedAfterQuery = false
-            request.queriedAt = null
-        }
-        return requestRepository.save(request)
+        throw ResponseStatusException(HttpStatus.CONFLICT, "Requests cannot be edited after submission")
     }
 
     private fun requireTransition(from: RequestStatus, to: RequestStatus) {
         val allowed = when (from) {
             RequestStatus.PENDING -> setOf(RequestStatus.CANCELLED)
-            RequestStatus.QUERIED -> setOf(RequestStatus.PENDING, RequestStatus.CANCELLED)
             else -> emptySet()
         }
         if (to !in allowed) {
@@ -165,9 +123,11 @@ class ResourceRequestService(
     fun createRequestIdempotently(
         dto: CreateResourceRequestDto,
         requesterId: Int,
-        assignedManagerId: Int,
         idempotencyId: Long
     ): RequestCreationResult {
+        val team = teams.findById(dto.teamId).orElseThrow { ResourceNotFoundException("Team not found") }
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val assignedManagerId = team.manager?.id ?: throw BusinessRuleException("Team has no manager")
         validationService.validateLineItems(dto.lineItems)
 
         val total = validationService.calculateTotal(dto.lineItems)

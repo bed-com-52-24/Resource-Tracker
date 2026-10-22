@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size
 import jakarta.validation.constraints.NotEmpty
 
 enum class RequesterUpdateStatus {
-    PENDING,
     CANCELLED,
 }
 

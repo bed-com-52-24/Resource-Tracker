@@ -11,7 +11,6 @@ import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
-import java.util.UUID
 
 @RestController
 @RequestMapping("/api/v1/teams")
@@ -128,7 +127,7 @@ class TeamController(private val service: TeamService) {
         @Parameter(description = "Filter by manager ID", example = "7")
         @RequestParam(required = false) managerId: Int?,
         @Parameter(description = "Filter by project ID")
-        @RequestParam(required = false) projectId: UUID?,
+        @RequestParam(required = false) projectId: Int?,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive teams.", example = "true")
         @RequestParam(required = false) isActive: Boolean?,
         @Parameter(description = "Search team names", example = "alpha")

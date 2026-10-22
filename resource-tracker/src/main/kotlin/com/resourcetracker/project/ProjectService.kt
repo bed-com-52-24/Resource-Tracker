@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
 
 @Service
 class ProjectService(
@@ -26,7 +25,7 @@ class ProjectService(
             ?: throw NotFoundException("Department not found or inactive")
         validateDates(req.startDate, req.endDate)
         val name = req.name.trim()
-        if (projects.existsByDepartmentIdAndNameIgnoreCase(dept.id!!, name))
+        if (projects.existsByDepartmentIdAndNameIgnoreCase(dept.id, name))
             throw ConflictException("Project name already exists in this department")
         if (projects.existsByCodeIgnoreCase(req.code))
             throw ConflictException("Project code already in use")
@@ -41,7 +40,7 @@ class ProjectService(
     }
 
     @Transactional
-    fun update(id: UUID, req: UpdateProjectRequest): ProjectResponse {
+    fun update(id: Int, req: UpdateProjectRequest): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
         val dept = req.departmentId?.let {
             departments.findByIdOrNull(it)?.takeIf { department -> department.status == "ACTIVE" }
@@ -52,7 +51,7 @@ class ProjectService(
         validateDates(startDate, endDate)
         req.name?.let {
             val name = it.trim()
-            if (projects.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id!!, name, id))
+            if (projects.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
                 throw ConflictException("Project name already exists in this department")
             project.name = name
         }
@@ -70,7 +69,7 @@ class ProjectService(
     }
 
     @Transactional
-    fun deactivate(id: UUID): ProjectResponse {
+    fun deactivate(id: Int): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
         applyActive(project, false)
         project.updatedAt = Instant.now()
@@ -78,7 +77,7 @@ class ProjectService(
     }
 
     @Transactional(readOnly = true)
-    fun get(id: UUID): ProjectResponse =
+    fun get(id: Int): ProjectResponse =
         (projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")).toResponse()
 
     @Transactional(readOnly = true)
@@ -109,13 +108,13 @@ class ProjectService(
     private fun applyActive(project: Project, active: Boolean) {
         if (project.active == active) return
 
-        if (!active && hasActiveRequests(project.id!!))
+        if (!active && hasActiveRequests(project.id))
             throw ConflictException("Project has active resource requests and cannot be deactivated")
 
         project.active = active
     }
 
-    private fun hasActiveRequests(projectId: UUID): Boolean = false
+    private fun hasActiveRequests(projectId: Int): Boolean = false
 
     private fun validateDates(start: LocalDate, end: LocalDate?) {
         if (end != null && end.isBefore(start))

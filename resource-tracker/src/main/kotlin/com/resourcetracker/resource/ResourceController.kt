@@ -11,8 +11,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.PathVariable
@@ -23,9 +25,9 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
-import java.util.UUID
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/resources")
 @Tag(name = "Resources", description = "Create, update, and deactivate resources")
 @SecurityRequirement(name = "bearerAuth")
@@ -95,12 +97,12 @@ class ResourceController(private val resources: ResourceService) {
         ApiResponse(responseCode = "409", description = "Resource type rules were violated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun update(
-        @PathVariable id: UUID,
+        @PathVariable @Min(1) id: Int,
         @Valid @RequestBody request: UpdateResourceRequest,
     ): ResourceResponse = resources.update(id, request)
 
     @GetMapping("/{id}")
-    fun get(@PathVariable id: UUID): ResourceResponse = resources.get(id)
+    fun get(@PathVariable @Min(1) id: Int): ResourceResponse = resources.get(id)
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

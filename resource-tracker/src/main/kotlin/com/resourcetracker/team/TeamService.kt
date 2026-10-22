@@ -19,7 +19,6 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
-import java.util.UUID
 
 @Service
 class TeamService(
@@ -84,7 +83,7 @@ class TeamService(
     fun list(
         departmentId: Int?,
         managerId: Int?,
-        projectId: UUID?,
+        projectId: Int?,
         isActive: Boolean?,
         keyword: String?,
         page: Int,
@@ -185,11 +184,11 @@ class TeamService(
     }
 
     // Only newly added projects must be active, so a team can still be edited or deactivated after one of its existing projects was deactivated.
-    private fun projectsForUpdate(team: Team, ids: Set<UUID>): List<Project> {
+    private fun projectsForUpdate(team: Team, ids: Set<Int>): List<Project> {
         if (ids.isEmpty()) return emptyList()
         val found = projects.findAllById(ids)
         if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")
-        val existing = team.projects.mapNotNull { it.id }.toSet()
+        val existing = team.projects.map { it.id }.toSet()
         if (found.any { it.id !in existing && !it.active })
             throw InvalidTeamRequestException("Inactive projects cannot be assigned to a team")
         return found
@@ -206,7 +205,7 @@ class TeamService(
         return manager
     }
 
-    private fun activeProjects(ids: Set<UUID>): List<Project> {
+    private fun activeProjects(ids: Set<Int>): List<Project> {
         if (ids.isEmpty()) return emptyList()
         val found = projects.findAllById(ids)
         if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")

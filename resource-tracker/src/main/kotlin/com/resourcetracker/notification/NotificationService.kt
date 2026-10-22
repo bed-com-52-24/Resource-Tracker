@@ -14,7 +14,7 @@ class NotificationService(
 
     @Transactional(propagation = Propagation.MANDATORY)
     fun notify(userIds: Collection<Int>, type: NotificationType, payload: Map<String, Any?>) {
-        val requestId = payload["requestId"]?.toString()
+        val requestId = payload["requestId"] as? Int
         val message = buildMessage(type, payload)
         val entries = userIds.distinct().map { userId ->
             Notification(

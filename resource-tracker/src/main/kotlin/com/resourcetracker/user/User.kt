@@ -32,7 +32,7 @@ import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import kotlin.reflect.KClass
 
-enum class Role { ADMIN, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR, MEMBER }
+enum class Role { ADMIN, MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR }
 
 @Entity
 @Table(name = "users")
@@ -40,8 +40,8 @@ class User(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "user_id") val id: Int = 0,
     @Column(nullable = false, unique = true, length = 50) var username: String,
     @Column(nullable = false, unique = true) var email: String,
-    @Column(nullable = false) var fullName: String,
-    @Column(nullable = false) var passwordHash: String,
+    @Column(name = "full_name", length = 255) var fullName: String? = null,
+    @Column(name = "password_hash", length = 255) var passwordHash: String? = null,
     @Enumerated(EnumType.STRING) @Column(nullable = false) var role: Role,
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "department_id", nullable = false)
@@ -61,6 +61,7 @@ class User(
 
 interface UserRepository : JpaRepository<User, Int>, JpaSpecificationExecutor<User> {
     fun findByUsername(username: String): User?
+    fun findByEmailIgnoreCase(email: String): User?
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByEmailIgnoreCase(email: String): Boolean
     fun existsByEmailIgnoreCaseAndIdNot(email: String, id: Int): Boolean
@@ -74,7 +75,7 @@ interface UserRepository : JpaRepository<User, Int>, JpaSpecificationExecutor<Us
         """select u from User u
           where lower(u.username) like lower(concat('%', :q, '%'))
              or lower(u.email) like lower(concat('%', :q, '%'))
-             or lower(u.fullName) like lower(concat('%', :q, '%'))"""
+             or lower(coalesce(u.fullName, u.username)) like lower(concat('%', :q, '%'))"""
     )
     fun search(@Param("q") q: String, pageable: Pageable): Page<User>
 

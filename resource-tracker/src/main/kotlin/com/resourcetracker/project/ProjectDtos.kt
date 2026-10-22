@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.time.LocalDate
-import java.util.UUID
 
 data class CreateProjectRequest(
     @field:NotBlank @field:Size(min = 2, max = 100)
@@ -55,7 +54,7 @@ data class UpdateProjectRequest(
 )
 
 data class ProjectResponse(
-    val id: UUID,
+    val id: Int,
     val name: String,
     val code: String,
     val departmentId: Int,
@@ -66,7 +65,7 @@ data class ProjectResponse(
 )
 
 fun Project.toResponse() = ProjectResponse(
-    id = id!!,
+    id = id,
     name = name,
     code = code,
     departmentId = department.id!!,

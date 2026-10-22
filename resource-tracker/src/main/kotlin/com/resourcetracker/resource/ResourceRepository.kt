@@ -5,9 +5,8 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
 import com.resourcetracker.resource.ResourceCategory
-import java.util.UUID
 
-interface ResourceRepository : JpaRepository<Resource, UUID>, JpaSpecificationExecutor<Resource> {
+interface ResourceRepository : JpaRepository<Resource, Int>, JpaSpecificationExecutor<Resource> {
     fun findByName(name: String): Resource?
 
     fun findByCode(code: String): Resource?
@@ -19,17 +18,17 @@ interface ResourceRepository : JpaRepository<Resource, UUID>, JpaSpecificationEx
     fun existsByNameIgnoreCaseAndDepartmentIdAndIdNot(
         name: String,
         departmentId: Int,
-        id: UUID
+        id: Int
     ): Boolean
 
-    fun findByIdAndActiveTrue(id: UUID): Resource?
+    fun findByIdAndActiveTrue(id: Int): Resource?
 
     fun findAllByTypeAndActiveTrue(type: ResourceType, pageable: Pageable): Page<Resource>
 
-    fun findAllByIdInAndActiveTrue(ids: Collection<UUID>): List<Resource>
+    fun findAllByIdInAndActiveTrue(ids: Collection<Int>): List<Resource>
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = ["department", "preferredVendor"])
-    fun findWithRelationsById(id: UUID): Resource?
+    fun findWithRelationsById(id: Int): Resource?
 
     fun existsByDepartmentIdAndActiveTrue(departmentId: Int): Boolean
 

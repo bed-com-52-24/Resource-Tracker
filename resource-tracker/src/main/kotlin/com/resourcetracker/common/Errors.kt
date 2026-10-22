@@ -2,6 +2,7 @@ package com.resourcetracker.common
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.resourcetracker.user.Role
+import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -79,6 +80,17 @@ class GlobalExceptionHandler{
             ErrorResponse(400, "VALIDATION_FAILED", "Request validation failed", fieldErrors = fields),
         )
     }
+
+    @ExceptionHandler(ConstraintViolationException::class)
+    fun constraintViolation(ex: ConstraintViolationException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.badRequest().body(
+            ErrorResponse(
+                400,
+                "VALIDATION_FAILED",
+                "Request validation failed",
+                details = ex.constraintViolations.map { it.message }.sorted(),
+            ),
+        )
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun unreadable(ex: HttpMessageNotReadableException): ResponseEntity<ErrorResponse> {
