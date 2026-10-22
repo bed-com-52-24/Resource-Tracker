@@ -11,6 +11,7 @@ import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import java.util.UUID
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -54,21 +55,25 @@ class InventoryService(
     ): InventoryResponse {
         val resource = internalResource(resourceId)
         requireManagerScope(resource, caller)
+        val location = request.location.trim()
         if (inventories.findAllByResourceIdOrderByLocation(resourceId).any {
-                    it.location == request.location
+                    it.location.equals(location, ignoreCase = true)
                 }
         ) {
             throw BusinessRuleException("Inventory already exists for this resource and location")
         }
-        val inventory =
-                inventories.save(
-                        Inventory(
-                                resource = resource,
-                                location = request.location.trim(),
-                                totalQuantity = request.totalQuantity,
-                                reorderLevel = request.reorderLevel,
-                        ),
-                )
+        val inventory = try {
+            inventories.saveAndFlush(
+                Inventory(
+                    resource = resource,
+                    location = location,
+                    totalQuantity = request.totalQuantity,
+                    reorderLevel = request.reorderLevel,
+                ),
+            )
+        } catch (exception: DataIntegrityViolationException) {
+            throw BusinessRuleException("Inventory already exists for this resource and location")
+        }
         audit(inventory, "CREATE", request.reason, Snapshot(0, 0, 0), currentUser(caller))
         publishLowStock(inventory)
         return inventory.toResponse()

@@ -9,9 +9,11 @@ import com.resourcetracker.user.Role
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
 import java.util.Optional
 import java.util.UUID
 import kotlin.test.assertTrue
@@ -99,5 +101,40 @@ class InventoryServiceTest {
         assertEquals(8, inventory.totalQuantity)
         assertEquals(2, inventory.reorderLevel)
         assertEquals(8, service.list(resource.id).totalAvailable)
+    }
+
+    @Test
+    fun `create rejects an existing location after trimming request input`() {
+        `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
+        `when`(inventories.findAllByResourceIdOrderByLocation(resource.id)).thenReturn(listOf(inventory))
+
+        val exception = assertThrows<com.resourcetracker.common.BusinessRuleException> {
+            service.create(
+                resource.id,
+                CreateInventoryRequest(location = " HQ ", totalQuantity = 1, reason = "Initial stock"),
+                caller,
+            )
+        }
+
+        assertEquals("Inventory already exists for this resource and location", exception.message)
+    }
+
+    @Test
+    fun `create maps concurrent duplicate location insert to a business rule error`() {
+        `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
+        `when`(inventories.findAllByResourceIdOrderByLocation(resource.id)).thenReturn(emptyList())
+        doThrow(DataIntegrityViolationException("duplicate inventory location"))
+            .`when`(inventories)
+            .saveAndFlush(org.mockito.ArgumentMatchers.any(Inventory::class.java))
+
+        val exception = assertThrows<com.resourcetracker.common.BusinessRuleException> {
+            service.create(
+                resource.id,
+                CreateInventoryRequest(location = "HQ", totalQuantity = 1, reason = "Initial stock"),
+                caller,
+            )
+        }
+
+        assertEquals("Inventory already exists for this resource and location", exception.message)
     }
 }
