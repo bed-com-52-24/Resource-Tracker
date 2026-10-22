@@ -108,15 +108,13 @@ data class ListQuery(
                 for (entry in sortValues) {
                     val trimmed = entry.trim()
                     if (trimmed.isEmpty()) continue
+                    if (parsedSorts.size >= 3) {
+                        break
+                    }
                     val parts = trimmed.split(":")
                     val field = parts.first().trim()
                     val direction = if (parts.size > 1) parts[1].trim().lowercase() else "asc"
 
-                    if (parsedSorts.size >= 3) {
-                        throw IllegalArgumentException(
-                            "At most 3 sort fields are allowed. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
-                        )
-                    }
                     if (field !in supportedSortFields) {
                         throw IllegalArgumentException(
                             "Invalid sort field '$field'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"

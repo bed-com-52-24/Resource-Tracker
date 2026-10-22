@@ -1,5 +1,6 @@
 {
     "java.configuration.updateBuildConfiguration": "automatic",
     "java.debug.settings.hotCodeReplace": "auto",
-    "terminal.integrated.cwd": "${workspaceFolder}/resource-tracker"
+    "terminal.integrated.cwd": "${workspaceFolder}/resource-tracker",
+    "java.compile.nullAnalysis.mode": "automatic"
 }

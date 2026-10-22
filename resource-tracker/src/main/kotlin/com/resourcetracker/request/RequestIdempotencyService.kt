@@ -41,11 +41,10 @@ class RequestIdempotencyService(
 
     fun hashRequest(
         dto: CreateResourceRequestDto,
-        requesterId: Int,
-        assignedManagerId: Int
+        requesterId: Int
     ): String {
         val payload = objectMapper.writeValueAsString(
-            RequestHashPayload(dto, requesterId, assignedManagerId)
+            RequestHashPayload(dto, requesterId)
         )
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(payload.toByteArray(StandardCharsets.UTF_8))
@@ -55,8 +54,7 @@ class RequestIdempotencyService(
 
     private data class RequestHashPayload(
         val dto: CreateResourceRequestDto,
-        val requesterId: Int,
-        val assignedManagerId: Int
+        val requesterId: Int
     )
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

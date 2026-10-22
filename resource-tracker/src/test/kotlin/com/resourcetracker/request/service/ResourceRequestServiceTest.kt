@@ -8,6 +8,7 @@ import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.entity.ResourceRequest
 import com.resourcetracker.request.repository.RequestLineItemRepository
 import com.resourcetracker.request.repository.ResourceRequestRepository
+import com.resourcetracker.team.TeamRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -25,7 +26,8 @@ class ResourceRequestServiceTest {
     private val validation = RequestValidationService()
     private val mapper = mock(ObjectMapper::class.java)
     private val idempotency = mock(RequestIdempotencyService::class.java)
-    private val service = ResourceRequestService(requests, lineItems, numbers, validation, mapper, idempotency)
+    private val teams = mock(TeamRepository::class.java)
+    private val service = ResourceRequestService(requests, lineItems, numbers, validation, mapper, idempotency, teams)
 
     private fun dto(status: RequesterUpdateStatus) = UpdateResourceRequestDto(
         departmentId = 1,
@@ -58,28 +60,15 @@ class ResourceRequestServiceTest {
     }
 
     @Test
-    fun `queried request can be edited and resubmitted in one update`() {
+    fun `queried request cannot be changed`() {
         val request = owned(RequestStatus.QUERIED)
         `when`(requests.findOwnedRequest(9, 7)).thenReturn(request)
-        `when`(requests.save(request)).thenReturn(request)
 
-        val result = service.updateRequest(9, 7, dto(RequesterUpdateStatus.PENDING))
+        val error = assertThrows<ResponseStatusException> {
+            service.updateRequest(9, 7, dto(RequesterUpdateStatus.CANCELLED))
+        }
 
-        assertEquals(RequestStatus.PENDING, result.status)
-        assertEquals(false, result.editedAfterQuery)
-        assertEquals(null, result.queriedAt)
-    }
-
-    @Test
-    fun `queried request can be cancelled`() {
-        val request = owned(RequestStatus.QUERIED)
-        `when`(requests.findOwnedRequest(9, 7)).thenReturn(request)
-        `when`(requests.save(request)).thenReturn(request)
-
-        assertEquals(
-            RequestStatus.CANCELLED,
-            service.updateRequest(9, 7, dto(RequesterUpdateStatus.CANCELLED)).status,
-        )
+        assertEquals(HttpStatus.CONFLICT, error.statusCode)
     }
 
     @Test
