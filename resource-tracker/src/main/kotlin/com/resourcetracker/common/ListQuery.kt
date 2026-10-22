@@ -104,30 +104,30 @@ data class ListQuery(
 
             val sortValues = params["sort"].orEmpty()
             val parsedSorts = mutableListOf<ListSort>()
-            if (sortValues.isNotEmpty()) {
-                for (entry in sortValues) {
-                    val trimmed = entry.trim()
-                    if (trimmed.isEmpty()) continue
-                    val parts = trimmed.split(":")
-                    val field = parts.first().trim()
-                    val direction = if (parts.size > 1) parts[1].trim().lowercase() else "asc"
+            val nonBlankSortValues = sortValues.filter { it.isNotBlank() }
 
-                    if (parsedSorts.size >= 3) {
-                        throw IllegalArgumentException(
-                            "At most 3 sort fields are allowed. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
-                        )
-                    }
+            if (nonBlankSortValues.isNotEmpty()) {
+                for (entry in nonBlankSortValues) {
+                    if (parsedSorts.size >= 3) break
+                    val parts = entry.trim().split(":", limit = 2)
+                    val field = parts.first().trim()
+
                     if (field !in supportedSortFields) {
-                        throw IllegalArgumentException(
-                            "Invalid sort field '$field'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
-                        )
+                        continue
                     }
+
+                    val direction = if (parts.size > 1) parts[1].trim().lowercase() else "asc"
                     if (direction !in setOf("asc", "desc")) {
                         throw IllegalArgumentException(
                             "Invalid sort direction '$direction' for '$field'. Use 'asc' or 'desc'."
                         )
                     }
                     parsedSorts += ListSort(field, direction)
+                }
+                if (parsedSorts.isEmpty() && nonBlankSortValues.isNotEmpty()) {
+                    throw IllegalArgumentException(
+                        "Invalid sort field '${nonBlankSortValues.first().trim().split(":").first().trim()}'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
+                    )
                 }
             } else if (supportedSortFields.isNotEmpty()) {
                 parsedSorts += ListSort(supportedSortFields.first(), "asc")

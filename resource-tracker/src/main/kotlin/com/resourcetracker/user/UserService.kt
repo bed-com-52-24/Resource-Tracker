@@ -8,6 +8,9 @@ import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.common.WeakPasswordException
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.dao.DataIntegrityViolationException
@@ -22,6 +25,7 @@ class UserService(
     private val encoder: PasswordEncoder,
     private val departments: DepartmentRepository,
     private val teams: TeamRepository,
+    private val audit: AuditService,
 ) {
     companion object {
         val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
@@ -57,16 +61,27 @@ class UserService(
             teams = activeTeams(request.teamIds ?: emptySet()),
         )
 
-        return try {
-            users.saveAndFlush(user).toResponse()
+        val saved = try {
+            users.saveAndFlush(user)
         } catch (e: DataIntegrityViolationException) {
             throw DuplicateResourceException("Username or email is already in use")
         }
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.USER_CREATED,
+                "USER",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("username", "email", "fullName", "role", "departmentId", "teamIds", "active"),
+            ),
+        )
+        return saved.toResponse()
     }
 
     @Transactional
     fun update(id: Int, request: UpdateUserRequest): UserResponse {
         val user = find(id)
+        val before = snapshot(user)
         val email = request.email?.trim()
 
         if (email != null && !user.email.equals(email, ignoreCase = true) && users.existsByEmailIgnoreCase(email)) {
@@ -89,11 +104,32 @@ class UserService(
         
         request.active?.let{applyActive(user, it)}
 
-        return try {
-            users.save(user).toResponse()
+        val saved = try {
+            users.saveAndFlush(user)
         } catch (e: DataIntegrityViolationException) {
             throw DuplicateResourceException("Email '${email ?: user.email}' is already in use")
         }
+        val after = snapshot(saved)
+        val changed = changedFields(before, after)
+        if (changed.isNotEmpty()) {
+            val action = when {
+                "role" in changed -> AuditAction.USER_ROLE_UPDATED
+                "active" in changed && saved.active -> AuditAction.USER_RESTORED
+                "active" in changed -> AuditAction.USER_ARCHIVED
+                else -> AuditAction.USER_UPDATED
+            }
+            audit.record(
+                AuditRecord.currentActor(
+                    action,
+                    "USER",
+                    saved.id.toString(),
+                    previousState = before,
+                    newState = after,
+                    changedFields = changed,
+                ),
+            )
+        }
+        return saved.toResponse()
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +196,19 @@ class UserService(
         teamNames = teams.map { it.name }.sorted(),
         active = active,
     )
+
+    private fun snapshot(user: User) = mapOf(
+        "username" to user.username,
+        "email" to user.email,
+        "fullName" to user.fullName,
+        "role" to user.role.name,
+        "departmentId" to user.department.id,
+        "teamIds" to user.teams.map { it.id }.sorted(),
+        "active" to user.active,
+    )
+
+    private fun changedFields(before: Map<String, Any?>, after: Map<String, Any?>): List<String> =
+        before.keys.filter { before[it] != after[it] }
 
     private fun activeDepartment(id: Int) =
         departments.findById(id).orElseThrow { ResourceNotFoundException("Department $id not found") }

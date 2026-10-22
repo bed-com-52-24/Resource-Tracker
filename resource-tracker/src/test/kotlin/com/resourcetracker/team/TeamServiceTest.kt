@@ -1,5 +1,8 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.audit.AuditService
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
@@ -14,6 +17,8 @@ import org.junit.jupiter.api.assertThrows
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.verify
 import java.util.Optional
 
 class TeamServiceTest {
@@ -22,7 +27,8 @@ class TeamServiceTest {
     private val departments = mock(DepartmentRepository::class.java)
     private val users = mock(UserRepository::class.java)
     private val projects = mock(ProjectRepository::class.java)
-    private val service = TeamService(teams, departments, users, projects)
+    private val audit = mock(AuditService::class.java)
+    private val service = TeamService(teams, departments, users, projects, audit)
 
     private val dept = Department(id = 1, name = "Engineering")
 
@@ -85,6 +91,10 @@ class TeamServiceTest {
         assertEquals("Alpha", response.name)
         assertEquals(7, response.managerId)
         assertEquals(true, response.isActive)
+        val auditRecord = argumentCaptor<AuditRecord>()
+        verify(audit).record(auditRecord.capture())
+        assertEquals(AuditAction.TEAM_CREATED, auditRecord.firstValue.action)
+        assertEquals("TEAM", auditRecord.firstValue.itemType)
     }
 
     @Test

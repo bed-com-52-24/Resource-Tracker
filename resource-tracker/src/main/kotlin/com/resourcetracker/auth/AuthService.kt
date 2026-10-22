@@ -1,5 +1,9 @@
 package com.resourcetracker.auth
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditCorrelationContext
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.ApiException
 import com.resourcetracker.common.AccountDeactivatedException
 import com.resourcetracker.common.AccountLockedException
@@ -27,6 +31,7 @@ class AuthService(
     private val jwt: JwtService,
     private val props: SecurityProps,
     private val clock: Clock,
+    private val audit: AuditService,
 ){
     private val random = SecureRandom()
 
@@ -38,22 +43,92 @@ class AuthService(
         val user = users.findForUpdateByUsername(req.username)
         if(user == null){
             encoder.matches(req.password, dummyHash)
+            audit.record(
+                AuditRecord(
+                    actorRole = "ANONYMOUS",
+                    action = AuditAction.AUTH_LOGIN_FAILED,
+                    itemType = "AUTHENTICATION",
+                    itemId = req.username,
+                    newState = mapOf("outcome" to "FAILED"),
+                    changedFields = listOf("outcome"),
+                    correlationId = AuditCorrelationContext.currentOrNew(),
+                ),
+            )
             throw InvalidCredentialsException()
         }
         val lockedUntil = user.lockedUntil
-        if(lockedUntil != null && lockedUntil.isAfter(now)) throw AccountLockedException()
+        if(lockedUntil != null && lockedUntil.isAfter(now)) {
+            audit.record(
+                AuditRecord(
+                    actorId = user.id,
+                    actorRole = user.role.name,
+                    action = AuditAction.AUTH_ACCOUNT_LOCKED,
+                    itemType = "USER",
+                    itemId = user.id.toString(),
+                    newState = mapOf("lockedUntil" to lockedUntil, "outcome" to "LOCKED"),
+                    changedFields = listOf("outcome"),
+                ),
+            )
+            throw AccountLockedException()
+        }
 
         if(!encoder.matches(req.password, user.passwordHash)){
+            val before = mapOf("failedAttempts" to user.failedAttempts, "lockedUntil" to user.lockedUntil)
             registerFailure(user, now)
+            val after = mapOf("failedAttempts" to user.failedAttempts, "lockedUntil" to user.lockedUntil)
+            val accountLocked = user.lockedUntil?.isAfter(now) == true
+            audit.record(
+                AuditRecord(
+                    actorId = user.id,
+                    actorRole = user.role.name,
+                    action = if (accountLocked) {
+                        AuditAction.AUTH_ACCOUNT_LOCKED
+                    } else {
+                        AuditAction.AUTH_LOGIN_FAILED
+                    },
+                    itemType = "USER",
+                    itemId = user.id.toString(),
+                    previousState = before,
+                    newState = after,
+                    changedFields = before.keys.filter { before[it] != after[it] },
+                ),
+            )
             throw InvalidCredentialsException()
         }
 
-        if(!user.active) throw AccountDeactivatedException()
+        if(!user.active) {
+            audit.record(
+                AuditRecord(
+                    actorId = user.id,
+                    actorRole = user.role.name,
+                    action = AuditAction.AUTH_LOGIN_FAILED,
+                    itemType = "USER",
+                    itemId = user.id.toString(),
+                    newState = mapOf("outcome" to "DEACTIVATED"),
+                    changedFields = listOf("outcome"),
+                ),
+            )
+            throw AccountDeactivatedException()
+        }
 
+        val before = mapOf("failedAttempts" to user.failedAttempts, "lockedUntil" to user.lockedUntil)
         user.failedAttempts = 0
         user.failedWindowStart = null
         user.lockedUntil = null
-        return issueTokens(user, now)
+        val tokens = issueTokens(user, now)
+        audit.record(
+            AuditRecord(
+                actorId = user.id,
+                actorRole = user.role.name,
+                action = AuditAction.AUTH_LOGIN,
+                itemType = "USER",
+                itemId = user.id.toString(),
+                previousState = before,
+                newState = mapOf("failedAttempts" to 0, "authenticated" to true),
+                changedFields = listOf("lastAuthenticated"),
+            ),
+        )
+        return tokens
     }
 
     @Transactional(noRollbackFor = [ApiException::class])
@@ -75,6 +150,17 @@ class AuthService(
             ?. revoked = true
 
         revokedTokens.save(RevokedAccessToken(caller.jti, caller.tokenExpiresAt))
+        audit.record(
+            AuditRecord(
+                actorId = caller.id,
+                actorRole = caller.role.name,
+                action = AuditAction.AUTH_LOGOUT,
+                itemType = "USER",
+                itemId = caller.id.toString(),
+                newState = mapOf("authenticated" to false),
+                changedFields = listOf("authenticated"),
+            ),
+        )
     }
 
     private fun registerFailure(user: User, now:Instant){

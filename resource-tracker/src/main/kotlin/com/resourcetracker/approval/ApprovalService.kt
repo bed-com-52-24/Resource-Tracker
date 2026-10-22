@@ -19,6 +19,12 @@ class ApprovalService(
 
     @Transactional
     fun decide(requestId: Int, actorId: Int, body: DecisionRequest): DecisionResponse {
+        val comment = when (body.decision) {
+            ApprovalDecision.APPROVE -> optionalComment(body.comment)
+            ApprovalDecision.REJECT -> requiredComment(body.comment, 10)
+            ApprovalDecision.QUERY -> requiredComment(body.comment, 1)
+        }
+
         val request = loadForManager(requestId, actorId)
         val current = currentStatus(request)
         RequestStateMachine.requirePending(current)
@@ -26,7 +32,6 @@ class ApprovalService(
         val lines = lineRepository.findByRequestId(requestId)
         when (body.decision) {
             ApprovalDecision.APPROVE -> {
-                val comment = optionalComment(body.comment)
                 saveStatus(request, RequestStatus.APPROVED)
                 lines.forEach { decideLine(requestId, it, true, comment, actorId) }
                 return finish(
@@ -35,7 +40,6 @@ class ApprovalService(
                 )
             }
             ApprovalDecision.REJECT -> {
-                val comment = requiredComment(body.comment, 10)
                 saveStatus(request, RequestStatus.REJECTED)
                 lines.forEach { decideLine(requestId, it, false, comment, actorId) }
                 return finish(
@@ -44,7 +48,6 @@ class ApprovalService(
                 )
             }
             ApprovalDecision.QUERY -> {
-                val comment = requiredComment(body.comment, 1)
                 saveStatus(request, RequestStatus.QUERIED)
                 return finish(
                     request, actorId, current, RequestStatus.QUERIED, "QUERY", comment,

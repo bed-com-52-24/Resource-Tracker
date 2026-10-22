@@ -102,7 +102,7 @@ class ResourceController(private val resources: ResourceService) {
     ): ResourceResponse = resources.update(id, request)
 
     @GetMapping("/{id}")
-    fun get(@PathVariable id: UUID): ResourceResponse = resources.get(id)
+    fun get(@PathVariable id: Int): ResourceResponse = resources.get(id)
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

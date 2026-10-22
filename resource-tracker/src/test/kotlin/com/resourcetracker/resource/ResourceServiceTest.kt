@@ -1,5 +1,8 @@
 package com.resourcetracker.resource
 
+import com.resourcetracker.audit.AuditService
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.common.BusinessRuleException
@@ -8,6 +11,8 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.verify
 import java.util.Optional
 
 class ResourceServiceTest {
@@ -15,7 +20,8 @@ class ResourceServiceTest {
     private val codes = mock(ResourceCodeGenerator::class.java)
     private val departments = mock(DepartmentRepository::class.java)
     private val vendors = mock(VendorRepository::class.java)
-    private val service = ResourceService(resources, codes, departments, vendors)
+    private val audit = mock(AuditService::class.java)
+    private val service = ResourceService(resources, codes, departments, vendors, audit)
 
     private fun resource(active: Boolean) = Resource(
         id = 1,
@@ -127,5 +133,12 @@ class ResourceServiceTest {
         )
 
         assertEquals(ResourceStatus.AVAILABLE, response.status)
+        val auditRecord = argumentCaptor<AuditRecord>()
+        verify(audit).record(auditRecord.capture())
+        assertEquals(AuditAction.INVENTORY_ADJUSTED, auditRecord.firstValue.action)
+        assertEquals("INVENTORY_ITEM", auditRecord.firstValue.itemType)
+        assertEquals(0, (auditRecord.firstValue.previousState as Map<*, *>)["quantity"])
+        assertEquals(5, (auditRecord.firstValue.newState as Map<*, *>)["quantity"])
+        assertEquals("unit", (auditRecord.firstValue.newState as Map<*, *>)["unitOfMeasure"])
     }
 }
