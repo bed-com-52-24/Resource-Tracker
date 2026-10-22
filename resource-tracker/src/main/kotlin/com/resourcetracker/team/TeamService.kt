@@ -14,6 +14,7 @@ import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
@@ -105,13 +106,11 @@ class TeamService(
     }
 
     @Transactional(readOnly = true)
-    fun members(teamId: Int, page: Int, size: Int, role: Role?, active: Boolean?, search: String?): Page<User> {
+    fun members(teamId: Int, role: Role?, active: Boolean?, search: String?, pageable: Pageable): Page<User> {
         val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
         if (!team.isActive) throw BusinessRuleException("Team is inactive")
-        if (page < 0 || size < 1 || size > 100) throw InvalidTeamRequestException("page must be >= 0 and size must be between 1 and 100")
 
         val spec = TeamMemberSpecifications.filter(teamId, role, active, search)
-        val pageable = PageRequest.of(page, size)
         return users.findAll(spec, pageable)
     }
 

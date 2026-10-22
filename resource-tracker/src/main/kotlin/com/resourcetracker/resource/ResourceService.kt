@@ -4,13 +4,12 @@ import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
-import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.service.StockAvailabilityService
 import com.resourcetracker.request.entity.MovementType
 import com.resourcetracker.request.entity.StockMovement
 import com.resourcetracker.request.repository.StockMovementRepository
 import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -79,18 +78,12 @@ class ResourceService(
         departmentId: Int?,
         availableOnly: Boolean,
         keyword: String?,
-        page: Int,
-        size: Int,
-        sort: List<String>,
+        pageable: Pageable,
     ): Page<ResourceResponse> {
         if (keyword != null && keyword.length > 200) {
             throw BusinessRuleException("Keyword must not exceed 200 characters")
         }
-        if (page < 0 || size < 1 || size > 100) {
-            throw BusinessRuleException("page must be >= 0 and size must be between 1 and 100")
-        }
 
-        val pageable = PageRequest.of(page, size, ListQuery.sort(sort, ALLOWED_SORT_FIELDS, "name"))
         val specification = ResourceSpecifications.filter(active, type, category, status, departmentId, keyword)
         val finalSpecification = if (availableOnly) {
             val availableIds = resourceRepository.findAll(specification)
@@ -164,7 +157,4 @@ class ResourceService(
         availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this) else null,
     )
 
-    companion object {
-        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")
-    }
 }

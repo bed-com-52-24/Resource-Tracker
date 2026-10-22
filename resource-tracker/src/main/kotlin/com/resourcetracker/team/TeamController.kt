@@ -1,5 +1,6 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
@@ -7,12 +8,15 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/teams")
 @Tag(name = "Teams", description = "Create, search, update, and deactivate teams")
 @SecurityRequirement(name = "bearerAuth")
@@ -23,13 +27,30 @@ class TeamController(private val service: TeamService) {
     @Operation(summary = "List team members", description = "Admin only. Returns a paginated list of team members with optional filters.")
     fun members(
         @PathVariable id: Int,
+        @Parameter(description = "Search username, email, or full name", example = "jane")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: username, email, fullName, role, or active", example = "username")
+        @RequestParam(defaultValue = "username") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @RequestParam(required = false) role: Role?,
         @RequestParam(required = false) active: Boolean?,
-        @RequestParam(required = false) search: String?,
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") size: Int,
     ): Page<TeamMemberResponse> =
-        service.members(id, page, size, role, active, search).map { user ->
+        service.members(
+            id,
+            role,
+            active,
+            search,
+            ListQuery.pageable(
+                page, size, sort, direction,
+                setOf("username", "email", "fullName", "role", "active"),
+                "username",
+            ),
+        ).map { user ->
             TeamMemberResponse(
                 id = user.id,
                 username = user.username,
@@ -122,6 +143,16 @@ class TeamController(private val service: TeamService) {
         description = "Any authenticated user. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
     )
     fun list(
+        @Parameter(description = "Search team names", example = "alpha")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: name, isActive, or createdAt", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @Parameter(description = "Filter by department ID", example = "1")
         @RequestParam(required = false) departmentId: Int?,
         @Parameter(description = "Filter by manager ID", example = "7")
@@ -130,24 +161,15 @@ class TeamController(private val service: TeamService) {
         @RequestParam(required = false) projectId: Int?,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive teams.", example = "true")
         @RequestParam(required = false) isActive: Boolean?,
-        @Parameter(description = "Search team names", example = "alpha")
-        @RequestParam(required = false) search: String?,
-        @Parameter(description = "Zero-based page number", example = "0")
-        @RequestParam(defaultValue = "0") page: Int,
-        @Parameter(description = "Page size, from 1 to 100", example = "20")
-        @RequestParam(defaultValue = "20") size: Int,
-        @Parameter(description = "Sort field: name, isActive, or createdAt", example = "name")
-        @RequestParam(defaultValue = "name") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "asc")
-        @RequestParam(defaultValue = "asc") direction: String
     ): Page<TeamResponse> =
-        service.list(
-            departmentId, managerId, projectId, isActive, search, page, size,
-            listOf(
-                "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
-                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
+        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
+            val order = pageable.sort.first()
+            service.list(
+                departmentId, managerId, projectId, isActive, search,
+                pageable.pageNumber, pageable.pageSize,
+                listOf("${order.property}:${order.direction.name.lowercase()}"),
             )
-        )
+        }
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "isActive", "createdAt")

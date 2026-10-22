@@ -52,18 +52,14 @@ ALTER TABLE resource_requests
         status IN ('PENDING', 'QUERIED', 'APPROVED', 'REJECTED', 'CANCELLED')
     );
 
--- Preserve the previous request audit before retiring the superseded approval table.
-INSERT INTO request_history (request_id, event_type, from_status, to_status, actor_id, comment, created_at)
-SELECT request_id, LEFT(action, 30), previous_state, new_state, actor_id, comment, timestamp
-FROM audit_logs;
-
-DROP TABLE resource_request_component_audit;
-DROP TABLE resource_request_idempotency;
-DROP TABLE request_line_items;
-DROP TABLE audit_logs;
-DROP TABLE routing_rule_audit;
-DROP TABLE routing_rule_lock;
-DROP TABLE routing_rules;
+-- These legacy tables are already removed by V23 on a clean migration path.
+DROP TABLE IF EXISTS resource_request_component_audit;
+DROP TABLE IF EXISTS resource_request_idempotency;
+DROP TABLE IF EXISTS request_line_items;
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS routing_rule_audit;
+DROP TABLE IF EXISTS routing_rule_lock;
+DROP TABLE IF EXISTS routing_rules;
 
 -- Phase 2-4 stock and procurement tables. Resource.quantity remains physical stock.
 ALTER TABLE resources

@@ -1,6 +1,7 @@
 package com.resourcetracker.request.controller
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.service.ResourceRequestService
@@ -12,15 +13,15 @@ import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBody
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
-import org.springframework.data.domain.Pageable
-import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.validation.annotation.Validated
@@ -37,7 +38,73 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
     @PostMapping
     @RequiresRoles(Role.TEAM_LEAD)
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Submit a resource request", description = "Department, requester and manager are derived from the authenticated user and selected team.")
+    @Operation(
+        summary = "Submit a resource request",
+        description = "Submit a request for internal stock or external procurement. Department, requester and manager are derived from the authenticated user and selected team.",
+        requestBody = OpenApiRequestBody(
+            required = true,
+            content = [
+                Content(
+                    mediaType = "application/json",
+                    schema = Schema(implementation = CreateResourceRequestDto::class),
+                    examples = [
+                        ExampleObject(
+                            name = "INTERNAL",
+                            summary = "Request resources from existing stock",
+                            value = """
+                                {
+                                  "teamId": 3,
+                                  "projectId": 12,
+                                  "vendorId": null,
+                                  "justification": "Replacement laptops for the design team",
+                                  "requiredDate": "2026-11-15",
+                                  "lineItems": [
+                                    {
+                                      "resourceId": 7,
+                                      "description": "",
+                                      "manufacturer": "N/A",
+                                      "unitPrice": 0,
+                                      "quantity": 4,
+                                      "category": "OTHER",
+                                      "batchNumber": null,
+                                      "unitOfMeasure": "unit",
+                                      "fulfillmentPreference": "INTERNAL"
+                                    }
+                                  ]
+                                }
+                            """,
+                        ),
+                        ExampleObject(
+                            name = "EXTERNAL",
+                            summary = "Request resources through procurement",
+                            value = """
+                                {
+                                  "teamId": 3,
+                                  "projectId": 12,
+                                  "vendorId": 5,
+                                  "justification": "Purchase laptops not available in stock",
+                                  "requiredDate": "2026-11-15",
+                                  "lineItems": [
+                                    {
+                                      "resourceId": null,
+                                      "description": "Business laptop",
+                                      "manufacturer": "Example Manufacturer",
+                                      "unitPrice": 850000,
+                                      "quantity": 4,
+                                      "category": "OTHER",
+                                      "batchNumber": null,
+                                      "unitOfMeasure": "unit",
+                                      "fulfillmentPreference": "EXTERNAL"
+                                    }
+                                  ]
+                                }
+                            """,
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    )
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Request submitted"),
         ApiResponse(responseCode = "400", description = "Invalid references or request data", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -87,6 +154,16 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "List requests visible to the current role")
     fun list(
+        @Parameter(description = "Search request numbers", example = "REQ-2026")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: createdAt, requestNumber, status, requiredDate, or totalAmount", example = "createdAt")
+        @RequestParam(defaultValue = "createdAt") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "desc")
+        @RequestParam(defaultValue = "desc") direction: String,
         @RequestParam(required = false) status: RequestStatus?,
         @RequestParam(required = false) @Min(1) teamId: Int?,
         @RequestParam(required = false) @Min(1) projectId: Int?,
@@ -94,10 +171,16 @@ class ResourceRequestController(private val service: ResourceRequestService, pri
         @RequestParam(required = false) needsReassignment: Boolean?,
         @RequestParam(required = false) from: LocalDate?,
         @RequestParam(required = false) to: LocalDate?,
-        @RequestParam(required = false) search: String?,
-        @PageableDefault(size = 20, sort = ["createdAt"]) pageable: Pageable,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.list(serviceUser(caller), status, teamId, projectId, assignedManagerId, needsReassignment, from, to, search, pageable)
+    ) = service.list(
+        serviceUser(caller), status, teamId, projectId, assignedManagerId,
+        needsReassignment, from, to, search,
+        ListQuery.pageable(
+            page, size, sort, direction,
+            setOf("createdAt", "requestNumber", "status", "requiredDate", "totalAmount"),
+            "createdAt",
+        ),
+    )
 
     @GetMapping("/{id}")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)

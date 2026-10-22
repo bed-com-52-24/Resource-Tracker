@@ -2,13 +2,12 @@ package com.resourcetracker.request.service
 
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
 import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.PageImpl
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -57,18 +56,24 @@ class ProcurementService(
     }
 
     @Transactional(readOnly = true)
-    fun list(actorId: Int, status: ProcurementStatus?, page: Int, size: Int): Page<ProcurementResponse> {
+    fun list(
+        actorId: Int,
+        status: ProcurementStatus?,
+        search: String?,
+        page: Int,
+        size: Int,
+        sort: String,
+        direction: String,
+    ): Page<ProcurementResponse> {
         val actor = users.findById(actorId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "User not found") }
         if (actor.role != Role.ADMIN && actor.role != Role.DEPARTMENT_MANAGER) forbidden()
-        if (page < 0 || size !in 1..100) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination")
-        val filtered = procurements.findAll().filter { procurement ->
-            (status == null || status == procurement.status) &&
-                (actor.role == Role.ADMIN || requests.findById(procurement.requestId).orElse(null)?.assignedManagerId == actor.id)
+        val keyword = search?.trim()?.takeIf(String::isNotEmpty)
+        if (keyword != null && keyword.length > 200) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Search must be 200 characters or less")
         }
-        val pageable = PageRequest.of(page, size)
-        val start = minOf(pageable.offset.toInt(), filtered.size)
-        val end = minOf(start + size, filtered.size)
-        return PageImpl(filtered.subList(start, end).map { it.toResponse() }, pageable, filtered.size.toLong())
+        val pageable = ListQuery.pageable(page, size, sort, direction, SORT_FIELDS, "id")
+        return procurements.searchForActor(status, actor.id, actor.role == Role.ADMIN, keyword, pageable)
+            .map { it.toResponse() }
     }
 
     @Transactional
@@ -106,4 +111,8 @@ class ProcurementService(
 
     private fun Procurement.toResponse() = ProcurementResponse(id, requestId, lineItemId, vendorId, status, estimatedCost, expectedDelivery, receivedQuantity)
     private fun forbidden(): Nothing = throw ResponseStatusException(HttpStatus.FORBIDDEN, "Action is not permitted")
+
+    companion object {
+        private val SORT_FIELDS = setOf("id", "requestId", "lineItemId", "vendorId", "estimatedCost", "expectedDelivery", "status", "receivedQuantity")
+    }
 }

@@ -1,10 +1,12 @@
 package com.resourcetracker.resource
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
@@ -38,7 +40,7 @@ class ResourceController(private val resources: ResourceService) {
     @GetMapping
     @Operation(
         summary = "List resources",
-        description = "Lists resources with optional active-state, type, category, and name/code search filters."
+        description = "Returns a paginated resource list. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resources returned"),
@@ -47,17 +49,22 @@ class ResourceController(private val resources: ResourceService) {
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
+        @Parameter(description = "Search resource names or codes", example = "laptop")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: name, code, type, category, active, createdAt, quantity, or status", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) type: ResourceType?,
         @RequestParam(required = false) category: ResourceCategory?,
         @RequestParam(required = false) status: ResourceStatus?,
         @RequestParam(defaultValue = "false") availableOnly: Boolean,
         @RequestParam(required = false) departmentId: Int?,
-        @RequestParam(required = false) search: String?,
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") size: Int,
-        @RequestParam(defaultValue = "name") sort: String,
-        @RequestParam(defaultValue = "asc") direction: String,
     ): Page<ResourceResponse> = resources.list(
         active = active,
         type = type,
@@ -66,12 +73,7 @@ class ResourceController(private val resources: ResourceService) {
         departmentId = departmentId,
         availableOnly = availableOnly,
         keyword = search,
-        page = page,
-        size = size,
-        sort = listOf(
-            "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
-                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
-        ),
+        pageable = ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name"),
     )
 
     @PostMapping

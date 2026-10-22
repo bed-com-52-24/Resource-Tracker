@@ -63,6 +63,14 @@ class Notification(
 }
 
 interface NotificationRepository : JpaRepository<Notification, Int> {
+    fun findByRecipientId(recipientId: Int, pageable: Pageable): Page<Notification>
+
+    fun findByRecipientIdAndStatus(
+        recipientId: Int,
+        status: NotificationStatus,
+        pageable: Pageable,
+    ): Page<Notification>
+
     fun findByRecipientIdOrderByCreatedAtDesc(recipientId: Int, pageable: Pageable): Page<Notification>
 
     fun findByRecipientIdAndStatusOrderByCreatedAtDesc(
@@ -80,7 +88,6 @@ interface NotificationRepository : JpaRepository<Notification, Int> {
           and (:status is null or n.status = :status)
           and (:search is null or lower(n.message) like lower(concat('%', :search, '%'))
             or lower(n.type) like lower(concat('%', :search, '%')))
-        order by n.createdAt desc
         """
     )
     fun searchForUser(

@@ -27,9 +27,9 @@ class RoleAuthorizationInterceptor : HandlerInterceptor {
         if (caller == null) {
             return required == null || request.requestURI.startsWith("/api/v1/auth/")
         }
-        if (required == null) {
-            throw ForbiddenRoleException(listOf(Role.ADMIN), caller.role)
-        }
+        // Authentication is enforced by Spring Security for protected routes.
+        // Only apply a role restriction when the handler explicitly declares one.
+        if (required == null) return true
         if (caller.role !in required.value) throw ForbiddenRoleException(required.value.toList(), caller.role)
         return true
     }

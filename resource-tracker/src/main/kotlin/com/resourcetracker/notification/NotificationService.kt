@@ -41,8 +41,8 @@ class NotificationService(
         val normalized = search?.trim()?.takeIf { it.isNotEmpty() }
         val page = when {
             normalized != null -> notifications.searchForUser(userId, status, normalized, pageable)
-            status != null -> notifications.findByRecipientIdAndStatusOrderByCreatedAtDesc(userId, status, pageable)
-            else -> notifications.findByRecipientIdOrderByCreatedAtDesc(userId, pageable)
+            status != null -> notifications.findByRecipientIdAndStatus(userId, status, pageable)
+            else -> notifications.findByRecipientId(userId, pageable)
         }
         return page.content.map { it.toResponse() }
     }
@@ -76,6 +76,7 @@ class NotificationService(
 
     private fun buildMessage(type: NotificationType, payload: Map<String, Any?>): String {
         val requestId = payload["requestId"]?.toString()
+        val resource = payload["resource"]?.toString()
         return when (type) {
             NotificationType.SUBMITTED -> "Request ${requestId ?: "unknown"} has been submitted."
             NotificationType.QUERIED -> "Request ${requestId ?: "unknown"} requires additional information."

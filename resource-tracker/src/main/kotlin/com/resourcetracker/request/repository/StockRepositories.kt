@@ -1,6 +1,8 @@
 package com.resourcetracker.request.repository
 
 import com.resourcetracker.request.entity.*
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -54,4 +56,27 @@ interface StockMovementRepository : JpaRepository<StockMovement, Int> {
 
 interface ProcurementRepository : JpaRepository<Procurement, Int> {
     fun findAllByRequestId(requestId: Int): List<Procurement>
+
+    @Query(
+        """
+        select p from Procurement p
+        where (:status is null or p.status = :status)
+          and (:isAdmin = true or exists (
+            select r.requestId from ResourceRequest r
+            where r.requestId = p.requestId and r.assignedManagerId = :actorId
+          ))
+          and (:search is null or exists (
+            select r.requestId from ResourceRequest r
+            where r.requestId = p.requestId
+              and lower(r.requestNumber) like lower(concat('%', :search, '%'))
+          ))
+        """,
+    )
+    fun searchForActor(
+        @Param("status") status: ProcurementStatus?,
+        @Param("actorId") actorId: Int,
+        @Param("isAdmin") isAdmin: Boolean,
+        @Param("search") search: String?,
+        pageable: Pageable,
+    ): Page<Procurement>
 }
