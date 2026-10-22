@@ -2,6 +2,7 @@ package com.resourcetracker.resource
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -15,6 +16,7 @@ import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.validation.annotation.Validated
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.PathVariable
@@ -49,6 +51,7 @@ class ResourceController(private val resources: ResourceService) {
         @RequestParam(required = false) type: ResourceType?,
         @RequestParam(required = false) category: ResourceCategory?,
         @RequestParam(required = false) status: ResourceStatus?,
+        @RequestParam(defaultValue = "false") availableOnly: Boolean,
         @RequestParam(required = false) departmentId: Int?,
         @RequestParam(required = false) search: String?,
         @RequestParam(defaultValue = "0") page: Int,
@@ -61,6 +64,7 @@ class ResourceController(private val resources: ResourceService) {
         category = category,
         status = status,
         departmentId = departmentId,
+        availableOnly = availableOnly,
         keyword = search,
         page = page,
         size = size,
@@ -82,8 +86,8 @@ class ResourceController(private val resources: ResourceService) {
         ApiResponse(responseCode = "404", description = "Department or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Resource type rules were violated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun create(@Valid @RequestBody request: CreateResourceRequest): ResourceResponse =
-        resources.create(request)
+    fun create(@Valid @RequestBody request: CreateResourceRequest, @AuthenticationPrincipal caller: AuthenticatedUser): ResourceResponse =
+        resources.create(request, caller.id)
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.ADMIN)

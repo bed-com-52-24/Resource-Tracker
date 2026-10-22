@@ -32,5 +32,17 @@ class ResourceRequestLineItem(
     var category: RequestCategory = RequestCategory.OTHER,
 
     @Column(name = "batch_number", length = 50)
-    var batchNumber: String? = null
+    var batchNumber: String? = null,
+
+    @Column(name = "resource_id")
+    var resourceId: Int? = null,
+
+    @Column(name = "fulfillment_preference", nullable = false, length = 10)
+    var fulfillmentPreference: String = "INTERNAL",
+
+    @Column(name = "unit_of_measure", length = 50)
+    var unitOfMeasure: String? = null,
+
+    @Column(name = "approved_quantity")
+    var approvedQuantity: Int? = null,
 )
