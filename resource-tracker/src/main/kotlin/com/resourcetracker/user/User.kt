@@ -67,6 +67,12 @@ interface UserRepository : JpaRepository<User, Int>, JpaSpecificationExecutor<Us
     fun existsByEmailIgnoreCaseAndIdNot(email: String, id: Int): Boolean
     fun findDistinctByTeams_Id(teamId: Int, pageable: Pageable): Page<User>
 
+    @Query("select u from User u where u.role = :role and u.department.id = :departmentId and u.active = true")
+    fun findActiveByRoleAndDepartmentId(@Param("role") role: Role, @Param("departmentId") departmentId: Int): List<User>
+
+    @Query("select u from User u where u.role = :role and u.active = true")
+    fun findActiveByRole(@Param("role") role: Role): List<User>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.role = :role and u.active = true")
     fun findActiveByRoleForUpdate(@Param("role") role: Role): List<User>

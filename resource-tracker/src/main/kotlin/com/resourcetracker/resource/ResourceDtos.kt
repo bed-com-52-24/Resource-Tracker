@@ -82,4 +82,7 @@ data class ResourceResponse(
     val status: ResourceStatus?,
     val departmentId: Int?,
     val preferredVendorId: Int?,
+    val reservedQuantity: Int = 0,
+    val unavailableQuantity: Int = 0,
+    val availableQuantity: Int? = null,
 )

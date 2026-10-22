@@ -1,15 +1,14 @@
 package com.resourcetracker.request.controller
 
-import com.resourcetracker.request.dto.CreateResourceRequestDto
-import com.resourcetracker.request.dto.UpdateResourceRequestDto
-import com.resourcetracker.request.service.RequestCreationFacade
+import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.request.dto.*
+import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.service.ResourceRequestService
-import com.resourcetracker.common.UnauthenticatedException
+import com.resourcetracker.request.service.ReservationService
+import com.resourcetracker.request.service.CreateReservationRequest
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
-import com.resourcetracker.common.ErrorResponse
-import com.resourcetracker.request.dto.ResourceRequestResponseDto
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -19,105 +18,107 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
-import org.springframework.security.core.Authentication
+import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
+import java.time.LocalDate
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/requests")
-@RequiresRoles(Role.ADMIN, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-@Tag(name = "Resource Requests", description = "Create and manage the authenticated user's resource requests")
+@Tag(name = "Resource Requests", description = "Submit and manage resource requests")
 @SecurityRequirement(name = "bearerAuth")
-class ResourceRequestController(
-    private val requestService: ResourceRequestService,
-    private val requestCreationFacade: RequestCreationFacade
-) {
-
-    private fun currentUserId(
-        authentication: Authentication
-    ): Int =
-        (authentication.principal as? AuthenticatedUser)?.id
-            ?: throw UnauthenticatedException()
+class ResourceRequestController(private val service: ResourceRequestService, private val reservationService: ReservationService) {
 
     @PostMapping
-    @Operation(
-        summary = "Create a resource request",
-        description = "Creates a pending resource request for the authenticated user. " +
-                "Requires a unique Idempotency-Key header; repeated submissions with the same key are safely replayed."
-    )
-    @ApiResponses(
-        value = [
-            ApiResponse(responseCode = "201", description = "Resource request created"),
-            ApiResponse(responseCode = "200", description = "Existing idempotent request replayed"),
-            ApiResponse(responseCode = "400", description = "Invalid request, line items, or idempotency key", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "409", description = "Idempotency key conflicts with another request", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ]
-    )
-    fun create(
-    @Valid @RequestBody dto: CreateResourceRequestDto,
-    @Parameter(description = "Unique key used to make request creation idempotent", required = true, example = "req-20261021-0001")
-    @RequestHeader("Idempotency-Key") idempotencyKey: String,
-    authentication: Authentication
-): org.springframework.http.ResponseEntity<String> {
-    val result = requestCreationFacade.create(
-        dto = dto,
-        requester = authentication.principal as AuthenticatedUser,
-        idempotencyKey = idempotencyKey
-    )
+    @RequiresRoles(Role.TEAM_LEAD)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Submit a resource request", description = "Department, requester and manager are derived from the authenticated user and selected team.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "201", description = "Request submitted"),
+        ApiResponse(responseCode = "400", description = "Invalid references or request data", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Team Lead role or team membership required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
+    fun create(@Valid @RequestBody dto: CreateResourceRequestDto, @AuthenticationPrincipal caller: AuthenticatedUser) =
+        service.createRequest(dto, caller.id)
 
-    return org.springframework.http.ResponseEntity
-        .status(result.httpStatus)
-        .header(
-            org.springframework.http.HttpHeaders.CONTENT_TYPE,
-            org.springframework.http.MediaType.APPLICATION_JSON_VALUE
-        )
-        .body(result.responseBody)
-}
+    @PostMapping("/{id}/decision")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Query, approve, or reject a request")
+    fun decide(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody dto: RequestDecisionDto,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.decide(id, serviceUser(caller), dto)
 
-    @GetMapping
-    @Operation(
-        summary = "List my resource requests",
-        description = "Returns only resource requests belonging to the authenticated user. Supports standard pageable parameters."
-    )
-    @ApiResponses(
-        value = [
-            ApiResponse(responseCode = "200", description = "Resource requests returned"),
-            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ]
-    )
-    fun list(
-        @PageableDefault(size = 20, sort = ["createdAt"]) pageable: Pageable,
-        authentication: Authentication
-    ) = requestService.listMyRequests(
-        requesterId = currentUserId(authentication),
-        pageable = pageable
-    )
+    @PostMapping("/{id}/reservations")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Reserve approved internal stock")
+    fun reserve(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody dto: CreateReservationRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = reservationService.reserve(id, caller.id, dto)
+
+    @PutMapping("/{id}/lines/{lineItemId}/approved-quantity")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Adjust approved line quantity")
+    fun adjustApprovedQuantity(
+        @PathVariable @Min(1) id: Int,
+        @PathVariable @Min(1) lineItemId: Int,
+        @Valid @RequestBody dto: ApprovedQuantityUpdateRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.adjustApprovedQuantity(id, lineItemId, serviceUser(caller), dto)
 
     @PutMapping("/{id}")
-    @Operation(
-        summary = "Edit a resource request",
-        description = "Cancels an owned pending request. Submitted requests cannot be edited."
-    )
-    @ApiResponses(
-        value = [
-            ApiResponse(responseCode = "200", description = "Resource request updated"),
-            ApiResponse(responseCode = "400", description = "Invalid request data", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "404", description = "Request not found or not owned by the authenticated user", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "409", description = "Requested status transition is not allowed", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ]
-    )
+    @RequiresRoles(Role.TEAM_LEAD)
+    @Operation(summary = "Clarify or cancel an owned request")
     fun edit(
-        @Parameter(description = "Resource request ID", example = "42")
-        @PathVariable id: Int,
+        @PathVariable @Min(1) id: Int,
         @Valid @RequestBody dto: UpdateResourceRequestDto,
-        authentication: Authentication
-    ) = requestService.updateRequest(
-        id,
-        currentUserId(authentication),
-        dto
-    )
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.updateRequest(id, serviceUser(caller), dto)
+
+    @GetMapping
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "List requests visible to the current role")
+    fun list(
+        @RequestParam(required = false) status: RequestStatus?,
+        @RequestParam(required = false) @Min(1) teamId: Int?,
+        @RequestParam(required = false) @Min(1) projectId: Int?,
+        @RequestParam(required = false) @Min(1) assignedManagerId: Int?,
+        @RequestParam(required = false) needsReassignment: Boolean?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
+        @RequestParam(required = false) search: String?,
+        @PageableDefault(size = 20, sort = ["createdAt"]) pageable: Pageable,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.list(serviceUser(caller), status, teamId, projectId, assignedManagerId, needsReassignment, from, to, search, pageable)
+
+    @GetMapping("/{id}")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Get a visible request with its line items")
+    fun get(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
+        service.get(id, serviceUser(caller))
+
+    @GetMapping("/{id}/history")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Get append-only request history")
+    fun history(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
+        service.history(id, serviceUser(caller))
+
+    @PutMapping("/{id}/manager")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "Assign or reassign a department manager")
+    fun reassign(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody dto: ManagerReassignmentDto,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.reassign(id, serviceUser(caller), dto.managerId)
+
+    private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }
