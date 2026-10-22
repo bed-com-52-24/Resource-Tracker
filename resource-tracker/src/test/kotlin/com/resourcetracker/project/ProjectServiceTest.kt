@@ -2,6 +2,9 @@ package com.resourcetracker.project
 
 import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
+import com.resourcetracker.common.ConflictException
+import com.resourcetracker.common.NotFoundException
+import com.resourcetracker.common.ValidationException
 import com.resourcetracker.resource.ResourceRepository
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -47,7 +50,7 @@ class ProjectServiceTest {
     @Test
     fun `create fails when end date is before start date`() {
         `when`(departments.findById(deptId)).thenReturn(Optional.of(dept))
-        assertThrows<BadRequestException> { service.create(request(end = LocalDate.of(2025, 12, 31))) }
+        assertThrows<ValidationException> { service.create(request(end = LocalDate.of(2025, 12, 31))) }
     }
 
     @Test
@@ -85,7 +88,7 @@ class ProjectServiceTest {
 
     @Test
     fun `list rejects more than three sort fields`() {
-        assertThrows<BadRequestException> {
+        assertThrows<ValidationException> {
             service.list(null, null, null, null, null, 0, 20,
                 listOf("name", "code", "startDate", "active"))
         }
@@ -93,7 +96,7 @@ class ProjectServiceTest {
 
     @Test
     fun `list rejects an invalid sort field`() {
-        assertThrows<BadRequestException> {
+        assertThrows<ValidationException> {
             service.list(null, null, null, null, null, 0, 20, listOf("password"))
         }
     }

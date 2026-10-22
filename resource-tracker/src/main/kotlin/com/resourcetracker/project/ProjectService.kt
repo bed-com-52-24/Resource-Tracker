@@ -2,6 +2,9 @@ package com.resourcetracker.project
 
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.ConflictException
+import com.resourcetracker.common.NotFoundException
+import com.resourcetracker.common.ValidationException
 import com.resourcetracker.resource.ResourceRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -92,15 +95,15 @@ class ProjectService(
         sort: List<String>
     ): Page<ProjectResponse> {
         if (keyword != null && keyword.length > 200)
-            throw BadRequestException("Keyword must not exceed 200 characters")
+            throw ValidationException("Keyword must not exceed 200 characters")
         if (page < 0 || size < 1 || size > 100)
-            throw BadRequestException("page must be >= 0 and size must be between 1 and 100")
+            throw ValidationException("page must be >= 0 and size must be between 1 and 100")
 
         val spec = ProjectSpecifications.filter(departmentId, active, startFrom, startTo, keyword)
         val pageable = PageRequest.of(page, size, try {
             ListQuery.sort(sort, allowedSortFields, "name")
         } catch (e: IllegalArgumentException) {
-            throw BadRequestException(e.message ?: "Invalid sort")
+            throw ValidationException(e.message ?: "Invalid sort")
         })
         return projects.findAll(spec, pageable).map { it.toResponse() }
     }
@@ -118,7 +121,7 @@ class ProjectService(
 
     private fun validateDates(start: LocalDate, end: LocalDate?) {
         if (end != null && end.isBefore(start))
-            throw BadRequestException("End date must not be before start date")
+            throw ValidationException("End date must not be before start date")
     }
 
 }

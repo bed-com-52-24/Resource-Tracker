@@ -24,6 +24,7 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.AuthenticationEntryPoint
+import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource
@@ -56,10 +57,14 @@ class SecurityConfig {
         revoked: RevokedAccessTokenRepository,
         users: UserRepository,
         entryPoint: RestAuthenticationEntryPoint,
+        accessDeniedHandler: RestAccessDeniedHandler,
     ): SecurityFilterChain = http
         .csrf { it.disable() }
         .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
-        .exceptionHandling { it.authenticationEntryPoint(entryPoint) }
+        .exceptionHandling {
+            it.authenticationEntryPoint(entryPoint)
+                .accessDeniedHandler(accessDeniedHandler)
+        }
         .authorizeHttpRequests {
             it.requestMatchers(
                 "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/health", "/error",
@@ -134,7 +139,36 @@ class RestAuthenticationEntryPoint(private val mapper: ObjectMapper) : Authentic
         response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
         mapper.writeValue(
             response.outputStream,
-            ErrorResponse(401, "UNAUTHENTICATED", "Authentication required"),
+            ErrorResponse.from(
+                request,
+                org.springframework.http.HttpStatus.UNAUTHORIZED,
+                "UNAUTHENTICATED",
+                "Authentication required",
+            ),
+        )
+    }
+}
+
+@Component
+class RestAccessDeniedHandler(private val mapper: ObjectMapper) : AccessDeniedHandler {
+    override fun handle(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        accessDeniedException: org.springframework.security.access.AccessDeniedException,
+    ) {
+        val actualRole = (SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser)
+            ?.role?.name ?: "UNKNOWN"
+        response.status = HttpServletResponse.SC_FORBIDDEN
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        mapper.writeValue(
+            response.outputStream,
+            ErrorResponse.from(
+                request,
+                org.springframework.http.HttpStatus.FORBIDDEN,
+                "INSUFFICIENT_ROLE",
+                "Access requires ADMIN; caller role is $actualRole",
+                listOf("Required role: ADMIN", "Caller role: $actualRole"),
+            ),
         )
     }
 }

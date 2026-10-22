@@ -16,7 +16,6 @@ import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
-import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 
@@ -187,24 +186,4 @@ class ProjectController(private val service: ProjectService) {
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "startDate", "endDate", "active", "createdAt")
     }
-
-    // ---- Local error handling (move to a shared @RestControllerAdvice when the team adds one) ----
-    @ExceptionHandler(NotFoundException::class)
-    fun notFound(e: NotFoundException) = error(HttpStatus.NOT_FOUND, e.message)
-
-    @ExceptionHandler(ConflictException::class)
-    fun conflict(e: ConflictException) = error(HttpStatus.CONFLICT, e.message)
-
-    @ExceptionHandler(BadRequestException::class)
-    fun badRequest(e: BadRequestException) = error(HttpStatus.BAD_REQUEST, e.message)
-
-    @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun invalid(e: MethodArgumentNotValidException): ResponseEntity<Map<String, Any?>> {
-        val details = e.bindingResult.fieldErrors.associate { it.field to it.defaultMessage }
-        return ResponseEntity.badRequest()
-            .body(mapOf("status" to 400, "error" to "Validation failed", "details" to details))
-    }
-
-    private fun error(status: HttpStatus, message: String?): ResponseEntity<Map<String, Any?>> =
-        ResponseEntity.status(status).body(mapOf("status" to status.value(), "error" to message))
 }

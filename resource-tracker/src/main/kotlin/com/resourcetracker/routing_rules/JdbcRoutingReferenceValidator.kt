@@ -1,5 +1,6 @@
 package com.resourcetracker.routing_rules
 
+import com.resourcetracker.common.ValidationException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 

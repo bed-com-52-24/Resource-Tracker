@@ -1,14 +1,13 @@
 package com.resourcetracker.routing_rules
 
+import com.resourcetracker.common.ConflictException
+import com.resourcetracker.common.NotFoundException
+import com.resourcetracker.common.ValidationException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.time.LocalDateTime
-
-class DuplicateRoutingRuleException(message: String) : RuntimeException(message)
-class NotFoundException(message: String) : RuntimeException(message)
-class ValidationException(message: String) : RuntimeException(message)
 
 @Service
 class RoutingRuleService(
@@ -71,7 +70,7 @@ class RoutingRuleService(
             audit(saved, "UPDATE", actor, before, snapshot(saved))
             saved
         } catch (ex: DataIntegrityViolationException) {
-            throw DuplicateRoutingRuleException(
+            throw ConflictException(
                 "An active rule already has this department/project/team"
             )
         }
@@ -104,7 +103,7 @@ class RoutingRuleService(
                 rule.id
             )
         ) {
-            throw DuplicateRoutingRuleException(
+            throw ConflictException(
                 "An active rule already has this department/project/team"
             )
         }
@@ -118,7 +117,7 @@ class RoutingRuleService(
             audit(saved, "ACTIVATE", actor, before, snapshot(saved))
             saved
         } catch (ex: DataIntegrityViolationException) {
-            throw DuplicateRoutingRuleException(
+            throw ConflictException(
                 "An active rule already has this department/project/team"
             )
         }
