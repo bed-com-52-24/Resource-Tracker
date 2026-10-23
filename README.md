@@ -25,3 +25,18 @@ The `Resource Tracker` launch configuration also supports debugging from the Run
 ```
 
 The access token is valid for 30 minutes. The login response no longer includes `user`; this is a breaking API contract change for clients that read `response.user`. After login, clients should call `GET /api/v1/auth/me` for the profile, including `id`, `role`, `teams`, and `teamIds`.
+
+## Email delivery
+
+Password setup and reset links are sent through SMTP in every profile. Configure these variables in `resource-tracker/.env` (or the backend environment):
+
+```dotenv
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=your-smtp-username
+MAIL_PASSWORD=your-smtp-password
+APP_MAIL_FROM=no-reply@example.com
+APP_FRONTEND_BASE_URL=https://your-frontend.example.com
+```
+
+Use the SMTP host, port, username, and password supplied by your email provider. The app uses STARTTLS on port 587. Password links are never written to application logs.

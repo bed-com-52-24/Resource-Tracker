@@ -90,7 +90,7 @@ class AuthService(
     @Transactional
     fun setPassword(request: PasswordSetRequest): PasswordSetResponse {
         val now = clock.instant()
-        val token = passwordTokens.findForUpdateByTokenHash(passwordTokenService.hash(request.token))
+        val token = passwordTokens.findForUpdateByTokenHash(passwordTokenService.hash(request.code))
             ?: throw invalidPasswordToken()
         val expiresAt = token.expiresAt
         if (token.usedAt != null || (expiresAt != null && !expiresAt.isAfter(now))) {

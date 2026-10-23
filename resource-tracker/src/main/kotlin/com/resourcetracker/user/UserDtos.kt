@@ -30,10 +30,10 @@ data class UpdateUserRequest(
 )
 
 data class PasswordSetRequest(
-    @field:NotBlank val token: String,
+    @field:NotBlank @field:Size(min = 8, max = 8) val code: String,
     @field:NotBlank val password: String,
 ) {
-    override fun toString() = "PasswordSetRequest(token=***, password=***)"
+    override fun toString() = "PasswordSetRequest(code=***, password=***)"
 }
 
 data class ForgotPasswordRequest(

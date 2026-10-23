@@ -41,8 +41,8 @@ class NotificationService(
         val normalized = search?.trim()?.takeIf { it.isNotEmpty() }
         val page = when {
             normalized != null -> notifications.searchForUser(userId, status, normalized, pageable)
-            status != null -> notifications.findByRecipientIdAndStatus(userId, status, pageable)
-            else -> notifications.findByRecipientId(userId, pageable)
+            status != null -> notifications.findByRecipientIdAndStatusOrderByCreatedAtDesc(userId, status, pageable)
+            else -> notifications.findByRecipientIdOrderByCreatedAtDesc(userId, pageable)
         }
         return page.content.map { it.toResponse() }
     }

@@ -105,7 +105,7 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
 
     @PostMapping("/set-password")
     @ResponseStatus(HttpStatus.OK)
-    @Operation(summary = "Set or reset a password", description = "Consumes a single-use password setup or reset token.")
+    @Operation(summary = "Set or reset a password", description = "Consumes a single-use 8-digit password setup or reset code.")
     fun setPassword(@Valid @RequestBody request: PasswordSetRequest) = auth.setPassword(request)
 
     @PostMapping("/forgot-password")
