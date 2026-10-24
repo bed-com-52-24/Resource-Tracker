@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # Environment files:
 #   development -> .env
-#   production  -> .env.production
+#   production  -> .env
 # ==============================================================================
 
 ENVIRONMENT="${1:-development}"
@@ -28,7 +28,7 @@ case "$ENVIRONMENT" in
         ;;
 
     production)
-        ENV_FILE=".env.production"
+        ENV_FILE=".env"
         START_MODE="docker"
         ;;
 
@@ -91,28 +91,41 @@ echo "Environment variables loaded successfully."
 # ------------------------------------------------------------------------------
 
 required_vars=(
-    "SPRING_DATASOURCE_URL"
+    "DB_NAME"
+    "DB_USER"
+    "DB_PASSWORD"
+    "APP_SECURITY_JWT_SECRET"
+    "DB_PORT"
+    "DATASOURCE_USERNAME"
+    "DATASOURCE_PASSWORD"
+    "SPRING_DATASOURCE_PASSWORD"
     "SPRING_DATASOURCE_USERNAME"
-    "SPRING_DATASOURCE_DRIVER_CLASS_NAME"
-    "SPRING_JPA_HIBERNATE_DIALECT"
-    "JWT_SECRET_KEY"
-    "JWT_ACCESS_TOKEN_EXPIRATION_MS"
-    "JWT_REFRESH_TOKEN_EXPIRATION_MS"
-    "UPLOAD_DIRECTORY"
-    "APP_NAME"
-    "APP_PORT"
-    "SPRING_PROFILES_ACTIVE"
-    "SPRING_FLYWAY_ENABLED"
-    "SPRING_FLYWAY_CLEAN_DISABLED"
+    "PORT"
+    "MAIL_PORT"
+    "MAIL_HOST"
+    "MAIL_USERNAME"
+    "MAIL_PASSWORD"
+    "APP_MAIL_FROM"
 )
+
+# Use the Spring datasource URL for local development and the deployment URL
+# for production migrations.
+if [[ "$ENVIRONMENT" == "development" ]]; then
+    required_vars+=("SPRING_DATASOURCE_URL")
+    DB_CONNECTION_URL="${SPRING_DATASOURCE_URL:-}"
+else
+    required_vars+=("DATABASE_URL")
+    DB_CONNECTION_URL="${DATABASE_URL:-}"
+fi
 
 # Production additionally requires MySQL container variables.
 if [[ "$ENVIRONMENT" == "production" ]]; then
     required_vars+=(
-        "MYSQL_DATABASE"
-        "MYSQL_USER"
-        "MYSQL_PASSWORD"
-        "MYSQL_ROOT_PASSWORD"
+        "DB_NAME"
+        "DB_USER"
+        "DB_PASSWORD"
+        "DATASOURCE_USERNAME"
+        "DATASOURCE_PASSWORD"
     )
 fi
 
@@ -149,19 +162,18 @@ echo "Environment validation successful."
 # ------------------------------------------------------------------------------
 
 echo
-echo "Extracting MySQL connection properties from SPRING_DATASOURCE_URL ..."
-echo "URL: $SPRING_DATASOURCE_URL"
+echo "Extracting MySQL connection properties from the configured datasource URL ..."
 
 extract_db_host() {
-    echo "$SPRING_DATASOURCE_URL" | sed -E 's|jdbc:mysql://([^:/]+).*|\1|'
+    echo "$DB_CONNECTION_URL" | sed -E 's|jdbc:mysql://([^:/]+).*|\1|'
 }
 
 extract_db_port() {
-    echo "$SPRING_DATASOURCE_URL" | sed -E 's|jdbc:mysql://[^:]+:([0-9]+).*|\1|'
+    echo "$DB_CONNECTION_URL" | sed -E 's|jdbc:mysql://[^:]+:([0-9]+).*|\1|'
 }
 
 extract_db_name() {
-    echo "$SPRING_DATASOURCE_URL" | sed -E 's|jdbc:mysql://[^/]+/([^?]+).*|\1|'
+    echo "$DB_CONNECTION_URL" | sed -E 's|jdbc:mysql://[^/]+/([^?]+).*|\1|'
 }
 
 
@@ -213,41 +225,6 @@ create_database_if_missing() {
 
 
 # ------------------------------------------------------------------------------
-# Helper: create or update API user with full privileges on the database
-# ------------------------------------------------------------------------------
-
-create_api_user() {
-    local root_user="$1"
-    local root_password="$2"
-    local dbname="$3"
-    local api_user="$4"
-    local api_password="$5"
-
-    echo
-    echo "Creating or updating API user '$api_user'@'%' ..."
-
-    docker compose exec -T mysql mysql -u"$root_user" -p"$root_password" <<EOF
--- Create user if not exists
-CREATE USER IF NOT EXISTS '$api_user'@'%'         IDENTIFIED BY '$api_password';
-CREATE USER IF NOT EXISTS '$api_user'@'localhost'  IDENTIFIED BY '$api_password';
-
--- Update password in case it changed
-ALTER USER '$api_user'@'%'         IDENTIFIED BY '$api_password';
-ALTER USER '$api_user'@'localhost'  IDENTIFIED BY '$api_password';
-
--- Grant full privileges on the application database
-GRANT ALL PRIVILEGES ON \`$dbname\`.* TO '$api_user'@'%';
-GRANT ALL PRIVILEGES ON \`$dbname\`.* TO '$api_user'@'localhost';
-
--- Apply privilege changes immediately
-FLUSH PRIVILEGES;
-EOF
-
-    echo "API user '$api_user' is ready and has full access to '$dbname'."
-}
-
-
-# ------------------------------------------------------------------------------
 # Development
 # ------------------------------------------------------------------------------
 
@@ -277,25 +254,27 @@ if [[ "$ENVIRONMENT" == "development" ]]; then
 
         ./mvnw flyway:clean \
                 -Dflyway.cleanDisabled='false' \
-                -Dflyway.url="$SPRING_DATASOURCE_URL" \
+                -Dflyway.url="$DB_CONNECTION_URL" \
                 -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
-                -Dflyway.password="$SPRING_DATASOURCE_PASSWORD"
+                -Dflyway.password="$DATASOURCE_PASSWORD"
 
         echo
         echo "Tables dropped from '$DB_NAME' successfully"
     fi
 
-    # Create or recreate all database tables
+    # Spring Boot runs Flyway with the application classpath, including the
+    # Kotlin-based V21 integer ID migration.
     echo
-    echo "Creating or recreating all tables in '$DB_NAME'"
+    echo "Starting Spring Boot application and running Flyway migrations"
     echo
 
-    ./mvnw flyway:migrate \
-        -Dflyway.url="$SPRING_DATASOURCE_URL" \
+    if false; then
+        ./mvnw flyway:migrate \
+        -Dflyway.url="$DB_CONNECTION_URL" \
         -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
         -Dflyway.password="$SPRING_DATASOURCE_PASSWORD"
 
-    echo "Flyway migrations completed successfully."
+    fi
 
     echo
     echo "============================================================"
@@ -331,11 +310,6 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
         exit 1
     fi
 
-    # Check env file is being read
-    echo
-    echo "Check env file is being read"
-    grep -E "MYSQL_ROOT_PASSWORD|MYSQL_USER|MYSQL_PASSWORD|MYSQL_DATABASE" "$ENV_FILE"
-
     # Start only the MySQL container first.
     echo
     echo "Starting MySQL container..."
@@ -348,7 +322,7 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
     # Wait for MySQL to be ready inside the container.
     echo
     echo "Waiting for MySQL container to be ready..."
-    until docker compose exec -T mysql mysqladmin ping -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --silent 2>/dev/null; do
+    until docker compose exec -T mysql mysqladmin ping -u"$DB_USER" -p"$DB_PASSWORD" --silent 2>/dev/null; do
         echo "  MySQL not ready yet — retrying in 2s..."
         sleep 2
     done
@@ -357,66 +331,13 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
     # Test login after container is ready
     echo
     echo "Test login with 'root' user after container is ready"
-    docker compose exec mysql mysql -u "$MYSQL_USER" -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES;"
+    docker compose exec mysql mysql -u "$DB_USER" -p"$DB_PASSWORD" -e "SHOW DATABASES;"
 
     # Ensure the application database exists.
     echo
-    echo "Ensuring database '$MYSQL_DATABASE' exists..."
-    docker compose exec -T mysql mysql -h"$DB_HOST" -u"$MYSQL_USER" --protocol=TCP -p"$MYSQL_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    echo "Database '$MYSQL_DATABASE' is ready."
-
-    # Create or update the API user.
-    echo
-    echo "Ensuring API user '$SPRING_DATASOURCE_USERNAME' is granted required permissions..."
-    create_api_user "root" "$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" "$MYSQL_USER" "$MYSQL_PASSWORD"
-
-    # Run Flyway migrations via Maven before starting the app.
-    echo
-    echo "============================================================"
-    echo "Running Flyway migrations"
-    echo "============================================================"
-
-    # Build a host-accessible URL by replacing the Docker service name with 127.0.0.1
-    echo
-    echo "Replace '//mysql' with '//127.0.0.1' in the Flyway migration command"
-    # shellcheck disable=SC2001
-    FLYWAY_URL=$(echo "$SPRING_DATASOURCE_URL" | sed 's|//mysql:|//127.0.0.1:|')
-    echo "New SPRING_DATASOURCE_URL: $FLYWAY_URL"
-    echo
-
-    chmod +x ./mvnw
-
-    # Clean previous database migrations, if any
-    if [[ "$DB_NAME" ]]; then
-        echo
-        echo "Cleaning '$DB_NAME' from previous migration (if any)"
-        echo
-
-        ./mvnw flyway:clean \
-                -Dflyway.cleanDisabled='false' \
-                -Dflyway.url="$FLYWAY_URL" \
-                -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
-                -Dflyway.password="$SPRING_DATASOURCE_PASSWORD"
-
-        echo
-        echo "Flyway cleaned '$DB_NAME' successfully"
-    fi
-
-    ./mvnw flyway:migrate \
-        -Dflyway.url="$FLYWAY_URL" \
-        -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
-        -Dflyway.password="$SPRING_DATASOURCE_PASSWORD"
-
-    echo "Flyway migrations completed successfully."
-
-
-    # Remove orphaned containers, networks, and images
-    echo
-    echo "Cleaning up orphaned resources (leave volumes intact)..."
-    docker compose down --remove-orphans
-    docker image prune -f
-    echo "Cleanup complete."
-
+    echo "Ensuring database '$DB_NAME' exists..."
+    docker compose exec -T mysql mysql -h"$DB_HOST" -u"$DB_USER" --protocol=TCP -p"$DB_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    echo "Database '$DB_NAME' is ready."
 
     # Now bring up the remaining services.
     echo
