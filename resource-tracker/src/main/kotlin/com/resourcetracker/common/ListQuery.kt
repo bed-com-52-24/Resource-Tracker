@@ -104,33 +104,39 @@ data class ListQuery(
 
             val sortValues = params["sort"].orEmpty()
             val parsedSorts = mutableListOf<ListSort>()
-            if (sortValues.isNotEmpty()) {
-                for (entry in sortValues) {
-                    val trimmed = entry.trim()
-                    if (trimmed.isEmpty()) continue
-                    val parts = trimmed.split(":")
-                    val field = parts.first().trim()
-                    val direction = if (parts.size > 1) parts[1].trim().lowercase() else "asc"
 
-                    if (parsedSorts.size >= 3) {
+            when {
+                sortValues.isNotEmpty() -> {
+                    if (sortValues.count { it.isNotBlank() } > 3) {
                         throw IllegalArgumentException(
                             "At most 3 sort fields are allowed. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
                         )
                     }
-                    if (field !in supportedSortFields) {
-                        throw IllegalArgumentException(
-                            "Invalid sort field '$field'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
-                        )
+
+                    for (entry in sortValues) {
+                        val trimmed = entry.trim()
+                        if (trimmed.isEmpty()) continue
+                        val parts = trimmed.split(":")
+                        val field = parts.first().trim()
+                        val direction = if (parts.size > 1) parts[1].trim().lowercase() else "asc"
+
+                        if (field !in supportedSortFields) {
+                            throw IllegalArgumentException(
+                                "Invalid sort field '$field'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"
+                            )
+                        }
+                        if (direction !in setOf("asc", "desc")) {
+                            throw IllegalArgumentException(
+                                "Invalid sort direction '$direction' for '$field'. Use 'asc' or 'desc'."
+                            )
+                        }
+                        parsedSorts += ListSort(field, direction)
                     }
-                    if (direction !in setOf("asc", "desc")) {
-                        throw IllegalArgumentException(
-                            "Invalid sort direction '$direction' for '$field'. Use 'asc' or 'desc'."
-                        )
-                    }
-                    parsedSorts += ListSort(field, direction)
                 }
-            } else if (supportedSortFields.isNotEmpty()) {
-                parsedSorts += ListSort(supportedSortFields.first(), "asc")
+
+                supportedSortFields.isNotEmpty() -> {
+                    parsedSorts += ListSort(supportedSortFields.first(), "asc")
+                }
             }
 
             return ListQuery(cleanFilters, keyword, parsedSorts)

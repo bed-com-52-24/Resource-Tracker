@@ -6,9 +6,10 @@ import java.time.Duration
 @ConfigurationProperties(prefix = "app.security")
 data class SecurityProps(
     val jwtSecret: String,
-    val accessTtl: Duration = Duration.ofMinutes(15),
+    val accessTtl: Duration = Duration.ofMinutes(30),
     val refreshTtl: Duration = Duration.ofDays(7),
     val maxFailedAttempts: Int = 5,
     val failureWindow: Duration = Duration.ofMinutes(15),
     val lockDuration: Duration = Duration.ofMinutes(15),
+    val resetTokenTtl: Duration = Duration.ofHours(1),
 )

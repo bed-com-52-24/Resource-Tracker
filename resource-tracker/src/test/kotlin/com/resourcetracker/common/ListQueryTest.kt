@@ -81,6 +81,15 @@ class ListQueryTest {
         assertEquals(listOf("name", "status", "createdAt"), parsed.sorts.map { it.field })
         assertEquals(listOf("desc", "asc", "desc"), parsed.sorts.map { it.direction })
 
+        val tooManySorts = assertThrows<IllegalArgumentException> {
+            ListQuery.parse(
+                params = mapOf("sort" to listOf("name", "status", "createdAt", "name")),
+                supportedFilters = emptySet(),
+                supportedSortFields = setOf("name", "status", "createdAt"),
+            )
+        }
+        assertEquals(true, tooManySorts.message.orEmpty().contains("At most 3"))
+
         val ex = assertThrows<IllegalArgumentException> {
             ListQuery.parse(
                 params = mapOf("sort" to listOf("password")),

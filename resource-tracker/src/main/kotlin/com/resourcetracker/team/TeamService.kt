@@ -1,5 +1,6 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
@@ -7,23 +8,26 @@ import com.resourcetracker.common.ListQuery
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.project.Project
 import com.resourcetracker.project.ProjectRepository
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.data.repository.findByIdOrNull
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
-import java.util.UUID
 
 @Service
 class TeamService(
     private val teams: TeamRepository,
     private val departments: DepartmentRepository,
     private val users: UserRepository,
-    private val projects: ProjectRepository
+    private val projects: ProjectRepository,
+    private val memberHistory: TeamMemberHistoryRepository,
 ) {
     private val allowedSortFields = setOf("name", "isActive", "createdAt")
 
@@ -80,7 +84,7 @@ class TeamService(
     fun list(
         departmentId: Int?,
         managerId: Int?,
-        projectId: UUID?,
+        projectId: Int?,
         isActive: Boolean?,
         keyword: String?,
         page: Int,
@@ -100,18 +104,90 @@ class TeamService(
         })
         return teams.findAll(spec, pageable).map { it.toResponse() }
     }
-    
-    
+
+    @Transactional(readOnly = true)
+    fun members(teamId: Int, role: Role?, active: Boolean?, search: String?, pageable: Pageable): Page<User> {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+
+        val spec = TeamMemberSpecifications.filter(teamId, role, active, search)
+        return users.findAll(spec, pageable)
+    }
+
+    @Transactional
+    fun addMembers(teamId: Int, userIds: Set<Int>): List<User> {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val members = users.findAllById(userIds)
+        if (members.size != userIds.size) throw ResourceNotFoundException("One or more users not found")
+
+        val actor = currentActor()
+        members.forEach { user ->
+            if (!user.active) throw BusinessRuleException("User is inactive")
+            if (user.teams.any { it.id == teamId }) throw BusinessRuleException("User is already a member of this team")
+            user.teams.add(team)
+            memberHistory.save(TeamMemberHistory(user = user, fromTeam = null, toTeam = team, action = TeamMemberAction.ADDED, performedBy = actor))
+        }
+        return members
+    }
+
+    @Transactional
+    fun transfer(teamId: Int, userId: Int, toTeamId: Int): User {
+        if (teamId == toTeamId) throw BusinessRuleException("Transfer target must be different from the source team")
+        val source = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        val target = teams.findByIdOrNull(toTeamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!source.isActive || !target.isActive) throw BusinessRuleException("Teams must be active")
+        val user = users.findByIdOrNull(userId) ?: throw ResourceNotFoundException("User not found")
+        if (!user.active) throw BusinessRuleException("User is inactive")
+        if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the source team")
+        if (user.teams.any { it.id == toTeamId }) throw BusinessRuleException("User is already a member of the target team")
+
+        val actor = currentActor()
+        user.teams.removeIf { it.id == teamId }
+        user.teams.add(target)
+        memberHistory.save(TeamMemberHistory(user = user, fromTeam = source, toTeam = target, action = TeamMemberAction.TRANSFERRED, performedBy = actor))
+        return user
+    }
+
+    @Transactional
+    fun removeMember(teamId: Int, userId: Int): User {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val user = users.findByIdOrNull(userId) ?: throw ResourceNotFoundException("User not found")
+        if (!user.active) throw BusinessRuleException("User is inactive")
+        if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the team")
+        if (team.manager?.id == user.id) throw BusinessRuleException("Reassign the team manager before removing them")
+        if (user.role == Role.MEMBER && user.teams.size <= 1) throw BusinessRuleException("MEMBER users must retain at least one team")
+
+        user.teams.removeIf { it.id == teamId }
+        val actor = currentActor()
+        memberHistory.save(TeamMemberHistory(user = user, fromTeam = team, toTeam = null, action = TeamMemberAction.REMOVED, performedBy = actor))
+        return user
+    }
+
+    @Transactional(readOnly = true)
+    fun history(teamId: Int): List<TeamMemberHistory> {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        return memberHistory.findHistoryForTeam(teamId)
+    }
+
+    private fun currentActor(): User {
+        val principal = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
+            ?: throw BusinessRuleException("Authentication required")
+        return users.findByIdOrNull(principal.id) ?: throw ResourceNotFoundException("Actor not found")
+    }
+
     private fun applyActive(team: Team, active: Boolean) {
         team.isActive = active
     }
 
     // Only newly added projects must be active, so a team can still be edited or deactivated after one of its existing projects was deactivated.
-    private fun projectsForUpdate(team: Team, ids: Set<UUID>): List<Project> {
+    private fun projectsForUpdate(team: Team, ids: Set<Int>): List<Project> {
         if (ids.isEmpty()) return emptyList()
         val found = projects.findAllById(ids)
         if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")
-        val existing = team.projects.mapNotNull { it.id }.toSet()
+        val existing = team.projects.map { it.id }.toSet()
         if (found.any { it.id !in existing && !it.active })
             throw InvalidTeamRequestException("Inactive projects cannot be assigned to a team")
         return found
@@ -128,7 +204,7 @@ class TeamService(
         return manager
     }
 
-    private fun activeProjects(ids: Set<UUID>): List<Project> {
+    private fun activeProjects(ids: Set<Int>): List<Project> {
         if (ids.isEmpty()) return emptyList()
         val found = projects.findAllById(ids)
         if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")

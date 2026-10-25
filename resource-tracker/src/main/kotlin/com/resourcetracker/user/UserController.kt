@@ -39,9 +39,9 @@ class UserController(private val users: UserService) {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
         summary = "Create a user",
-        description = "Creates an account using existing department and team IDs. " +
+        description = "Creates an account without a password and emails a single-use setup link. " +
                 "The department and every supplied team must exist and be active. " +
-                "Team IDs are optional for ADMIN and DEPARTMENT_MANAGER users. " +
+                "Team IDs are required for MEMBER and TEAM_LEAD users, and optional for ADMIN and DEPARTMENT_MANAGER users. " +
                 "MANAGING_DIRECTOR is reserved and cannot be assigned through this endpoint."
     )
     @ApiResponses(
@@ -53,7 +53,7 @@ class UserController(private val users: UserService) {
             ),
             ApiResponse(
                 responseCode = "400",
-                description = "Invalid input or weak password",
+                description = "Invalid input",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
             ApiResponse(
@@ -75,11 +75,21 @@ class UserController(private val users: UserService) {
     )
     fun create(@Valid @RequestBody request: CreateUserRequest): UserResponse = users.create(request)
 
+    @PostMapping("/{id}/resend-setup")
+    @Operation(summary = "Resend password setup link", description = "Replaces the unused setup token and emails a new setup link.")
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Password setup link queued"),
+            ApiResponse(responseCode = "404", description = "User not found"),
+            ApiResponse(responseCode = "409", description = "Password setup is complete or the user is inactive"),
+        ],
+    )
+    fun resendSetup(@PathVariable @Min(1) id: Int): UserResponse = users.resendSetup(id)
+
     @PutMapping("/{id}")
     @Operation(
         summary = "Update a user",
-        description = "Partially updates a user. Null or omitted fields preserve their current values. " +
-                "Department and team fields use existing IDs. Username cannot be changed. " +
+        description = "Updates only role and active status. Profile and team membership cannot be changed here. " +
                 "If `role` is supplied, the role is changed as well. " +
                 "If `active` is false, the account is deactivated and its refresh tokens are revoked. " +
                 "The final active Admin cannot be demoted or deactivated."
@@ -113,7 +123,7 @@ class UserController(private val users: UserService) {
             ),
             ApiResponse(
                 responseCode = "409",
-                description = "Email already exists,  or cannot demote/deactivate the final active Admin",
+                description = "Role or status change violates a user-management rule",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
         ]

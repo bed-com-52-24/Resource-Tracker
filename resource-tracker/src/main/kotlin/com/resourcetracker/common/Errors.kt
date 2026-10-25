@@ -2,10 +2,12 @@ package com.resourcetracker.common
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.resourcetracker.user.Role
+import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -80,6 +82,17 @@ class GlobalExceptionHandler{
         )
     }
 
+    @ExceptionHandler(ConstraintViolationException::class)
+    fun constraintViolation(ex: ConstraintViolationException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.badRequest().body(
+            ErrorResponse(
+                400,
+                "VALIDATION_FAILED",
+                "Request validation failed",
+                details = ex.constraintViolations.map { it.message }.sorted(),
+            ),
+        )
+
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun unreadable(ex: HttpMessageNotReadableException): ResponseEntity<ErrorResponse> {
         log.debug("Unreadable request body")
@@ -96,6 +109,12 @@ class GlobalExceptionHandler{
                 code = "REQUEST_FAILED",
                 message = ex.reason ?: "Request failed",
             ),
+        )
+
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun optimisticLock(ex: OptimisticLockingFailureException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.CONFLICT).body(
+            ErrorResponse(409, "CONCURRENT_MODIFICATION", "This record changed while you were acting. Reload and try again."),
         )
 
     @ExceptionHandler(IllegalArgumentException::class)

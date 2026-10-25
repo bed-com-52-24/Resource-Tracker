@@ -1,6 +1,7 @@
 package com.resourcetracker.project
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ListQuery
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -10,16 +11,18 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
-import java.util.UUID
 
 @RestController
+@Validated
 @RequestMapping("/api/v1/projects")
 @Tag(name = "Projects", description = "Create, search, update, and deactivate projects")
 @SecurityRequirement(name = "bearerAuth")
@@ -101,11 +104,11 @@ class ProjectController(private val service: ProjectService) {
             ),
         ]
     )
-    fun update(@PathVariable id: UUID, @Valid @RequestBody body: UpdateProjectRequest): ProjectResponse =
+    fun update(@PathVariable @Min(1) id: Int, @Valid @RequestBody body: UpdateProjectRequest): ProjectResponse =
         service.update(id, body)
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get a project", description = "Return a project by its UUID.")
+    @Operation(summary = "Get a project", description = "Return a project by its integer ID.")
     @ApiResponses(
         value = [
             ApiResponse(
@@ -130,7 +133,7 @@ class ProjectController(private val service: ProjectService) {
             ),
         ]
     )
-    fun get(@PathVariable id: UUID): ProjectResponse = service.get(id)
+    fun get(@PathVariable @Min(1) id: Int): ProjectResponse = service.get(id)
 
     @GetMapping
     @Operation(
@@ -158,29 +161,31 @@ class ProjectController(private val service: ProjectService) {
         ]
     )
     fun list(
+        @Parameter(description = "Search project names or codes", example = "facilities")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: name, code, startDate, endDate, active, or createdAt", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @Parameter(description = "Filter by department ID", example = "1")
         @RequestParam(required = false) departmentId: Int?,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive projects.", example = "true")
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startFrom: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startTo: LocalDate?,
-        @RequestParam(required = false) search: String?,
-        @Parameter(description = "Zero-based page number", example = "0")
-        @RequestParam(defaultValue = "0") page: Int,
-        @Parameter(description = "Page size, from 1 to 100", example = "20")
-        @RequestParam(defaultValue = "20") size: Int,
-        @Parameter(description = "Sort field: name, code, startDate, endDate, active, or createdAt", example = "name")
-        @RequestParam(defaultValue = "name") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "asc")
-        @RequestParam(defaultValue = "asc") direction: String
     ): Page<ProjectResponse> =
-        service.list(
-            departmentId, active, startFrom, startTo, search, page, size,
-            listOf(
-                "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
-                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
+        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
+            val order = pageable.sort.first()
+            service.list(
+                departmentId, active, startFrom, startTo, search,
+                pageable.pageNumber, pageable.pageSize,
+                listOf("${order.property}:${order.direction.name.lowercase()}"),
             )
-        )
+        }
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "startDate", "endDate", "active", "createdAt")

@@ -3,7 +3,6 @@ package com.resourcetracker.team
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
-import java.util.UUID
 
 data class TeamRequest(
     @field:NotBlank @field:Size(min = 2, max = 100)
@@ -13,10 +12,10 @@ data class TeamRequest(
 
     val managerId: Int,
 
-    val projectIds: Set<UUID> = emptySet()
+    val projectIds: Set<Int> = emptySet()
 )
 
-data class ProjectSummary(val id: UUID, val name: String, val code: String)
+data class ProjectSummary(val id: Int, val name: String, val code: String)
 
 data class UpdateTeamRequest(
     @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
@@ -30,7 +29,7 @@ data class UpdateTeamRequest(
     val managerId: Int? = null,
 
     @field:Schema(description = "Optional project IDs. Null or omitted preserves the current project assignments.")
-    val projectIds: Set<UUID>? = null,
+    val projectIds: Set<Int>? = null,
 
     @field:Schema(
         description = "Set to false to deactivate the team, true to reactivate it. Omit to leave unchanged.",
@@ -50,13 +49,31 @@ data class TeamResponse(
     val isActive: Boolean
 )
 
+data class AddTeamMembersRequest(
+    val userIds: Set<Int>
+)
+
+data class TransferTeamMemberRequest(
+    val toTeamId: Int
+)
+
+data class TeamMemberResponse(
+    val id: Int,
+    val username: String,
+    val email: String,
+    val fullName: String,
+    val role: com.resourcetracker.user.Role,
+    val active: Boolean,
+    val teamIds: List<Int>,
+)
+
 fun Team.toResponse() = TeamResponse(
     id = id,
     name = name,
     departmentId = department.id,
     departmentName = department.name,
     managerId = manager?.id,
-    managerName = manager?.fullName,
-    projects = projects.map { ProjectSummary(it.id!!, it.name, it.code) }.sortedBy { it.name },
+    managerName = manager?.let { it.fullName ?: it.username },
+    projects = projects.map { ProjectSummary(it.id, it.name, it.code) }.sortedBy { it.name },
     isActive = isActive
 )
