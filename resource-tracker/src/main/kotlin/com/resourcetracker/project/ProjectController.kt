@@ -1,6 +1,7 @@
 package com.resourcetracker.project
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ListQuery
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -160,29 +161,31 @@ class ProjectController(private val service: ProjectService) {
         ]
     )
     fun list(
+        @Parameter(description = "Search project names or codes", example = "facilities")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: name, code, startDate, endDate, active, or createdAt", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @Parameter(description = "Filter by department ID", example = "1")
         @RequestParam(required = false) departmentId: Int?,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive projects.", example = "true")
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startFrom: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startTo: LocalDate?,
-        @RequestParam(required = false) search: String?,
-        @Parameter(description = "Zero-based page number", example = "0")
-        @RequestParam(defaultValue = "0") page: Int,
-        @Parameter(description = "Page size, from 1 to 100", example = "20")
-        @RequestParam(defaultValue = "20") size: Int,
-        @Parameter(description = "Sort field: name, code, startDate, endDate, active, or createdAt", example = "name")
-        @RequestParam(defaultValue = "name") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "asc")
-        @RequestParam(defaultValue = "asc") direction: String
     ): Page<ProjectResponse> =
-        service.list(
-            departmentId, active, startFrom, startTo, search, page, size,
-            listOf(
-                "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
-                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
+        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
+            val order = pageable.sort.first()
+            service.list(
+                departmentId, active, startFrom, startTo, search,
+                pageable.pageNumber, pageable.pageSize,
+                listOf("${order.property}:${order.direction.name.lowercase()}"),
             )
-        )
+        }
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "startDate", "endDate", "active", "createdAt")

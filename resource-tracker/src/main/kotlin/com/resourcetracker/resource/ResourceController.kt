@@ -1,9 +1,13 @@
 package com.resourcetracker.resource
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.request.service.StockCorrectionRequest
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
@@ -15,6 +19,7 @@ import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.validation.annotation.Validated
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.PathVariable
@@ -31,12 +36,15 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/resources")
 @Tag(name = "Resources", description = "Create, update, and deactivate resources")
 @SecurityRequirement(name = "bearerAuth")
-class ResourceController(private val resources: ResourceService) {
+class ResourceController(
+    private val resources: ResourceService,
+    private val stockOperations: com.resourcetracker.request.service.StockOperationsService,
+) {
 
     @GetMapping
     @Operation(
         summary = "List resources",
-        description = "Lists resources with optional active-state, type, category, and name/code search filters."
+        description = "Returns a paginated resource list. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resources returned"),
@@ -45,29 +53,31 @@ class ResourceController(private val resources: ResourceService) {
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
+        @Parameter(description = "Search resource names or codes", example = "laptop")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: name, code, type, category, active, createdAt, quantity, or status", example = "name")
+        @RequestParam(defaultValue = "name") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) type: ResourceType?,
         @RequestParam(required = false) category: ResourceCategory?,
         @RequestParam(required = false) status: ResourceStatus?,
+        @RequestParam(defaultValue = "false") availableOnly: Boolean,
         @RequestParam(required = false) departmentId: Int?,
-        @RequestParam(required = false) search: String?,
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") size: Int,
-        @RequestParam(defaultValue = "name") sort: String,
-        @RequestParam(defaultValue = "asc") direction: String,
     ): Page<ResourceResponse> = resources.list(
         active = active,
         type = type,
         category = category,
         status = status,
         departmentId = departmentId,
+        availableOnly = availableOnly,
         keyword = search,
-        page = page,
-        size = size,
-        sort = listOf(
-            "${sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"}:" +
-                    if (direction.equals("desc", ignoreCase = true)) "desc" else "asc"
-        ),
+        pageable = ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name"),
     )
 
     @PostMapping
@@ -82,8 +92,8 @@ class ResourceController(private val resources: ResourceService) {
         ApiResponse(responseCode = "404", description = "Department or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Resource type rules were violated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun create(@Valid @RequestBody request: CreateResourceRequest): ResourceResponse =
-        resources.create(request)
+    fun create(@Valid @RequestBody request: CreateResourceRequest, @AuthenticationPrincipal caller: AuthenticatedUser): ResourceResponse =
+        resources.create(request, caller.id)
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.ADMIN)
@@ -102,7 +112,16 @@ class ResourceController(private val resources: ResourceService) {
     ): ResourceResponse = resources.update(id, request)
 
     @GetMapping("/{id}")
-    fun get(@PathVariable id: Int): ResourceResponse = resources.get(id)
+    fun get(@PathVariable @Min(1) id: Int): ResourceResponse = resources.get(id)
+
+    @PostMapping("/{id}/corrections")
+    @RequiresRoles(Role.ADMIN)
+    @Operation(summary = "Correct resource stock", description = "Sets the resource quantity to the supplied value and records the reason.")
+    fun correctStock(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: CorrectionRequestDto,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.correctResource(id, caller.id, StockCorrectionRequest(request.newQuantity, request.reason))
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

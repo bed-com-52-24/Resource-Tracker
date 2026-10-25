@@ -20,13 +20,13 @@ HTTP 403 Forbidden.
 Business Rule 2
 Single Manager Routing
 Definition:
-Every new request must be routed to exactly one Department Manager.
+Every new request is assigned to the active Department Manager in the requester's department, or flagged for Admin reassignment if assignment is ambiguous or unavailable.
 Action:
 A new request is submitted.
 Rule:
-The system routes the request to exactly one Department Manager using the active routing rules.
+The request is assigned to the active Department Manager in the requester's department. Exactly one active manager is required. If there are none or more than one, the request remains pending, is flagged for administrative reassignment, and all active Admins are notified.
 If Violated:
-HTTP 409 Conflict.
+The request is not silently left unassigned; it is flagged for Admin action.
 
 Business Rule 3
 Manager Decision Authority
@@ -106,12 +106,26 @@ If Violated:
 HTTP 409 Conflict with a list of missing fields.
 
 Business Rule 10
-Data-Driven Routing Configuration
+Manager Reassignment
 Definition:
-Routing configuration must be stored in the database and not hard-coded.
+Only an Admin may reassign a request to a department manager.
 Action:
-An Admin updates routing rules.
+An Admin reassigns a request.
 Rule:
-The system saves the changes in the database and writes an audit record.
+The selected manager must be active, have the DEPARTMENT_MANAGER role, and belong to the request's department. The reassignment is recorded in request history and notifies the old and new managers.
 If Violated:
-Not applicable.
+HTTP 400 Bad Request.
+
+Business Rule 11
+Resource Type and Stock Integrity
+Definition:
+Requests cannot change a resource's type or physical stock.
+Rule:
+Existing resource type is taken from the resource record. Physical quantity changes only through issues, returns, or corrections, each recorded by a stock movement in the same transaction. Reservations and request operations are recorded in request history. Available quantity is physical quantity minus active reservations and unavailable quantity, floored at zero.
+
+Business Rule 12
+Cancellation After Issue
+Definition:
+A request with issued stock cannot be cancelled.
+Rule:
+Issued stock must go through the return process; cancellation is rejected with HTTP 409.

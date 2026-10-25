@@ -19,13 +19,18 @@ annotation class RequiresRoles(vararg val value: Role)
 class RoleAuthorizationInterceptor : HandlerInterceptor {
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         if(handler !is HandlerMethod) return true
+
         val required = handler.getMethodAnnotation(RequiresRoles::class.java)
             ?: AnnotatedElementUtils.findMergedAnnotation(handler.beanType, RequiresRoles::class.java)
-            ?: return true
 
         val caller = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
-            ?: throw com.resourcetracker.common.UnauthenticatedException()
-        if(caller.role !in required.value) throw ForbiddenRoleException(required.value.toList(),caller.role)
+        if (caller == null) {
+            return required == null || request.requestURI.startsWith("/api/v1/auth/")
+        }
+        // Authentication is enforced by Spring Security for protected routes.
+        // Only apply a role restriction when the handler explicitly declares one.
+        if (required == null) return true
+        if (caller.role !in required.value) throw ForbiddenRoleException(required.value.toList(), caller.role)
         return true
     }
 }

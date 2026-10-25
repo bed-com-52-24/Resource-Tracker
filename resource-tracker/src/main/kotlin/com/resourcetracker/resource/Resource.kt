@@ -57,6 +57,9 @@ class Resource(
     @Column
     var quantity: Int? = null,
 
+    @Column(name = "unavailable_quantity", nullable = false)
+    var unavailableQuantity: Int = 0,
+
     @Column(length = 120)
     var location: String? = null,
 
@@ -102,7 +105,7 @@ class Resource(
         recomputeStatus()
     }
 
-    private fun recomputeStatus() {
+    fun recomputeStatus() {
         status = if (type == ResourceType.INTERNAL) {
             if (quantity!! > 0) ResourceStatus.AVAILABLE else ResourceStatus.OUT_OF_STOCK
         } else {

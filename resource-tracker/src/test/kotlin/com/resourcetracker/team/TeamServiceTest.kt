@@ -3,15 +3,18 @@ package com.resourcetracker.team
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.project.ProjectRepository
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.ArgumentMatchers.any
@@ -19,6 +22,10 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.verify
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
+import java.time.Instant
 import java.util.Optional
 
 class TeamServiceTest {
@@ -28,7 +35,8 @@ class TeamServiceTest {
     private val users = mock(UserRepository::class.java)
     private val projects = mock(ProjectRepository::class.java)
     private val audit = mock(AuditService::class.java)
-    private val service = TeamService(teams, departments, users, projects, audit)
+    private val memberHistory = mock(TeamMemberHistoryRepository::class.java)
+    private val service = TeamService(teams, departments, users, projects, audit, memberHistory)
 
     private val dept = Department(id = 1, name = "Engineering")
 
@@ -126,5 +134,88 @@ class TeamServiceTest {
         assertThrows<InvalidTeamRequestException> {
             service.list(null, null, null, null, null, 0, 20, listOf("password"))
         }
+    }
+
+    @Test
+    fun `add members rejects a duplicate membership`() {
+        val team = Team(id = 2, name = "Ops", department = dept, manager = user())
+        val member = user(role = Role.MEMBER)
+        member.teams.add(team)
+        `when`(teams.findById(2)).thenReturn(Optional.of(team))
+        `when`(users.findAllById(setOf(7))).thenReturn(listOf(member))
+        asAdmin()
+
+        assertThrows<BusinessRuleException> { service.addMembers(2, setOf(7)) }
+    }
+
+    @Test
+    fun `transfer moves a user between teams and writes history`() {
+        val source = Team(id = 2, name = "Ops", department = dept, manager = user())
+        val target = Team(id = 3, name = "Support", department = dept, manager = user())
+        val member = user(role = Role.MEMBER)
+        member.teams.add(source)
+        `when`(teams.findById(2)).thenReturn(Optional.of(source))
+        `when`(teams.findById(3)).thenReturn(Optional.of(target))
+        `when`(users.findById(7)).thenReturn(Optional.of(member))
+        `when`(memberHistory.save(any(TeamMemberHistory::class.java))).thenAnswer { it.getArgument(0) }
+        asAdmin()
+
+        service.transfer(2, 7, 3)
+
+        assertTrue(member.teams.contains(target))
+        assertTrue(!member.teams.contains(source))
+    }
+
+    @Test
+    fun `transfer rejects when user is not in the source team`() {
+        val source = Team(id = 2, name = "Ops", department = dept, manager = user())
+        val target = Team(id = 3, name = "Support", department = dept, manager = user())
+        val member = user(role = Role.MEMBER)
+        `when`(teams.findById(2)).thenReturn(Optional.of(source))
+        `when`(teams.findById(3)).thenReturn(Optional.of(target))
+        `when`(users.findById(7)).thenReturn(Optional.of(member))
+        asAdmin()
+
+        assertThrows<BusinessRuleException> { service.transfer(2, 7, 3) }
+    }
+
+    @Test
+    fun `remove member rejects removing the last team from a member`() {
+        val team = Team(id = 2, name = "Ops", department = dept, manager = user())
+        val member = user(role = Role.MEMBER)
+        member.teams.add(team)
+        `when`(teams.findById(2)).thenReturn(Optional.of(team))
+        `when`(users.findById(7)).thenReturn(Optional.of(member))
+        asAdmin()
+
+        assertThrows<BusinessRuleException> { service.removeMember(2, 7) }
+    }
+
+    private fun asAdmin() {
+        val principal = AuthenticatedUser(
+            id = 1,
+            username = "admin",
+            role = Role.ADMIN,
+            jti = "jwt-1",
+            tokenExpiresAt = Instant.now().plusSeconds(3600)
+        )
+        `when`(users.findById(1)).thenReturn(Optional.of(
+            User(
+                id = 1,
+                username = "admin",
+                email = "admin@example.com",
+                fullName = "System Admin",
+                passwordHash = "hash",
+                role = Role.ADMIN,
+                department = dept,
+                active = true,
+            )
+        ))
+        val auth = UsernamePasswordAuthenticationToken(
+            principal,
+            null,
+            listOf(SimpleGrantedAuthority("ROLE_ADMIN"))
+        )
+        SecurityContextHolder.getContext().authentication = auth
     }
 }

@@ -11,4 +11,5 @@ data class SecurityProps(
     val maxFailedAttempts: Int = 5,
     val failureWindow: Duration = Duration.ofMinutes(15),
     val lockDuration: Duration = Duration.ofMinutes(15),
+    val resetTokenTtl: Duration = Duration.ofHours(1),
 )

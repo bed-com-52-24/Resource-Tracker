@@ -1,0 +1,4 @@
+ALTER TABLE resource_requests
+    ADD COLUMN edited_after_query BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN queried_at DATETIME NULL,
+    ADD COLUMN version BIGINT NOT NULL DEFAULT 0;

@@ -1,6 +1,7 @@
 package com.resourcetracker.department
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ListQuery
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -9,15 +10,16 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import org.springframework.http.HttpStatus
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
 
 @RestController
-@RequestMapping("/api/departments")
+@Validated
+@RequestMapping("/api/v1/departments")
 @Tag(name = "Departments", description = "Create, search, update, and deactivate departments")
 @SecurityRequirement(name = "bearerAuth")
 class DepartmentController(private val departmentService: DepartmentService) {
@@ -36,7 +38,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         departmentService.create(request)
 
     @GetMapping
-    @Operation(summary = "List departments", description = "Lists all departments by default. Optionally filters by active status or keyword. Sorting uses one field and direction.")
+    @Operation(summary = "List departments", description = "Returns a paginated department list. Search matches department names; active status is an optional filter. Page size is capped at 100.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Departments returned"),
         ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -44,29 +46,22 @@ class DepartmentController(private val departmentService: DepartmentService) {
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
-        @Parameter(description = "Filter by active state. Omit to return both active and inactive departments.", example = "true")
-        @RequestParam(required = false) active: Boolean?,
         @Parameter(description = "Search department names", example = "engineering")
-        @RequestParam(required = false) keyword: String?,
+        @RequestParam(required = false) search: String?,
         @Parameter(description = "Zero-based page number", example = "0")
-        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @Parameter(description = "Page size, from 1 to 100", example = "20")
-        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @Parameter(description = "Sort field: id, name, or status", example = "name")
         @RequestParam(defaultValue = "name") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "asc")
-        @RequestParam(defaultValue = "asc") direction: String
+        @RequestParam(defaultValue = "asc") direction: String,
+        @Parameter(description = "Filter by active state. Omit to return both active and inactive departments.", example = "true")
+        @RequestParam(required = false) active: Boolean?,
     ) = departmentService.search(
         active,
-        keyword,
-        PageRequest.of(
-            page.coerceAtLeast(0),
-            size.coerceIn(1, 100),
-            Sort.by(
-                if (direction.equals("desc", ignoreCase = true)) Sort.Direction.DESC else Sort.Direction.ASC,
-                sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "name"
-            )
-        )
+        search,
+        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name")
     )
 
     @GetMapping("/{id}")
@@ -94,7 +89,5 @@ class DepartmentController(private val departmentService: DepartmentService) {
     fun update(@PathVariable id: Int, @Valid @RequestBody request: UpdateDepartmentRequest) =
         departmentService.update(id, request)
 
-    companion object {
-        private val ALLOWED_SORT_FIELDS = setOf("id", "name", "status")
-    }
+    companion object { private val ALLOWED_SORT_FIELDS = setOf("id", "name", "status") }
 }

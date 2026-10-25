@@ -7,9 +7,12 @@ import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
-import com.resourcetracker.common.ListQuery
+import com.resourcetracker.request.service.StockAvailabilityService
+import com.resourcetracker.request.entity.MovementType
+import com.resourcetracker.request.entity.StockMovement
+import com.resourcetracker.request.repository.StockMovementRepository
 import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -20,9 +23,11 @@ class ResourceService(
     private val departmentRepository: DepartmentRepository,
     private val vendorRepository: VendorRepository,
     private val audit: AuditService,
+    private val availability: StockAvailabilityService,
+    private val movements: StockMovementRepository,
 ) {
     @Transactional
-    fun create(request: CreateResourceRequest): ResourceResponse {
+    fun create(request: CreateResourceRequest, actorId: Int): ResourceResponse {
         validateTypeRules(request.type, request.departmentId, request.preferredVendorId, request.quantity)
         val resource = Resource(
             code = resourceCodeGenerator.next(),
@@ -48,6 +53,9 @@ class ResourceService(
                 changedFields = listOf("code", "name", "type", "category", "departmentId", "unitOfMeasure", "quantity", "location", "reorderLevel"),
             ),
         )
+        if (saved.type == ResourceType.INTERNAL && (saved.quantity ?: 0) > 0) {
+            movements.save(StockMovement(resourceId = saved.id, type = MovementType.OPENING, quantity = saved.quantity!!, actorId = actorId, reason = "Initial stock on resource creation"))
+        }
         return saved.toResponse()
     }
 
@@ -57,6 +65,9 @@ class ResourceService(
         val resource = resourceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }
         val before = snapshot(resource)
+        if (request.type != resource.type) {
+            throw BusinessRuleException("Resource type cannot be changed; create a new resource")
+        }
 
         resource.name = request.name
         resource.category = request.category
@@ -64,7 +75,10 @@ class ResourceService(
         resource.description = request.description
         resource.department = request.departmentId?.let(::findDepartment)
         resource.preferredVendor = request.preferredVendorId?.let(::findVendor)
-        resource.update(request.type, request.quantity, request.location, request.reorderLevel)
+        if (request.quantity != null && request.quantity != resource.quantity) {
+            throw BusinessRuleException("Physical quantity can only change through stock operations")
+        }
+        resource.update(request.type, resource.quantity, request.location, request.reorderLevel)
         request.active?.let { applyActive(resource, it) }
         val saved = resourceRepository.save(resource)
         val after = snapshot(saved)
@@ -98,23 +112,23 @@ class ResourceService(
         category: ResourceCategory?,
         status: ResourceStatus?,
         departmentId: Int?,
+        availableOnly: Boolean,
         keyword: String?,
-        page: Int,
-        size: Int,
-        sort: List<String>,
+        pageable: Pageable,
     ): Page<ResourceResponse> {
         if (keyword != null && keyword.length > 200) {
             throw BusinessRuleException("Keyword must not exceed 200 characters")
         }
-        if (page < 0 || size < 1 || size > 100) {
-            throw BusinessRuleException("page must be >= 0 and size must be between 1 and 100")
-        }
 
-        val pageable = PageRequest.of(page, size, ListQuery.sort(sort, ALLOWED_SORT_FIELDS, "name"))
-        return resourceRepository.findAll(
-            ResourceSpecifications.filter(active, type, category, status, departmentId, keyword),
-            pageable,
-        ).map { it.toResponse() }
+        val specification = ResourceSpecifications.filter(active, type, category, status, departmentId, keyword)
+        val finalSpecification = if (availableOnly) {
+            val availableIds = resourceRepository.findAll(specification)
+                .filter { availability.availableQuantity(it) > 0 }
+                .map { it.id }
+            if (availableIds.isEmpty()) return Page.empty(pageable)
+            specification.and { root, _, cb -> root.get<Int>("id").`in`(availableIds) }
+        } else specification
+        return resourceRepository.findAll(finalSpecification, pageable).map { it.toResponse() }
     }
 
     @Transactional(readOnly = true)
@@ -174,6 +188,9 @@ class ResourceService(
         status = status,
         departmentId = department?.id,
         preferredVendorId = preferredVendor?.id,
+        reservedQuantity = if (type == ResourceType.INTERNAL) availability.reservedQuantity(id) else 0,
+        unavailableQuantity = if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
+        availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this) else null,
     )
 
     private fun snapshot(resource: Resource) = mapOf(

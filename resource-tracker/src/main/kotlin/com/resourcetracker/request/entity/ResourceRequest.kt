@@ -8,8 +8,10 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.Version
 import java.math.BigDecimal
 import java.time.LocalDateTime
+import java.time.LocalDate
 
 @Entity
 @Table(name = "resource_requests")
@@ -37,8 +39,8 @@ class ResourceRequest(
     @Column(name = "batch_number", length = 100)
     var batchNumber: String? = null,
 
-    @Column(name = "vendor_id", nullable = false)
-    var vendorId: Int = 0,
+    @Column(name = "vendor_id")
+    var vendorId: Int? = null,
 
     @Column(name = "department_id", nullable = false)
     var departmentId: Int = 0,
@@ -52,8 +54,35 @@ class ResourceRequest(
     @Column(name = "requester_id", nullable = false)
     var requesterId: Int = 0,
 
-    @Column(name = "assigned_manager_id", nullable = false)
-    var assignedManagerId: Int = 0,
+    @Column(name = "assigned_manager_id")
+    var assignedManagerId: Int? = null,
+
+    @Column(name = "needs_reassignment", nullable = false)
+    var needsReassignment: Boolean = false,
+
+    @Column(name = "required_date")
+    var requiredDate: LocalDate? = null,
+
+    @Column(name = "decided_by")
+    var decidedBy: Int? = null,
+
+    @Column(name = "decided_at")
+    var decidedAt: LocalDateTime? = null,
+
+    @Column(name = "decision_reason", length = 500)
+    var decisionReason: String? = null,
+
+    @Column(name = "cancelled_by")
+    var cancelledBy: Int? = null,
+
+    @Column(name = "cancelled_at")
+    var cancelledAt: LocalDateTime? = null,
+
+    @Column(name = "cancel_reason", length = 500)
+    var cancelReason: String? = null,
+
+    @Column(name = "unique_key", length = 64, unique = true)
+    var uniqueKey: String? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -75,5 +104,9 @@ class ResourceRequest(
     var createdAt: LocalDateTime? = null,
 
     @Column(name = "updated_at", insertable = false, updatable = false)
-    var updatedAt: LocalDateTime? = null
+    var updatedAt: LocalDateTime? = null,
+
+    @Version
+    @Column(name = "version", nullable = false)
+    var version: Long = 0,
 )

@@ -10,7 +10,8 @@ data class NotificationResponse(
     val type: NotificationType,
     val requestId: Int?,
     val message: String,
-    val read: Boolean,
+    val status: NotificationStatus,
+    val readAt: Instant?,
     val createdAt: Instant,
 )
 
@@ -21,7 +22,7 @@ data class NotificationCountResponse(
 data class NotificationUpdateRequest(
     val ids: Set<Int>? = null,
     val all: Boolean = false,
-    val read: Boolean = true,
+    val status: NotificationStatus,
 )
 
 data class NotificationUpdateResponse(

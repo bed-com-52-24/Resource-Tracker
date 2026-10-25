@@ -1,12 +1,14 @@
 package com.resourcetracker.user
 
 import com.resourcetracker.auth.RefreshTokenRepository
+import com.resourcetracker.auth.PasswordTokenPurpose
+import com.resourcetracker.auth.PasswordTokenRepository
+import com.resourcetracker.auth.PasswordTokenService
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
-import com.resourcetracker.common.WeakPasswordException
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
@@ -14,7 +16,6 @@ import com.resourcetracker.audit.AuditService
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -22,13 +23,14 @@ import org.springframework.transaction.annotation.Transactional
 class UserService(
     private val users: UserRepository,
     private val refreshTokens: RefreshTokenRepository,
-    private val encoder: PasswordEncoder,
     private val departments: DepartmentRepository,
     private val teams: TeamRepository,
     private val audit: AuditService,
+    private val passwordTokens: PasswordTokenRepository,
+    private val passwordTokenService: PasswordTokenService,
 ) {
     companion object {
-        val ASSIGNABLE_ROLES = setOf(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
+        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
 
         private val SORTABLE = setOf("username", "email", "fullName", "role", "department", "active")
         private const val MAX_PAGE_SIZE = 100
@@ -48,24 +50,28 @@ class UserService(
             throw DuplicateResourceException("Email '$email' is already in use")
         }
 
-        val violations = PasswordPolicy.violations(request.password)
-        if (violations.isNotEmpty()) throw WeakPasswordException(violations)
+        if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
+            throw BusinessRuleException("${request.role} users must be assigned to at least one team")
+        }
 
+        val userTeams = activeTeams(request.teamIds ?: emptySet())
         val user = User(
             username = username,
             email = email,
-            fullName = request.fullName.trim(),
-            passwordHash = encoder.encode(request.password)!!,
+            fullName = null,
+            passwordHash = null,
             role = request.role,
             department = activeDepartment(request.departmentId),
-            teams = activeTeams(request.teamIds ?: emptySet()),
+            teams = userTeams,
         )
+        requireMemberHasTeam(user)
 
         val saved = try {
             users.saveAndFlush(user)
         } catch (e: DataIntegrityViolationException) {
             throw DuplicateResourceException("Username or email is already in use")
         }
+        passwordTokenService.issue(saved, PasswordTokenPurpose.SETUP, expiresAt = null)
         audit.record(
             AuditRecord.currentActor(
                 AuditAction.USER_CREATED,
@@ -82,33 +88,16 @@ class UserService(
     fun update(id: Int, request: UpdateUserRequest): UserResponse {
         val user = find(id)
         val before = snapshot(user)
-        val email = request.email?.trim()
-
-        if (email != null && !user.email.equals(email, ignoreCase = true) && users.existsByEmailIgnoreCase(email)) {
-            throw DuplicateResourceException("Email '$email' is already in use")
-        }
-
-        email?.let { user.email = it }
-        request.fullName?.let { user.fullName = it.trim() }
-        request.departmentId?.let { user.department = activeDepartment(it) }
-        request.teamIds?.let {
-            user.teams.clear()
-            user.teams.addAll(activeTeams(it))
-        }
 
         request.role?.let { newRole ->
             if(newRole != user.role){
                 applyRole(user, newRole)
             }
         }
-        
-        request.active?.let{applyActive(user, it)}
 
-        val saved = try {
-            users.saveAndFlush(user)
-        } catch (e: DataIntegrityViolationException) {
-            throw DuplicateResourceException("Email '${email ?: user.email}' is already in use")
-        }
+        request.active?.let { applyActive(user, it) }
+        requireMemberHasTeam(user)
+        val saved = users.saveAndFlush(user)
         val after = snapshot(saved)
         val changed = changedFields(before, after)
         if (changed.isNotEmpty()) {
@@ -130,6 +119,20 @@ class UserService(
             )
         }
         return saved.toResponse()
+    }
+
+    @Transactional
+    fun resendSetup(id: Int): UserResponse {
+        val user = find(id)
+        if (!user.active) {
+            throw BusinessRuleException("Cannot send password setup for an inactive user")
+        }
+        if (user.passwordHash != null) {
+            throw BusinessRuleException("Password setup is already complete")
+        }
+        passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.SETUP)
+        passwordTokenService.issue(user, PasswordTokenPurpose.SETUP, expiresAt = null)
+        return user.toResponse()
     }
 
     @Transactional(readOnly = true)
@@ -161,21 +164,31 @@ class UserService(
     }
 
     private fun applyRole(user: User, newRole: Role) {
-    requireAssignable(newRole)
-    if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
-        ensureAnotherActiveAdmin(user)
+        requireAssignable(newRole)
+        if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
+            ensureAnotherActiveAdmin(user)
+        }
+        if (newRole == Role.MEMBER && user.teams.isEmpty()) {
+            throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
+        }
+        user.role = newRole
     }
-    user.role = newRole
+
+    private fun requireMemberHasTeam(user: User) {
+        if (user.role == Role.MEMBER && user.teams.isEmpty()) {
+            throw BusinessRuleException("MEMBER users must belong to at least one active team")
+        }
     }
-    
+
     private fun applyActive(user: User, active: Boolean){
-        if(user.active == active) return
-        
-        if(!active){
-            if(user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
+        if (user.active == active) return
+
+        if (!active) {
+            if (user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
             user.active = false
             refreshTokens.revokeAllByUserId(user.id)
-        }else{
+            passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.SETUP)
+        } else {
             user.active = true
         }
     }
@@ -188,13 +201,14 @@ class UserService(
     }
 
     private fun User.toResponse() = UserResponse(
-        id = id, username = username, email = email, fullName = fullName,
+        id = id, username = username, email = email, fullName = fullName ?: username,
         role = role,
         departmentId = department.id,
         departmentName = department.name,
         teamIds = teams.map { it.id }.sorted(),
         teamNames = teams.map { it.name }.sorted(),
         active = active,
+        passwordSet = passwordHash != null,
     )
 
     private fun snapshot(user: User) = mapOf(
