@@ -1,6 +1,7 @@
 package com.resourcetracker.request.service
 
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.ConnectionCallback
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -16,26 +17,31 @@ class RequestNumberService(
     fun generateRequestNumber(): String {
         val year = Year.now(clock).value
 
-        jdbcTemplate.update(
-            """
-            INSERT INTO resource_request_sequences
-                (request_year, last_sequence)
-            VALUES (?, LAST_INSERT_ID(1))
-            ON DUPLICATE KEY UPDATE
-                last_sequence = LAST_INSERT_ID(last_sequence + 1)
-            """.trimIndent(),
-            year
-        )
+        val nextSequence = jdbcTemplate.execute(ConnectionCallback { connection ->
+            connection.prepareStatement(
+                """
+                INSERT INTO resource_request_sequences (request_year, last_sequence)
+                VALUES (?, LAST_INSERT_ID(1))
+                ON DUPLICATE KEY UPDATE
+                    last_sequence = LAST_INSERT_ID(last_sequence + 1)
+                """.trimIndent()
+            ).use { statement ->
+                statement.setInt(1, year)
+                statement.executeUpdate()
+            }
 
-        val sequence = jdbcTemplate.queryForObject(
-            "SELECT LAST_INSERT_ID()",
-            Long::class.java
-        ) ?: error("Could not allocate request number")
+            connection.createStatement().use { statement ->
+                statement.executeQuery("SELECT LAST_INSERT_ID()").use { result ->
+                    check(result.next()) { "Could not allocate request number" }
+                    result.getLong(1)
+                }
+            }
+        }) ?: error("Could not allocate request number")
 
-        require(sequence in 1..999999) {
+        require(nextSequence in 1..999999) {
             "Request sequence exhausted for year $year"
         }
 
-        return "REQ-$year-${sequence.toString().padStart(6, '0')}"
+        return "REQ-$year-${nextSequence.toString().padStart(6, '0')}"
     }
 }

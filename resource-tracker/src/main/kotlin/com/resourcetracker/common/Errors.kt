@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.ErrorResponse as SpringErrorResponse
@@ -201,6 +202,18 @@ class GlobalExceptionHandler {
             HttpStatus.CONFLICT,
             "DATA_CONFLICT",
             "Request conflicts with existing data",
+        )
+
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun optimisticLock(
+        ex: OptimisticLockingFailureException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        response(
+            request,
+            HttpStatus.CONFLICT,
+            "CONCURRENT_MODIFICATION",
+            "This record changed while you were acting. Reload and try again.",
         )
 
     @ExceptionHandler(IllegalArgumentException::class)

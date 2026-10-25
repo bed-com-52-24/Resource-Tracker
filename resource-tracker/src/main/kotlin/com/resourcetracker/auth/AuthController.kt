@@ -2,6 +2,8 @@ package com.resourcetracker.auth
 
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.UserRepository
+import com.resourcetracker.user.PasswordSetRequest
+import com.resourcetracker.user.ForgotPasswordRequest
 import com.resourcetracker.common.UnauthenticatedException
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -96,8 +98,18 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
     fun me(@AuthenticationPrincipal caller: AuthenticatedUser) : ProfileResponse{
         val u = users.findById(caller.id).orElseThrow{ UnauthenticatedException() }
         return ProfileResponse(
-            u.id, u.username, u.email, u.fullName,
+            u.id, u.username, u.email, u.fullName ?: u.username,
             u.role.name, u.department.name, u.teams.map { it.name }.sorted(), u.teams.map { it.id }.sorted(), u.active,
         )
     }
+
+    @PostMapping("/set-password")
+    @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Set or reset a password", description = "Consumes a single-use 8-digit password setup or reset code.")
+    fun setPassword(@Valid @RequestBody request: PasswordSetRequest) = auth.setPassword(request)
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Request a password reset", description = "Always returns the same response to protect account privacy.")
+    fun forgotPassword(@Valid @RequestBody request: ForgotPasswordRequest) = auth.forgotPassword(request)
 }

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
+import jakarta.validation.constraints.PositiveOrZero
 
 @Schema(description = "Information required to create a resource")
 data class CreateResourceRequest(
@@ -82,4 +83,12 @@ data class ResourceResponse(
     val status: ResourceStatus?,
     val departmentId: Int?,
     val preferredVendorId: Int?,
+    val reservedQuantity: Int = 0,
+    val unavailableQuantity: Int = 0,
+    val availableQuantity: Int? = null,
+)
+
+data class CorrectionRequestDto(
+    @field:PositiveOrZero val newQuantity: Int,
+    @field:NotBlank val reason: String,
 )
