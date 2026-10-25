@@ -224,4 +224,3 @@ CREATE TABLE IF NOT EXISTS notifications (
         FOREIGN KEY (request_id)
         REFERENCES resource_requests(request_id)
 );
-

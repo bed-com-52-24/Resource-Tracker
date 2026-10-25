@@ -3,13 +3,17 @@ package com.resourcetracker.common
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.resourcetracker.user.Role
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
+import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.util.UUID
 
@@ -175,6 +179,19 @@ class GlobalExceptionHandler {
         )
     }
 
+    @ExceptionHandler(ConstraintViolationException::class)
+    fun constraintViolation(
+        ex: ConstraintViolationException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "VALIDATION_FAILED",
+            message = "Request validation failed",
+            details = ex.constraintViolations.map { it.message }.sorted(),
+            request = request
+        )
+
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun unreadable(
         ex: HttpMessageNotReadableException,
@@ -212,8 +229,44 @@ class GlobalExceptionHandler {
         )
     }
 
+    @ExceptionHandler(ResponseStatusException::class)
+    fun status(
+        ex: ResponseStatusException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        respond(
+            status = ex.statusCode,
+            code = "REQUEST_FAILED",
+            message = ex.reason ?: "Request failed",
+            request = request
+        )
+
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun optimisticLock(
+        ex: OptimisticLockingFailureException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        respond(
+            status = HttpStatus.CONFLICT,
+            code = "CONCURRENT_MODIFICATION",
+            message = "This record changed while you were acting. Reload and try again.",
+            request = request
+        )
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    fun illegalArgument(
+        ex: IllegalArgumentException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "INVALID_REQUEST",
+            message = ex.message ?: "Invalid request",
+            request = request
+        )
+
     private fun respond(
-        status: HttpStatus,
+        status: HttpStatusCode,
         code: String,
         message: String,
         request: HttpServletRequest,
@@ -223,7 +276,7 @@ class GlobalExceptionHandler {
         val body = ErrorResponse(
             timestamp = Instant.now(),
             status = status.value(),
-            error = status.reasonPhrase,
+            error = HttpStatus.resolve(status.value())?.reasonPhrase ?: "HTTP ${status.value()}",
             code = code,
             message = message,
             path = request.requestURI,

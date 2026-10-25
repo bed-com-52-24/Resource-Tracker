@@ -2,6 +2,7 @@ package com.resourcetracker.project
 
 import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
+import com.resourcetracker.resource.ResourceRepository
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -10,13 +11,13 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.time.LocalDate
 import java.util.Optional
-import java.util.UUID
 
 class ProjectServiceTest {
 
     private val projects = mock(ProjectRepository::class.java)
     private val departments = mock(DepartmentRepository::class.java)
-    private val service = ProjectService(projects, departments)
+    private val resources = mock(ResourceRepository::class.java)
+    private val service = ProjectService(projects, departments, resources)
 
     private val deptId = 1
     private val dept = Department(id = deptId, name = "Engineering")
@@ -65,7 +66,7 @@ class ProjectServiceTest {
 
     @Test
     fun `deactivate sets active to false and keeps the record`() {
-        val id = UUID.randomUUID()
+        val id = 1
         val project = Project(id = id, name = "Data Pipeline", code = "DP1", department = dept,
             startDate = LocalDate.of(2026, 1, 1))
         `when`(projects.findById(id)).thenReturn(Optional.of(project))
@@ -77,7 +78,7 @@ class ProjectServiceTest {
 
     @Test
     fun `deactivate fails when project does not exist`() {
-        val id = UUID.randomUUID()
+        val id = 1
         `when`(projects.findById(id)).thenReturn(Optional.empty())
         assertThrows<NotFoundException> { service.deactivate(id) }
     }

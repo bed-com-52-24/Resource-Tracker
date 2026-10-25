@@ -1,0 +1,11 @@
+ALTER TABLE teams
+    ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+UPDATE teams
+SET is_active = CASE
+    WHEN UPPER(status) = 'ACTIVE' THEN TRUE
+    ELSE FALSE
+END;
+
+ALTER TABLE teams
+    DROP COLUMN status;

@@ -12,6 +12,17 @@ data class VendorRequest(
     val contactInformation: String? = null
 )
 
+data class UpdateVendorRequest(
+    @field:NotBlank(message = "Vendor name is required")
+    @field:Size(max = 150, message = "Vendor name must be at most 150 characters")
+    val name: String,
+
+    @field:Size(max = 255, message = "Contact information must be at most 255 characters")
+    val contactInformation: String? = null,
+
+    val active: Boolean? = null,
+)
+
 data class VendorResponse(
     val id: Int,
     val name: String,

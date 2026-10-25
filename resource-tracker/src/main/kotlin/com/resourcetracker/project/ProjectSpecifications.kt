@@ -3,7 +3,6 @@ package com.resourcetracker.project
 import jakarta.persistence.criteria.Predicate
 import org.springframework.data.jpa.domain.Specification
 import java.time.LocalDate
-import java.util.UUID
 
 object ProjectSpecifications {
 
