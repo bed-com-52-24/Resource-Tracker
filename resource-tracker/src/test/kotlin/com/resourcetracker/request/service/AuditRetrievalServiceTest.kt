@@ -28,7 +28,7 @@ class AuditRetrievalServiceTest {
     private val pageable = PageRequest.of(0, 20)
 
     @Test
-    fun `actor query defaults to the last 30 days for admin and MD`() {
+    fun `actor query defaults to 30 calendar days for admin and MD`() {
         whenever(
             history.findAllByActorIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAscIdAsc(
                 eq(9), any(), any(), any(),
@@ -39,7 +39,7 @@ class AuditRetrievalServiceTest {
 
         verify(history).findAllByActorIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAscIdAsc(
             9,
-            LocalDateTime.parse("2026-09-26T00:00:00"),
+            LocalDateTime.parse("2026-09-27T00:00:00"),
             LocalDateTime.parse("2026-10-26T23:59:59.999999999"),
             pageable,
         )

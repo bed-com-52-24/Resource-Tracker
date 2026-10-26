@@ -82,7 +82,7 @@ class AuditRetrievalService(
         val start = from ?: if (end.isBefore(LocalDate.MIN.plusDays(30))) {
             badRequest("to date is too early to apply the default date range")
         } else {
-            end.minusDays(30)
+            end.minusDays(29)
         }
         if (start.isAfter(end)) badRequest("from date must be on or before to date")
         val yearDifference = end.year - start.year
