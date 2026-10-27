@@ -11,19 +11,16 @@ interface RequestHistoryRepository : Repository<RequestHistory, Int> {
     fun save(history: RequestHistory): RequestHistory
     fun findAllByRequestIdOrderByCreatedAtAscIdAsc(requestId: Int): List<RequestHistory>
     fun findAllByLineItemIdOrderByCreatedAtAscIdAsc(lineItemId: Int): List<RequestHistory>
-
     fun findAllByActorIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAscIdAsc(
         actorId: Int,
         from: LocalDateTime,
         to: LocalDateTime,
         pageable: Pageable,
     ): Page<RequestHistory>
-
     fun findAllByEventTypeInAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAscIdAsc(
         eventTypes: Collection<String>,
         from: LocalDateTime,
         to: LocalDateTime,
         pageable: Pageable,
     ): Page<RequestHistory>
-
 }
