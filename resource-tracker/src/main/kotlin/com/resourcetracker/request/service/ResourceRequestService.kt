@@ -45,6 +45,7 @@ class ResourceRequestService(
     private val reservationRepository: StockReservationRepository,
     private val issueRepository: StockIssueRepository,
     private val procurementService: ProcurementService,
+    private val waitlistService: WaitlistService,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -190,12 +191,14 @@ class ResourceRequestService(
     @Transactional
     fun decide(requestId: Int, caller: User, dto: RequestDecisionDto): ResourceRequestResponseDto {
         if (caller.role != Role.DEPARTMENT_MANAGER) forbidden()
-        val request = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
+        val request = requestRepository.findForUpdateById(requestId)
+            ?: throw ResourceNotFoundException("Request not found")
         if (request.assignedManagerId != caller.id) forbidden("Only the assigned manager may decide this request")
         val action = when (dto.decision) {
             Decision.QUERY -> RequestAction.QUERY
             Decision.APPROVE -> RequestAction.APPROVE
             Decision.REJECT -> RequestAction.REJECT
+            Decision.WAITLIST -> RequestAction.WAITLIST
         }
         val from = request.status
         val target = RequestTransitions.target(from, action, RequestActor.ASSIGNED_MANAGER)
@@ -203,6 +206,7 @@ class ResourceRequestService(
         val comment = dto.comment?.trim()?.takeIf(String::isNotEmpty)
         if ((dto.decision == Decision.QUERY || dto.decision == Decision.REJECT) && comment == null) badRequest("A comment is required")
         val lines = lineItemRepository.findAllByRequestId(requestId)
+            .sortedBy { it.resourceId ?: Int.MAX_VALUE }
         if (dto.decision != Decision.QUERY) {
             val missing = buildList {
                 if (request.requiredDate == null) add("requiredDate")
@@ -212,7 +216,12 @@ class ResourceRequestService(
             }
             if (missing.isNotEmpty()) conflict("Cannot decide request; missing: ${missing.joinToString()}")
         }
-        if (dto.decision == Decision.APPROVE) {
+        if (dto.decision == Decision.WAITLIST &&
+            lines.any { it.fulfillmentPreference != FulfillmentPreference.INTERNAL.name || it.resourceId == null }
+        ) {
+            conflict("Only requests with internal resource lines can be waitlisted")
+        }
+        if (dto.decision == Decision.APPROVE || dto.decision == Decision.WAITLIST) {
             val ids = lines.mapNotNull { it.lineItemId }.toSet()
             if (dto.approvedQuantities.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")
             lines.forEach { line ->
@@ -221,7 +230,9 @@ class ResourceRequestService(
                 if (approved !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
                 val resource = line.resourceId?.let { resources.findForUpdateById(it) ?: conflict("Resource for line item $lineId no longer exists") }
                 if (resource != null && !resource.active) conflict("Resource for line item $lineId is inactive")
-                if (resource?.type == ResourceType.INTERNAL && approved > availability.availableQuantity(resource, lockReservations = true)) conflict("Insufficient stock for line item $lineId; available ${availability.availableQuantity(resource, lockReservations = true)}")
+                if (dto.decision == Decision.APPROVE && resource?.type == ResourceType.INTERNAL &&
+                    approved > availability.availableQuantity(resource, lockReservations = true)
+                ) conflict("Insufficient stock for line item $lineId; available ${availability.availableQuantity(resource, lockReservations = true)}")
                 line.approvedQuantity = approved
                 if (approved < line.quantity) {
                     if (comment == null) badRequest("A comment is required when reducing an approved quantity")
@@ -241,10 +252,12 @@ class ResourceRequestService(
             RequestStatus.QUERIED -> NotificationType.QUERIED
             RequestStatus.APPROVED -> NotificationType.APPROVED
             RequestStatus.REJECTED -> NotificationType.REJECTED
+            RequestStatus.WAITLISTED -> NotificationType.WAITLISTED
             else -> error("Unexpected decision target")
         }
         notifications.notify(listOf(request.requesterId), notification, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))
         if (target == RequestStatus.APPROVED) procurementService.authorize(request, lines, caller.id)
+        if (target == RequestStatus.WAITLISTED) waitlistService.enqueue(requestId, lines, caller.id, from, comment)
         return saved.toResponse(lines, includeStock = true)
     }
 

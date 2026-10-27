@@ -4,6 +4,7 @@ enum class NotificationType {
     SUBMITTED,
     QUERIED,
     APPROVED,
+    WAITLISTED,
     REJECTED,
     PARTIALLY_APPROVED,
     RESUBMITTED,

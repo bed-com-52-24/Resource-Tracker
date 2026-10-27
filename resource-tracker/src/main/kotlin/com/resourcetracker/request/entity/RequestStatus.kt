@@ -5,12 +5,13 @@ enum class RequestStatus {
     QUERIED,
     APPROVED,
     REJECTED,
+    WAITLISTED,
     CANCELLED
 }
 
 enum class FulfillmentPreference { INTERNAL, EXTERNAL }
 
-enum class RequestAction { SUBMIT, QUERY, CLARIFY, APPROVE, REJECT, CANCEL }
+enum class RequestAction { SUBMIT, QUERY, CLARIFY, APPROVE, REJECT, WAITLIST, CANCEL }
 
 enum class RequestActor { TEAM_LEAD, ASSIGNED_MANAGER }
 
@@ -21,12 +22,14 @@ object RequestTransitions {
     private val rules = mapOf(
         (RequestStatus.PENDING to RequestAction.QUERY) to Rule(RequestStatus.QUERIED, RequestActor.ASSIGNED_MANAGER),
         (RequestStatus.PENDING to RequestAction.APPROVE) to Rule(RequestStatus.APPROVED, RequestActor.ASSIGNED_MANAGER),
+        (RequestStatus.PENDING to RequestAction.WAITLIST) to Rule(RequestStatus.WAITLISTED, RequestActor.ASSIGNED_MANAGER),
         (RequestStatus.PENDING to RequestAction.REJECT) to Rule(RequestStatus.REJECTED, RequestActor.ASSIGNED_MANAGER),
         (RequestStatus.QUERIED to RequestAction.CLARIFY) to Rule(RequestStatus.PENDING, RequestActor.TEAM_LEAD),
         (RequestStatus.QUERIED to RequestAction.REJECT) to Rule(RequestStatus.REJECTED, RequestActor.ASSIGNED_MANAGER),
         (RequestStatus.PENDING to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
         (RequestStatus.QUERIED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
         (RequestStatus.APPROVED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
+        (RequestStatus.WAITLISTED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
     )
     private val initialRules = mapOf((RequestAction.SUBMIT to RequestActor.TEAM_LEAD) to RequestStatus.PENDING)
 

@@ -81,6 +81,7 @@ class NotificationService(
             NotificationType.SUBMITTED -> "Request ${requestId ?: "unknown"} has been submitted."
             NotificationType.QUERIED -> "Request ${requestId ?: "unknown"} requires additional information."
             NotificationType.APPROVED -> "Request ${requestId ?: "unknown"} was approved."
+            NotificationType.WAITLISTED -> "Request ${requestId ?: "unknown"} was added to the waitlist."
             NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
