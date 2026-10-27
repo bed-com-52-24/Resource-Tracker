@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Resource Tracker: Build",
+            "type": "shell",
+            "command": "./mvnw --batch-mode --no-transfer-progress package -DskipTests",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": ["$javac"]
+        },
+        {
+            "label": "Resource Tracker: Run",
+            "type": "shell",
+            "command": "docker compose up -d mysql && ./mvnw --batch-mode --no-transfer-progress spring-boot:run",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Resource Tracker: Prepare Debug",
+            "type": "shell",
+            "command": "docker compose up -d mysql && ./mvnw --batch-mode --no-transfer-progress package -DskipTests",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": ["$javac"]
+        },
+        {
+            "label": "Resource Tracker: Test",
+            "type": "shell",
+            "command": "./mvnw --batch-mode --no-transfer-progress test",
+            "options": {
+                "cwd": "${workspaceFolder}/resource-tracker"
+            },
+            "problemMatcher": ["$javac"]
+        }
+    ]
+}
