@@ -135,7 +135,7 @@ class ResourceRequestWorkflowServiceTest {
     @Test
     fun `a manager who is not assigned cannot decide the request`() {
         val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
         val otherManager = User(
             id = 56, username = "other", email = "other@example.test", fullName = "Other Manager",
             passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
@@ -152,7 +152,7 @@ class ResourceRequestWorkflowServiceTest {
     @Test
     fun `a queried request cannot be approved before clarification`() {
         val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
         val manager = User(
             id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
             passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
