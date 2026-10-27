@@ -13,7 +13,7 @@
         {
             "label": "Resource Tracker: Run",
             "type": "shell",
-            "command": "set -a && . .env && set +a && ./mvnw spring-boot:run",
+            "command": "docker compose up -d mysql && set -a && . .env && set +a && ./mvnw spring-boot:run",
             "options": {
                 "cwd": "${workspaceFolder}/resource-tracker"
             },

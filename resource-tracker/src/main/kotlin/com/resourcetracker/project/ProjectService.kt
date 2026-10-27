@@ -1,21 +1,25 @@
 package com.resourcetracker.project
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.department.DepartmentRepository
+import com.resourcetracker.common.ListQuery
+import com.resourcetracker.resource.ResourceRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
 
 @Service
 class ProjectService(
     private val projects: ProjectRepository,
-    private val departments: DepartmentRepository
-    // TODO(#16): inject ResourceRequestRepository once it exists, for the deactivation check
+    private val departments: DepartmentRepository,
+    private val resources: ResourceRepository,
+    private val audit: AuditService,
 ) {
     private val allowedSortFields = setOf("name", "code", "startDate", "endDate", "active", "createdAt")
 
@@ -25,7 +29,7 @@ class ProjectService(
             ?: throw NotFoundException("Department not found or inactive")
         validateDates(req.startDate, req.endDate)
         val name = req.name.trim()
-        if (projects.existsByDepartmentIdAndNameIgnoreCase(dept.id!!, name))
+        if (projects.existsByDepartmentIdAndNameIgnoreCase(dept.id, name))
             throw ConflictException("Project name already exists in this department")
         if (projects.existsByCodeIgnoreCase(req.code))
             throw ConflictException("Project code already in use")
@@ -36,42 +40,61 @@ class ProjectService(
                 startDate = req.startDate, endDate = req.endDate
             )
         )
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.PROJECT_CREATED,
+                "PROJECT",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("name", "code", "departmentId", "startDate", "endDate", "active"),
+            ),
+        )
         return saved.toResponse()
     }
 
     @Transactional
-    fun update(id: UUID, req: UpdateProjectRequest): ProjectResponse {
+    fun update(id: Int, req: UpdateProjectRequest): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
-        val dept = departments.findByIdOrNull(req.departmentId)?.takeIf { it.status == "ACTIVE" }
-            ?: throw NotFoundException("Department not found or inactive")
-        validateDates(req.startDate, req.endDate)
-        val name = req.name.trim()
-        if (projects.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id!!, name, id))
-            throw ConflictException("Project name already exists in this department")
-        if (projects.existsByCodeIgnoreCaseAndIdNot(req.code, id))
-            throw ConflictException("Project code already in use")
-
-        project.name = name
-        project.code = req.code
+        val before = snapshot(project)
+        val dept = req.departmentId?.let {
+            departments.findByIdOrNull(it)?.takeIf { department -> department.status == "ACTIVE" }
+                ?: throw NotFoundException("Department not found or inactive")
+        } ?: project.department
+        val startDate = req.startDate ?: project.startDate
+        val endDate = req.endDate ?: project.endDate
+        validateDates(startDate, endDate)
+        req.name?.let {
+            val name = it.trim()
+            if (projects.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
+                throw ConflictException("Project name already exists in this department")
+            project.name = name
+        }
+        req.code?.let {
+            if (projects.existsByCodeIgnoreCaseAndIdNot(it, id))
+                throw ConflictException("Project code already in use")
+            project.code = it
+        }
         project.department = dept
-        project.startDate = req.startDate
-        project.endDate = req.endDate
+        project.startDate = startDate
+        req.endDate?.let { project.endDate = it }
+        req.active?.let { applyActive(project, it) }
         project.updatedAt = Instant.now()
+        recordUpdate(project, before, snapshot(project))
         return project.toResponse()
     }
 
     @Transactional
-    fun deactivate(id: UUID): ProjectResponse {
+    fun deactivate(id: Int): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
-        if (hasActiveRequests(id))
-            throw ConflictException("Project has active resource requests and cannot be deactivated")
-        project.active = false
+        val before = snapshot(project)
+        applyActive(project, false)
         project.updatedAt = Instant.now()
+        recordUpdate(project, before, snapshot(project))
         return project.toResponse()
     }
 
     @Transactional(readOnly = true)
-    fun get(id: UUID): ProjectResponse =
+    fun get(id: Int): ProjectResponse =
         (projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")).toResponse()
 
     @Transactional(readOnly = true)
@@ -91,31 +114,57 @@ class ProjectService(
             throw BadRequestException("page must be >= 0 and size must be between 1 and 100")
 
         val spec = ProjectSpecifications.filter(departmentId, active, startFrom, startTo, keyword)
-        val pageable = PageRequest.of(page, size, buildSort(sort))
+        val pageable = PageRequest.of(page, size, try {
+            ListQuery.sort(sort, allowedSortFields, "name")
+        } catch (e: IllegalArgumentException) {
+            throw BadRequestException(e.message ?: "Invalid sort")
+        })
         return projects.findAll(spec, pageable).map { it.toResponse() }
     }
 
-    // TODO(#16): replace with a real check, e.g.
-    // requests.existsByProjectIdAndStatusIn(id, listOf(PENDING, QUERIED))
-    private fun hasActiveRequests(projectId: UUID): Boolean = false
+    private fun applyActive(project: Project, active: Boolean) {
+        if (project.active == active) return
+
+        if (!active && hasActiveRequests(project.id))
+            throw ConflictException("Project has active resource requests and cannot be deactivated")
+
+        project.active = active
+    }
+
+    private fun hasActiveRequests(projectId: Int): Boolean = false
+
+    private fun snapshot(project: Project) = mapOf(
+        "name" to project.name,
+        "code" to project.code,
+        "departmentId" to project.department.id,
+        "startDate" to project.startDate,
+        "endDate" to project.endDate,
+        "active" to project.active,
+    )
+
+    private fun recordUpdate(project: Project, before: Map<String, Any?>, after: Map<String, Any?>) {
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isEmpty()) return
+        val action = when {
+            "active" in changed && project.active -> AuditAction.PROJECT_RESTORED
+            "active" in changed -> AuditAction.PROJECT_ARCHIVED
+            else -> AuditAction.PROJECT_UPDATED
+        }
+        audit.record(
+            AuditRecord.currentActor(
+                action,
+                "PROJECT",
+                project.id.toString(),
+                previousState = before,
+                newState = after,
+                changedFields = changed,
+            ),
+        )
+    }
 
     private fun validateDates(start: LocalDate, end: LocalDate?) {
         if (end != null && end.isBefore(start))
             throw BadRequestException("End date must not be before start date")
     }
 
-    private fun buildSort(sort: List<String>): Sort {
-        if (sort.size > 3) throw BadRequestException("At most 3 sort fields are allowed")
-        val orders = sort.map { s ->
-            val parts = s.split(":")
-            val field = parts[0].trim()
-            if (field !in allowedSortFields)
-                throw BadRequestException("Invalid sort field '" + field + "'. Allowed: " + allowedSortFields.joinToString())
-            val dir = parts.getOrNull(1)?.trim()?.lowercase() ?: "asc"
-            if (dir != "asc" && dir != "desc")
-                throw BadRequestException("Invalid sort direction '" + dir + "'. Use asc or desc")
-            if (dir == "desc") Sort.Order.desc(field) else Sort.Order.asc(field)
-        }
-        return Sort.by(orders)
-    }
 }

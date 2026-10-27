@@ -73,13 +73,22 @@ class ListQueryTest {
     @Test
     fun `sort fields are limited and default to asc`() {
         val parsed = ListQuery.parse(
-            params = mapOf("sort" to listOf("name:desc", "status", "createdAt:desc", "unknown")),
+            params = mapOf("sort" to listOf("name:desc", "status", "createdAt:desc")),
             supportedFilters = emptySet(),
             supportedSortFields = setOf("name", "status", "createdAt"),
         )
 
         assertEquals(listOf("name", "status", "createdAt"), parsed.sorts.map { it.field })
         assertEquals(listOf("desc", "asc", "desc"), parsed.sorts.map { it.direction })
+
+        val tooManySorts = assertThrows<IllegalArgumentException> {
+            ListQuery.parse(
+                params = mapOf("sort" to listOf("name", "status", "createdAt", "name")),
+                supportedFilters = emptySet(),
+                supportedSortFields = setOf("name", "status", "createdAt"),
+            )
+        }
+        assertEquals(true, tooManySorts.message.orEmpty().contains("At most 3"))
 
         val ex = assertThrows<IllegalArgumentException> {
             ListQuery.parse(

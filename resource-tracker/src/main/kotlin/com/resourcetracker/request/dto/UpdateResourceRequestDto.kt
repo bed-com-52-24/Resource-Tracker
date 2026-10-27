@@ -1,27 +1,27 @@
 package com.resourcetracker.request.dto
 
 import jakarta.validation.Valid
-import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
-import jakarta.validation.constraints.NotEmpty
+
+enum class RequesterUpdateStatus { PENDING, CANCELLED }
 
 data class UpdateResourceRequestDto(
-    @field:Positive
-    val departmentId: Int,
+    val status: RequesterUpdateStatus? = null,
+    @field:Size(max = 1000) val comment: String? = null,
+    @field:Valid val lineItems: List<RequestLineItemDto>? = null,
+)
 
-    @field:Positive
-    val projectId: Int,
+data class RequestDecisionDto(
+    val decision: Decision,
+    @field:Size(max = 1000) val comment: String? = null,
+    val approvedQuantities: Map<Int, Int> = emptyMap(),
+)
 
-    @field:Positive
-    val teamId: Int,
+enum class Decision { APPROVE, REJECT, QUERY }
 
-    @field:Positive
-    val vendorId: Int,
+data class ManagerReassignmentDto(val managerId: Int)
 
-    @field:Size(max = 500)
-    val justification: String? = null,
-
-    @field:NotEmpty
-    @field:Valid
-    val lineItems: List<RequestLineItemDto>
+data class ApprovedQuantityUpdateRequest(
+    @field:jakarta.validation.constraints.Positive val quantity: Int,
+    @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1000) val reason: String,
 )

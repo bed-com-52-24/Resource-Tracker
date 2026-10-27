@@ -1,9 +1,12 @@
 package com.resourcetracker.notification
 
 import org.springframework.data.domain.Pageable
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
+import java.time.Instant
 
 @Service
 class NotificationService(
@@ -12,7 +15,7 @@ class NotificationService(
 
     @Transactional(propagation = Propagation.MANDATORY)
     fun notify(userIds: Collection<Int>, type: NotificationType, payload: Map<String, Any?>) {
-        val requestId = payload["requestId"]?.toString()
+        val requestId = payload["requestId"] as? Int
         val message = buildMessage(type, payload)
         val entries = userIds.distinct().map { userId ->
             Notification(
@@ -29,38 +32,51 @@ class NotificationService(
     }
 
     @Transactional(readOnly = true)
-    fun listForUser(userId: Int, unreadOnly: Boolean = false, search: String?, pageable: Pageable): List<NotificationResponse> {
+    fun listForUser(
+        userId: Int,
+        status: NotificationStatus? = null,
+        search: String?,
+        pageable: Pageable,
+    ): List<NotificationResponse> {
         val normalized = search?.trim()?.takeIf { it.isNotEmpty() }
         val page = when {
-            normalized != null -> notifications.searchForUser(userId, unreadOnly, normalized, pageable)
-            unreadOnly -> notifications.findByRecipientIdAndReadOrderByCreatedAtDesc(userId, false, pageable)
+            normalized != null -> notifications.searchForUser(userId, status, normalized, pageable)
+            status != null -> notifications.findByRecipientIdAndStatusOrderByCreatedAtDesc(userId, status, pageable)
             else -> notifications.findByRecipientIdOrderByCreatedAtDesc(userId, pageable)
         }
         return page.content.map { it.toResponse() }
     }
 
     @Transactional
-    fun markRead(userId: Int, notificationId: Long): NotificationResponse {
-        val notification = notifications.findByIdAndRecipientId(notificationId, userId)
-            ?: throw IllegalArgumentException("Notification not found for the current user")
-        notification.read = true
-        return notifications.save(notification).toResponse()
-    }
+    fun updateReadState(userId: Int, request: NotificationUpdateRequest): NotificationUpdateResponse {
+        val hasIds = request.ids != null
+        if ((hasIds && request.all) || (!hasIds && !request.all) || request.ids?.isEmpty() == true) {
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Provide non-empty ids or set all=true, but not both"
+            )
+        }
 
-    @Transactional
-    fun markAllRead(userId: Int) {
-        val unread = notifications.findByRecipientIdAndReadOrderByCreatedAtDesc(userId, false, Pageable.unpaged())
-        unread.content.forEach { it.read = true }
-        notifications.saveAll(unread.content)
+        if (request.all) {
+            val readAt = if (request.status == NotificationStatus.READ) Instant.now() else null
+            return NotificationUpdateResponse(
+                notifications.updateStatusForRecipient(userId, request.status, readAt),
+            )
+        }
+
+        val items = notifications.findAllByIdInAndRecipientId(requireNotNull(request.ids), userId)
+        items.forEach { it.setStatus(request.status) }
+        notifications.saveAll(items)
+        return NotificationUpdateResponse(items.size)
     }
 
     @Transactional(readOnly = true)
-    fun unreadCount(userId: Int): Long = notifications.countByRecipientIdAndRead(userId, false)
+    fun unreadCount(userId: Int): Long =
+        notifications.countByRecipientIdAndStatus(userId, NotificationStatus.UNREAD)
 
     private fun buildMessage(type: NotificationType, payload: Map<String, Any?>): String {
         val requestId = payload["requestId"]?.toString()
         val resource = payload["resource"]?.toString()
-        val item = payload["item"]?.toString()
         return when (type) {
             NotificationType.SUBMITTED -> "Request ${requestId ?: "unknown"} has been submitted."
             NotificationType.QUERIED -> "Request ${requestId ?: "unknown"} requires additional information."
@@ -68,10 +84,12 @@ class NotificationService(
             NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
-            NotificationType.WAITLIST_FULFILLABLE -> "A waitlist item is now fulfillable${if (resource != null) " for $resource" else ""}."
             NotificationType.OVERDUE_RETURN -> "An overdue return needs attention${if (resource != null) " for $resource" else ""}."
             NotificationType.PROCUREMENT -> "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."
-            NotificationType.LOW_STOCK -> "Low stock alert${if (item != null) " for $item" else ""}."
+            NotificationType.REASSIGNMENT_REQUIRED -> payload["message"]?.toString()
+                ?: "Request ${requestId ?: "unknown"} needs manager reassignment."
+            NotificationType.REASSIGNED -> "Request ${requestId ?: "unknown"} has a new assigned manager."
+            NotificationType.CANCELLED -> "Request ${requestId ?: "unknown"} was cancelled."
         }
     }
 
@@ -81,7 +99,8 @@ class NotificationService(
         type = type,
         requestId = requestId,
         message = message,
-        read = read,
+        status = status,
+        readAt = readAt,
         createdAt = createdAt,
     )
 }

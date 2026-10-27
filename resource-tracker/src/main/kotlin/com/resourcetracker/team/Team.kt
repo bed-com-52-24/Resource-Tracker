@@ -33,8 +33,11 @@ class Team(
     )
     var projects: MutableSet<Project> = mutableSetOf(),
 
-    @Column(name = "status", length = 20)
-    var status: String = "ACTIVE",
+    @ManyToMany(mappedBy = "teams")
+    var users: MutableSet<User> = mutableSetOf(),
+
+    @Column(name = "is_active", nullable = false)
+    var isActive: Boolean = true,
 
     @Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),

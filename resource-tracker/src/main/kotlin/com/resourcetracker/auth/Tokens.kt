@@ -11,13 +11,12 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
-import java.util.UUID
 import java.time.Instant
 
 @Entity
 @Table(name = "refresh_tokens")
 class RefreshToken(
-    @Id val id: UUID = UUID.randomUUID(),
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) val id: Int = 0,
     @Column(nullable = false) val userId: Int,
     @Column(nullable = false, unique = true, length = 64) val tokenHash: String,
     @Column(nullable = false) val expiresAt: Instant,
@@ -31,7 +30,7 @@ class RevokedAccessToken(
     @Column(nullable = false) val expiresAt: Instant,
 )
 
-interface RefreshTokenRepository : JpaRepository<RefreshToken, UUID> {
+interface RefreshTokenRepository : JpaRepository<RefreshToken, Int> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from RefreshToken t where t.tokenHash = :hash")
     fun findForUpdate(@Param("hash") hash: String): RefreshToken?

@@ -1,31 +1,39 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
+import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
+import com.resourcetracker.common.ListQuery
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.project.Project
 import com.resourcetracker.project.ProjectRepository
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
+import org.springframework.data.domain.Pageable
 import org.springframework.data.repository.findByIdOrNull
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
-import java.util.UUID
 
 @Service
 class TeamService(
     private val teams: TeamRepository,
     private val departments: DepartmentRepository,
     private val users: UserRepository,
-    private val projects: ProjectRepository
+    private val projects: ProjectRepository,
+    private val audit: AuditService,
+    private val memberHistory: TeamMemberHistoryRepository,
 ) {
-    private val allowedSortFields = setOf("name", "status", "createdAt")
+    private val allowedSortFields = setOf("name", "isActive", "createdAt")
 
     @Transactional
     fun create(req: TeamRequest): TeamResponse {
@@ -39,33 +47,49 @@ class TeamService(
         val saved = teams.save(
             Team(name = name, department = dept, manager = manager, projects = teamProjects.toMutableSet())
         )
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.TEAM_CREATED,
+                "TEAM",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("name", "departmentId", "managerId", "projectIds", "isActive"),
+            ),
+        )
         return saved.toResponse()
     }
 
     @Transactional
-    fun update(id: Int, req: TeamRequest): TeamResponse {
+    fun update(id: Int, req: UpdateTeamRequest): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
-        val dept = activeDepartment(req.departmentId)
-        val name = req.name.trim()
-        if (teams.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
-            throw DuplicateResourceException("Team name already exists in this department")
-        val manager = validManager(req.managerId)
-        val teamProjects = activeProjects(req.projectIds)
-
-        team.name = name
+        val before = snapshot(team)
+        val dept = req.departmentId?.let(::activeDepartment) ?: team.department
+        req.name?.let {
+            val name = it.trim()
+            if (teams.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
+                throw DuplicateResourceException("Team name already exists in this department")
+            team.name = name
+        }
         team.department = dept
-        team.manager = manager
-        team.projects.clear()
-        team.projects.addAll(teamProjects)
+        req.managerId?.let { team.manager = validManager(it) }
+        req.projectIds?.let {
+            val teamProjects = projectsForUpdate(team, it)
+            team.projects.clear()
+            team.projects.addAll(teamProjects)
+        }
+        req.isActive?.let { applyActive(team, it) }
         team.updatedAt = Instant.now()
+        recordUpdate(team, before, snapshot(team))
         return team.toResponse()
     }
 
     @Transactional
     fun deactivate(id: Int): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
-        team.status = "INACTIVE"
+        val before = snapshot(team)
+        applyActive(team, false)
         team.updatedAt = Instant.now()
+        recordUpdate(team, before, snapshot(team))
         return team.toResponse()
     }
 
@@ -77,8 +101,8 @@ class TeamService(
     fun list(
         departmentId: Int?,
         managerId: Int?,
-        projectId: UUID?,
-        status: String?,
+        projectId: Int?,
+        isActive: Boolean?,
         keyword: String?,
         page: Int,
         size: Int,
@@ -89,9 +113,129 @@ class TeamService(
         if (page < 0 || size < 1 || size > 100)
             throw InvalidTeamRequestException("page must be >= 0 and size must be between 1 and 100")
 
-        val spec = TeamSpecifications.filter(departmentId, managerId, projectId, status, keyword)
-        val pageable = PageRequest.of(page, size, buildSort(sort))
+        val spec = TeamSpecifications.filter(departmentId, managerId, projectId, isActive, keyword)
+        val pageable = PageRequest.of(page, size, try {
+            ListQuery.sort(sort, allowedSortFields, "name")
+        } catch (e: IllegalArgumentException) {
+            throw InvalidTeamRequestException(e.message ?: "Invalid sort")
+        })
         return teams.findAll(spec, pageable).map { it.toResponse() }
+    }
+
+    @Transactional(readOnly = true)
+    fun members(teamId: Int, role: Role?, active: Boolean?, search: String?, pageable: Pageable): Page<User> {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+
+        val spec = TeamMemberSpecifications.filter(teamId, role, active, search)
+        return users.findAll(spec, pageable)
+    }
+
+    @Transactional
+    fun addMembers(teamId: Int, userIds: Set<Int>): List<User> {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val members = users.findAllById(userIds)
+        if (members.size != userIds.size) throw ResourceNotFoundException("One or more users not found")
+
+        val actor = currentActor()
+        members.forEach { user ->
+            if (!user.active) throw BusinessRuleException("User is inactive")
+            if (user.teams.any { it.id == teamId }) throw BusinessRuleException("User is already a member of this team")
+            user.teams.add(team)
+            memberHistory.save(TeamMemberHistory(user = user, fromTeam = null, toTeam = team, action = TeamMemberAction.ADDED, performedBy = actor))
+        }
+        return members
+    }
+
+    @Transactional
+    fun transfer(teamId: Int, userId: Int, toTeamId: Int): User {
+        if (teamId == toTeamId) throw BusinessRuleException("Transfer target must be different from the source team")
+        val source = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        val target = teams.findByIdOrNull(toTeamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!source.isActive || !target.isActive) throw BusinessRuleException("Teams must be active")
+        val user = users.findByIdOrNull(userId) ?: throw ResourceNotFoundException("User not found")
+        if (!user.active) throw BusinessRuleException("User is inactive")
+        if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the source team")
+        if (user.teams.any { it.id == toTeamId }) throw BusinessRuleException("User is already a member of the target team")
+
+        val actor = currentActor()
+        user.teams.removeIf { it.id == teamId }
+        user.teams.add(target)
+        memberHistory.save(TeamMemberHistory(user = user, fromTeam = source, toTeam = target, action = TeamMemberAction.TRANSFERRED, performedBy = actor))
+        return user
+    }
+
+    @Transactional
+    fun removeMember(teamId: Int, userId: Int): User {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val user = users.findByIdOrNull(userId) ?: throw ResourceNotFoundException("User not found")
+        if (!user.active) throw BusinessRuleException("User is inactive")
+        if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the team")
+        if (team.manager?.id == user.id) throw BusinessRuleException("Reassign the team manager before removing them")
+        if (user.role == Role.MEMBER && user.teams.size <= 1) throw BusinessRuleException("MEMBER users must retain at least one team")
+
+        user.teams.removeIf { it.id == teamId }
+        val actor = currentActor()
+        memberHistory.save(TeamMemberHistory(user = user, fromTeam = team, toTeam = null, action = TeamMemberAction.REMOVED, performedBy = actor))
+        return user
+    }
+
+    @Transactional(readOnly = true)
+    fun history(teamId: Int): List<TeamMemberHistory> {
+        val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        return memberHistory.findHistoryForTeam(teamId)
+    }
+
+    private fun currentActor(): User {
+        val principal = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
+            ?: throw BusinessRuleException("Authentication required")
+        return users.findByIdOrNull(principal.id) ?: throw ResourceNotFoundException("Actor not found")
+    }
+
+    private fun applyActive(team: Team, active: Boolean) {
+        team.isActive = active
+    }
+
+    private fun snapshot(team: Team) = mapOf(
+        "name" to team.name,
+        "departmentId" to team.department.id,
+        "managerId" to team.manager?.id,
+        "projectIds" to team.projects.map { it.id }.sorted(),
+        "isActive" to team.isActive,
+    )
+
+    private fun recordUpdate(team: Team, before: Map<String, Any?>, after: Map<String, Any?>) {
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isEmpty()) return
+        val action = when {
+            "isActive" in changed && team.isActive -> AuditAction.TEAM_RESTORED
+            "isActive" in changed -> AuditAction.TEAM_ARCHIVED
+            else -> AuditAction.TEAM_UPDATED
+        }
+        audit.record(
+            AuditRecord.currentActor(
+                action,
+                "TEAM",
+                team.id.toString(),
+                previousState = before,
+                newState = after,
+                changedFields = changed,
+            ),
+        )
+    }
+
+    // Only newly added projects must be active, so a team can still be edited or deactivated after one of its existing projects was deactivated.
+    private fun projectsForUpdate(team: Team, ids: Set<Int>): List<Project> {
+        if (ids.isEmpty()) return emptyList()
+        val found = projects.findAllById(ids)
+        if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")
+        val existing = team.projects.map { it.id }.toSet()
+        if (found.any { it.id !in existing && !it.active })
+            throw InvalidTeamRequestException("Inactive projects cannot be assigned to a team")
+        return found
     }
 
     private fun activeDepartment(id: Int): Department =
@@ -105,7 +249,7 @@ class TeamService(
         return manager
     }
 
-    private fun activeProjects(ids: Set<UUID>): List<Project> {
+    private fun activeProjects(ids: Set<Int>): List<Project> {
         if (ids.isEmpty()) return emptyList()
         val found = projects.findAllById(ids)
         if (found.size != ids.size) throw ResourceNotFoundException("One or more projects not found")
@@ -113,18 +257,4 @@ class TeamService(
         return found
     }
 
-    private fun buildSort(sort: List<String>): Sort {
-        if (sort.size > 3) throw InvalidTeamRequestException("At most 3 sort fields are allowed")
-        val orders = sort.map { s ->
-            val parts = s.split(":")
-            val field = parts[0].trim()
-            if (field !in allowedSortFields)
-                throw InvalidTeamRequestException("Invalid sort field '" + field + "'. Allowed: " + allowedSortFields.joinToString())
-            val dir = parts.getOrNull(1)?.trim()?.lowercase() ?: "asc"
-            if (dir != "asc" && dir != "desc")
-                throw InvalidTeamRequestException("Invalid sort direction '" + dir + "'. Use asc or desc")
-            if (dir == "desc") Sort.Order.desc(field) else Sort.Order.asc(field)
-        }
-        return Sort.by(orders)
-    }
 }

@@ -1,5 +1,8 @@
 package com.resourcetracker.vendor
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
@@ -8,8 +11,12 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 
 @Service
-class VendorService(private val vendorRepository: VendorRepository) {
+class VendorService(
+    private val vendorRepository: VendorRepository,
+    private val audit: AuditService,
+) {
 
+    @Transactional
     fun create(request: VendorRequest): VendorResponse {
         val name = request.name.trim()
         if (vendorRepository.existsByNameIgnoreCase(name)) {
@@ -17,6 +24,15 @@ class VendorService(private val vendorRepository: VendorRepository) {
         }
         val saved = vendorRepository.save(
             Vendor(name = name, contactInformation = request.contactInformation)
+        )
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.VENDOR_CREATED,
+                "VENDOR",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("name", "contactInformation", "status"),
+            ),
         )
         return saved.toResponse()
     }
@@ -40,8 +56,9 @@ class VendorService(private val vendorRepository: VendorRepository) {
     fun getById(id: Int): VendorResponse = findOrThrow(id).toResponse()
 
     @Transactional
-    fun update(id: Int, request: VendorRequest): VendorResponse {
+    fun update(id: Int, request: UpdateVendorRequest): VendorResponse {
         val vendor = findOrThrow(id)
+        val before = snapshot(vendor)
         val name = request.name.trim()
         if (!vendor.name.equals(name, ignoreCase = true) &&
             vendorRepository.existsByNameIgnoreCase(name)
@@ -50,14 +67,29 @@ class VendorService(private val vendorRepository: VendorRepository) {
         }
         vendor.name = name
         vendor.contactInformation = request.contactInformation
-        return vendorRepository.save(vendor).toResponse()
-    }
-
-    @Transactional
-    fun deactivate(id: Int): VendorResponse {
-        val vendor = findOrThrow(id)
-        vendor.status = "INACTIVE"
-        return vendorRepository.save(vendor).toResponse()
+        request.active?.let { vendor.status = if (it) "ACTIVE" else "INACTIVE" }
+        val saved = vendorRepository.save(vendor)
+        val after = snapshot(saved)
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isNotEmpty()) {
+            val action = when {
+                "status" in changed && saved.status.equals("ACTIVE", ignoreCase = true) ->
+                    AuditAction.VENDOR_RESTORED
+                "status" in changed -> AuditAction.VENDOR_ARCHIVED
+                else -> AuditAction.VENDOR_UPDATED
+            }
+            audit.record(
+                AuditRecord.currentActor(
+                    action,
+                    "VENDOR",
+                    saved.id.toString(),
+                    previousState = before,
+                    newState = after,
+                    changedFields = changed,
+                ),
+            )
+        }
+        return saved.toResponse()
     }
 
     private fun findOrThrow(id: Int): Vendor =
@@ -67,4 +99,10 @@ class VendorService(private val vendorRepository: VendorRepository) {
 
     private fun Vendor.toResponse() =
         VendorResponse(id, name, contactInformation, status)
+
+    private fun snapshot(vendor: Vendor) = mapOf(
+        "name" to vendor.name,
+        "contactInformation" to vendor.contactInformation,
+        "status" to vendor.status,
+    )
 }

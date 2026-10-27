@@ -19,8 +19,8 @@ import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-@SpringBootTest
-@Testcontainers
+@SpringBootTest(properties = ["app.security.jwt-secret=resource-tracker-request-number-test-secret-32"])
+@Testcontainers(disabledWithoutDocker = true)
 class RequestNumberServiceTest {
 
     @Autowired
