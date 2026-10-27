@@ -1,6 +1,13 @@
 package com.resourcetracker.project
 
-// Local exceptions for issue #16. Move to a shared package if the team adds common ones.
-class NotFoundException(message: String) : RuntimeException(message)
-class ConflictException(message: String) : RuntimeException(message)
-class BadRequestException(message: String) : RuntimeException(message)
+import com.resourcetracker.common.ApiException
+import org.springframework.http.HttpStatus
+
+class NotFoundException(message: String) :
+    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
+
+class ConflictException(message: String) :
+    ApiException(HttpStatus.CONFLICT, "RESOURCE_CONFLICT", message)
+
+class BadRequestException(message: String) :
+    ApiException(HttpStatus.BAD_REQUEST, "BAD_REQUEST", message)
