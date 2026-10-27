@@ -30,6 +30,7 @@ class StockOperationsService(
     private val movements: StockMovementRepository,
     private val history: RequestHistoryRepository,
     private val availability: StockAvailabilityService,
+    private val waitlistService: WaitlistService,
     private val users: UserRepository,
     private val clock: Clock,
 ) {
@@ -133,6 +134,7 @@ class StockOperationsService(
         resource.recomputeStatus()
         resources.save(resource)
         history.save(RequestHistory(requestId = request.requestId!!, eventType = "RETURNED", actorId = actor.id, lineItemId = issue.lineItemId, quantity = quantity, comment = "${dto.condition}: ${dto.note.orEmpty()}"))
+        if (dto.condition == ReturnCondition.USABLE) waitlistService.onStockReturned(resource.id)
         return saved
     }
 
@@ -152,6 +154,7 @@ class StockOperationsService(
         resource.recomputeStatus()
         resources.save(resource)
         val movement = movements.save(StockMovement(resourceId = resource.id, type = MovementType.CORRECTION, quantity = difference, actorId = actor.id, reason = dto.reason.trim()))
+        if (difference > 0) waitlistService.onStockReturned(resource.id)
         return movement
     }
 

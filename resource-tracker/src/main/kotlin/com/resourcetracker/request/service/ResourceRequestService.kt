@@ -290,7 +290,10 @@ class ResourceRequestService(
             if (request.status == RequestStatus.APPROVED && issueRepository.findAllByRequestId(requestId).any { it.quantity > 0 }) {
                 conflict("An approved request with issued stock cannot be cancelled; use the return process")
             }
+            waitlistService.cancelForRequest(requestId, caller.id)
             reservations.releaseAllFor(requestId, caller.id, comment)
+                .sorted()
+                .forEach(waitlistService::onStockReturned)
             request.cancelledBy = caller.id
             request.cancelledAt = LocalDateTime.now(clock)
             request.cancelReason = comment

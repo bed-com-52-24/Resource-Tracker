@@ -8,7 +8,7 @@ data class RequestHistoryResponseDto(
     val eventType: String,
     val fromStatus: String?,
     val toStatus: String?,
-    val actorId: Int,
+    val actorId: Int?,
     val lineItemId: Int?,
     val quantity: Int?,
     val comment: String?,

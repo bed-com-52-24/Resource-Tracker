@@ -2,6 +2,8 @@ package com.resourcetracker.request.entity
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -22,22 +24,17 @@ class RequestHistory(
     var fromStatus: String? = null,
     @Column(name = "to_status", length = 20)
     var toStatus: String? = null,
-    @Column(name = "actor_id", nullable = false)
-    var actorId: Int,
+    @Column(name = "actor_id")
+    var actorId: Int? = null,
     @Column(name = "line_item_id")
     var lineItemId: Int? = null,
     @Column(name = "quantity")
     var quantity: Int? = null,
     @Column(name = "comment", length = 1000)
     var comment: String? = null,
-    @Column(name = "created_at", nullable = 
-    false, insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     var createdAt: LocalDateTime? = null,
-    // was: @Column(name = "actor_id", nullable = false) var actorId: Int,
-    @Column(name = "actor_id") var actorId: Int?,
-    ...
-    @Column(name = "created_at", nullable = 
-    false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
-    @Enumerated(EnumType.STRING) 
-    @Column(name = "actor_type", nullable = false, length = 10) var actorType: ActorType = ActorType.USER,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "actor_type", nullable = false, length = 10)
+    var actorType: ActorType = ActorType.USER,
 )
