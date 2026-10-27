@@ -26,8 +26,4 @@ interface RequestHistoryRepository : Repository<RequestHistory, Int> {
         pageable: Pageable,
     ): Page<RequestHistory>
 
-    fun findByRequestIdAndEventType(
-        requestId: Int,
-        eventType: String,
-    ): List<RequestHistory>
 }
