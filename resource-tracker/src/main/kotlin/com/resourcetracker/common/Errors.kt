@@ -23,11 +23,11 @@ open class ApiException(
     message: String
 ) : RuntimeException(message)
 
-class ValidationException(message: String) :
+open class ValidationException(message: String) :
     ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", message)
 
 open class NotFoundException(message: String = "Resource not found") :
-    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
+    ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", message)
 
 open class ConflictException(message: String = "Resource conflict") :
     ApiException(HttpStatus.CONFLICT, "RESOURCE_CONFLICT", message)
@@ -85,7 +85,7 @@ class ForbiddenRoleException(
 ) : ApiException(
     HttpStatus.FORBIDDEN,
     "INSUFFICIENT_ROLE",
-    "Insufficient role"
+    "Access requires ${required.joinToString(" or ") { it.name }}; caller role is ${actual.name}"
 )
 
 class WeakPasswordException(val violations: List<String>) :
@@ -99,9 +99,7 @@ class DuplicateResourceException(
     message: String = "Resource already exists",
 ) : ApiException(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", message)
 class ResourceNotFoundException(message: String = "Resource not found") :
-    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
-class BadRequestException(message: String) :
-    ApiException(HttpStatus.BAD_REQUEST, "INVALID_RESOURCE_REQUEST", message)
+    NotFoundException(message)
 class BusinessRuleException(message: String) :
     ApiException(
         HttpStatus.CONFLICT,
@@ -136,7 +134,7 @@ class GlobalExceptionHandler {
         val details = when {
             forbidden != null -> listOf(
                 "Required role: ${forbidden.required.joinToString(" or ") { it.name }}",
-                "Actual role: ${forbidden.actual.name}"
+                "Caller role: ${forbidden.actual.name}"
             )
 
             ex is WeakPasswordException -> ex.violations
@@ -285,7 +283,8 @@ class GlobalExceptionHandler {
     }
 
     private fun correlationId(request: HttpServletRequest): String {
-        val supplied = request.getHeader("X-Correlation-ID")
+        val supplied = request.getAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE) as? String
+            ?: request.getHeader(CorrelationIdFilter.HEADER_NAME)
 
         return supplied
             ?.takeIf { it.matches(Regex("[A-Za-z0-9._-]{1,100}")) }
