@@ -245,7 +245,10 @@ class ResourceRequestService(
             else -> error("Unexpected decision target")
         }
         notifications.notify(listOf(request.requesterId), notification, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))
-        if (target == RequestStatus.APPROVED) procurementService.authorize(request, lines, caller.id)
+        if (target == RequestStatus.APPROVED) {
+            procurementService.authorize(request, lines, caller.id)
+            reservations.reserveApprovedInternalLines(requestId, lines, caller.id)
+        }
         return saved.toResponse(lines, includeStock = true)
     }
 
