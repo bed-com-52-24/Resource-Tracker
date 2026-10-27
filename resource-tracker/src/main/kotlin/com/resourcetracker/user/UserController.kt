@@ -79,12 +79,14 @@ class UserController(private val users: UserService) {
     @Operation(summary = "Resend password setup link", description = "Replaces the unused setup token and emails a new setup link.")
     @ApiResponses(
         value = [
-            ApiResponse(responseCode = "200", description = "Password setup link queued"),
-            ApiResponse(responseCode = "404", description = "User not found"),
-            ApiResponse(responseCode = "409", description = "Password setup is complete or the user is inactive"),
+            ApiResponse(responseCode = "200", description = "New password setup link sent", content = [Content(schema = Schema(implementation = UserResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "404", description = "User not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "409", description = "Password setup is complete or the user is inactive", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
-    fun resendSetup(@PathVariable @Min(1) id: Int): UserResponse = users.resendSetup(id)
+    fun resendSetup(@Parameter(description = "User ID", example = "42") @PathVariable @Min(1) id: Int): UserResponse = users.resendSetup(id)
 
     @PutMapping("/{id}")
     @Operation(
@@ -160,7 +162,7 @@ class UserController(private val users: UserService) {
     )
     fun list(
         @Parameter(description = "Search username, email, or full name", example = "jane")
-        @RequestParam(required = false) search: String?,
+            @RequestParam(required = false) search: String?,
         @Parameter(description = "Zero-based page number", example = "0")
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @Parameter(description = "Page size, from 1 to 100", example = "20")

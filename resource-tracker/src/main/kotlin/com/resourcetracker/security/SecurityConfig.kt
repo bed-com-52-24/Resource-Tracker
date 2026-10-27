@@ -66,11 +66,6 @@ class SecurityConfig {
                 "/api/v1/auth/forgot-password", "/api/v1/health", "/error",
                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
             ).permitAll()
-                .requestMatchers(
-                    "/api/v1/departments/**",
-                    "/api/v1/vendors/**",
-                    "/api/v1/projects/**",
-                ).hasRole("ADMIN")
                 .anyRequest().authenticated()
         }
         .addFilterBefore(

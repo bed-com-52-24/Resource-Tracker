@@ -6,6 +6,7 @@ import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.common.BusinessRuleException
+import com.resourcetracker.common.BadRequestException
 import com.resourcetracker.request.service.StockAvailabilityService
 import com.resourcetracker.request.repository.StockMovementRepository
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -101,7 +102,7 @@ class ResourceServiceTest {
 
     @Test
     fun `internal create requires quantity`() {
-        assertThrows(BusinessRuleException::class.java) {
+        assertThrows(BadRequestException::class.java) {
             service.create(internalRequest(null), 1)
         }
     }
@@ -116,7 +117,7 @@ class ResourceServiceTest {
             quantity = 1,
         )
 
-        assertThrows(BusinessRuleException::class.java) {
+        assertThrows(BadRequestException::class.java) {
             service.create(request, 1)
         }
     }

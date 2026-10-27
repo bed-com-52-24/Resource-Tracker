@@ -1,0 +1,398 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassNaming:Rbac.kt:webConfig : WebMvcConfigurer</ID>
+    <ID>ClassNaming:V21__integer_ids.kt:V21__integer_ids : BaseJavaMigration</ID>
+    <ID>ComplexCondition:NotificationService.kt:NotificationService$(hasIds &amp;&amp; request.all) || (!hasIds &amp;&amp; !request.all) || request.ids?.isEmpty() == true</ID>
+    <ID>CyclomaticComplexMethod:ListQuery.kt:ListQuery.Companion$fun parse: ListQuery</ID>
+    <ID>CyclomaticComplexMethod:NotificationService.kt:NotificationService$private fun buildMessage: String</ID>
+    <ID>CyclomaticComplexMethod:ReservationService.kt:ReservationService$@Transactional fun reserve: ReservationResponse</ID>
+    <ID>CyclomaticComplexMethod:ResourceRequestService.kt:ResourceRequestService$@Transactional fun adjustApprovedQuantity: ResourceRequestResponseDto</ID>
+    <ID>CyclomaticComplexMethod:ResourceRequestService.kt:ResourceRequestService$@Transactional fun createRequest: ResourceRequestResponseDto</ID>
+    <ID>CyclomaticComplexMethod:ResourceRequestService.kt:ResourceRequestService$@Transactional fun decide: ResourceRequestResponseDto</ID>
+    <ID>CyclomaticComplexMethod:ResourceRequestService.kt:ResourceRequestService$@Transactional fun updateRequest: ResourceRequestResponseDto</ID>
+    <ID>CyclomaticComplexMethod:ResourceRequestService.kt:ResourceRequestService$@Transactional(readOnly = true) fun list: Page&lt;ResourceRequestResponseDto&gt;</ID>
+    <ID>CyclomaticComplexMethod:ResourceRequestService.kt:ResourceRequestService$private fun normalizeLines: List&lt;NormalizedLine&gt;</ID>
+    <ID>CyclomaticComplexMethod:StockOperationsService.kt:StockOperationsService$@Transactional fun issue: StockIssueResponse</ID>
+    <ID>CyclomaticComplexMethod:StockOperationsService.kt:StockOperationsService$@Transactional fun verifyReturn: StockReturn</ID>
+    <ID>EmptyKotlinFile:RequestHistoryDto.kt:.RequestHistoryDto.kt</ID>
+    <ID>EmptyKotlinFile:RequestLineItemValidator.kt:.RequestLineItemValidator.kt</ID>
+    <ID>EmptyKotlinFile:RequestSequenceRepository.kt:.RequestSequenceRepository.kt</ID>
+    <ID>EmptyKotlinFile:RequestSummaryDto.kt:.RequestSummaryDto.kt</ID>
+    <ID>FunctionNaming:User.kt:UserRepository$fun findDistinctByTeams_Id: Page&lt;User&gt;</ID>
+    <ID>FunctionOnlyReturningConstant:ProjectService.kt:ProjectService$private fun hasActiveRequests: Boolean</ID>
+    <ID>LongMethod:ResourceAccessControlIT.kt:ResourceAccessControlIT$@Test fun `resource visibility and stock changes follow role and department scope`</ID>
+    <ID>LongMethod:ResourceRequestService.kt:ResourceRequestService$@Transactional fun createRequest: ResourceRequestResponseDto</ID>
+    <ID>LoopWithTooManyJumpStatements:ListQuery.kt:ListQuery.Companion$for</ID>
+    <ID>MagicNumber:DepartmentService.kt:DepartmentService$200</ID>
+    <ID>MagicNumber:Errors.kt:GlobalExceptionHandler$400</ID>
+    <ID>MagicNumber:Errors.kt:GlobalExceptionHandler$409</ID>
+    <ID>MagicNumber:ListQuery.kt:ListQuery.Companion$10</ID>
+    <ID>MagicNumber:ListQuery.kt:ListQuery.Companion$3</ID>
+    <ID>MagicNumber:PasswordTokenService.kt:PasswordTokenService$10</ID>
+    <ID>MagicNumber:ProcurementService.kt:ProcurementService$200</ID>
+    <ID>MagicNumber:ProjectController.kt:ProjectController$400</ID>
+    <ID>MagicNumber:ProjectService.kt:ProjectService$100</ID>
+    <ID>MagicNumber:ProjectService.kt:ProjectService$200</ID>
+    <ID>MagicNumber:RequestNumberService.kt:RequestNumberService$6</ID>
+    <ID>MagicNumber:RequestNumberService.kt:RequestNumberService$999999</ID>
+    <ID>MagicNumber:ResourceRequestService.kt:ResourceRequestService$0xff</ID>
+    <ID>MagicNumber:ResourceRequestService.kt:ResourceRequestService$100000</ID>
+    <ID>MagicNumber:ResourceRequestService.kt:ResourceRequestService$120</ID>
+    <ID>MagicNumber:ResourceRequestService.kt:ResourceRequestService$255</ID>
+    <ID>MagicNumber:ResourceRequestService.kt:ResourceRequestService$32</ID>
+    <ID>MagicNumber:ResourceRequestService.kt:ResourceRequestService$50</ID>
+    <ID>MagicNumber:ResourceService.kt:ResourceService$200</ID>
+    <ID>MagicNumber:SecurityConfig.kt:JwtAuthenticationFilter$7</ID>
+    <ID>MagicNumber:SecurityConfig.kt:RestAuthenticationEntryPoint$401</ID>
+    <ID>MagicNumber:SecurityConfig.kt:SecurityConfig$12</ID>
+    <ID>MagicNumber:SecurityProps.kt:SecurityProps$15</ID>
+    <ID>MagicNumber:SecurityProps.kt:SecurityProps$30</ID>
+    <ID>MagicNumber:SecurityProps.kt:SecurityProps$7</ID>
+    <ID>MagicNumber:TeamService.kt:TeamService$100</ID>
+    <ID>MagicNumber:TeamService.kt:TeamService$200</ID>
+    <ID>MagicNumber:VendorService.kt:VendorService$200</ID>
+    <ID>MatchingDeclarationName:AdminController.kt:HealthController</ID>
+    <ID>MatchingDeclarationName:TeamErrors.kt:InvalidTeamRequestException : ApiException</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$@Operation(summary = "Get current profile", description = "Return the profile associated with the authenticated access token.", security = [SecurityRequirement(name = "bearerAuth")])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$@Operation(summary = "Log in", description = "Authenticate with username and password. Returns token data only; retrieve the user profile from GET /api/v1/auth/me.")</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$@Operation(summary = "Log out", description = "Revoke the supplied refresh token and current access token.", security = [SecurityRequirement(name = "bearerAuth")])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$@Operation(summary = "Refresh tokens", description = "Rotate a valid refresh token and return a new access token and refresh token.")</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$@Operation(summary = "Request a password reset", description = "Always returns the same response to protect account privacy.")</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$@Operation(summary = "Set or reset a password", description = "Consumes a single-use 8-digit password setup or reset code.")</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "200", description = "Current profile", content = [Content(schema = Schema(implementation = ProfileResponse::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "200", description = "Login successful", content = [Content(schema = Schema(implementation = TokenPair::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "200", description = "Tokens rotated", content = [Content(schema = Schema(implementation = TokenPair::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "401", description = "Invalid credentials", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "401", description = "Refresh token invalid or expired", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$ApiResponse(responseCode = "423", description = "Account temporarily locked", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:AuthController.kt:AuthController$fun</ID>
+    <ID>MaxLineLength:AuthController.kt:LoginRequest$@field:NotBlank @field:Size(max = 50) @field:Schema(description = "Account username", example = "admin") val username: String</ID>
+    <ID>MaxLineLength:AuthController.kt:LoginRequest$@field:NotBlank @field:Size(max = 72) @field:Schema(description = "Account password", example = "Admin@2026", format = "password") val password: String</ID>
+    <ID>MaxLineLength:AuthController.kt:LogoutRequest$data</ID>
+    <ID>MaxLineLength:AuthController.kt:RefreshRequest$data</ID>
+    <ID>MaxLineLength:AuthService.kt:AuthService$private</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$@</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$@Operation(summary = "List departments", description = "Returns a paginated department list. Search matches department names; active status is an optional filter. Page size is capped at 100.")</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$@Parameter(description = "Filter by active state. Omit to return both active and inactive departments.", example = "true")</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(implementation = DepartmentResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "200", description = "Department updated", content = [Content(schema = Schema(implementation = DepartmentResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "201", description = "Department created", content = [Content(schema = Schema(implementation = DepartmentResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "404", description = "Department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "409", description = "A department with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:DepartmentController.kt:DepartmentController$ApiResponse(responseCode = "409", description = "Name already exists, or department is in use and cannot be deactivated", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:Errors.kt:GlobalExceptionHandler$ErrorResponse(409, "CONCURRENT_MODIFICATION", "This record changed while you were acting. Reload and try again.")</ID>
+    <ID>MaxLineLength:Errors.kt:InvalidRefreshTokenException$ApiException(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", "Refresh token is invalid refresh token, expired or already used")</ID>
+    <ID>MaxLineLength:ListQuery.kt:ListQuery.Companion$"At most 3 sort fields are allowed. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"</ID>
+    <ID>MaxLineLength:ListQuery.kt:ListQuery.Companion$"Invalid sort field '$field'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"</ID>
+    <ID>MaxLineLength:ListQuery.kt:ListQuery.Companion$"Invalid sort field '${parts[0].trim()}'. Allowed sort fields: ${supportedSortFields.sorted().joinToString()}"</ID>
+    <ID>MaxLineLength:ListQuery.kt:ListQuery.Companion$(key.endsWith("Id", ignoreCase = true) || key.equals("id", ignoreCase = true)) &amp;&amp; value.toIntOrNull() == null</ID>
+    <ID>MaxLineLength:ListQuery.kt:ListQuery.Companion$throw IllegalArgumentException("Invalid filter '$key': value '$value' must be either true or false")</ID>
+    <ID>MaxLineLength:ListQuery.kt:ListQuery.Companion$throw IllegalArgumentException("Invalid filter 'keyword': keyword must be 200 characters or less")</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$@Operation(summary = "Get unread notification count", description = "Returns the number of unread notifications for the current user.")</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$@Operation(summary = "List notifications for the current user", description = "Returns notifications owned by the authenticated user.")</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$@Operation(summary = "Update notification status", description = "Set status on selected notification ids or all notifications owned by the current user.")</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$ApiResponse(responseCode = "200", description = "Notification read state updated", content = [Content(schema = Schema(implementation = NotificationUpdateResponse::class))])</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$ApiResponse(responseCode = "200", description = "Notifications returned", content = [Content(schema = Schema(implementation = NotificationResponse::class))])</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$ApiResponse(responseCode = "200", description = "Unread count returned", content = [Content(schema = Schema(implementation = NotificationCountResponse::class))])</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$ApiResponse(responseCode = "400", description = "Provide either non-empty ids or all=true", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:NotificationController.kt:NotificationController$fun</ID>
+    <ID>MaxLineLength:NotificationService.kt:NotificationService$NotificationType.OVERDUE_RETURN -&gt; "An overdue return needs attention${if (resource != null) " for $resource" else ""}."</ID>
+    <ID>MaxLineLength:NotificationService.kt:NotificationService$NotificationType.PROCUREMENT -&gt; "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."</ID>
+    <ID>MaxLineLength:NotificationServiceTest.kt:NotificationServiceTest$`when`(repository.findByRecipientIdOrderByCreatedAtDesc(1, Pageable.unpaged())).thenReturn(PageImpl(listOf(item)))</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$history.save(RequestHistory(requestId = request.requestId!!, eventType = "PROCUREMENT_${dto.status.name}", fromStatus = from.name, toStatus = dto.status.name, actorId = actor.id, lineItemId = procurement.lineItemId, quantity = procurement.receivedQuantity))</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$history.save(RequestHistory(requestId = request.requestId!!, eventType = "PROCUREMENT_AUTHORIZED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actorId, lineItemId = line.lineItemId, quantity = quantity, comment = "Procurement ${procurement.id} authorized"))</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$if (!valid) throw ResponseStatusException(HttpStatus.CONFLICT, "Invalid procurement transition ${procurement.status} -&gt; ${dto.status}")</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$if (quantity !in 1..(line.approvedQuantity ?: line.quantity)) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity exceeds authorized quantity")</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$notifications.notify(listOf(request.requesterId), NotificationType.PROCUREMENT, mapOf("requestId" to request.requestId!!))</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$private fun Procurement.toResponse</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$val actor = users.findById(actorId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "User not found") }</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$val line = lines.findById(procurement.lineItemId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Procurement line not found") }</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$val procurement = procurements.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Procurement not found") }</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$val quantity = dto.receivedQuantity ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity is required")</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$val request = requests.findById(procurement.requestId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found") }</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService$val vendorId = request.vendorId ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")</ID>
+    <ID>MaxLineLength:ProcurementService.kt:ProcurementService.Companion$private val SORT_FIELDS = setOf("id", "requestId", "lineItemId", "vendorId", "estimatedCost", "expectedDelivery", "status", "receivedQuantity")</ID>
+    <ID>MaxLineLength:ProjectController.kt:ProjectController$@Parameter(description = "Filter by active state. Omit to return both active and inactive projects.", example = "true")</ID>
+    <ID>MaxLineLength:ProjectController.kt:ProjectController$description</ID>
+    <ID>MaxLineLength:ProjectController.kt:ProjectController$description = "Lists all projects by default. Optionally filters by department, active status, dates, or search text. Sorting uses one field and direction."</ID>
+    <ID>MaxLineLength:ProjectController.kt:ProjectController$description = "Name or code already exists, or project has active resource requests and cannot be deactivated"</ID>
+    <ID>MaxLineLength:ProjectDtos.kt:UpdateProjectRequest$@field:Schema(description = "Set to false to deactivate the project, true to reactivate it. Omit to leave unchanged.",nullable = true)</ID>
+    <ID>MaxLineLength:RequestTransitionsTest.kt:RequestTransitionsTest$Triple(RequestStatus.PENDING, RequestAction.APPROVE, RequestActor.ASSIGNED_MANAGER) to RequestStatus.APPROVED</ID>
+    <ID>MaxLineLength:RequestTransitionsTest.kt:RequestTransitionsTest$Triple(RequestStatus.PENDING, RequestAction.REJECT, RequestActor.ASSIGNED_MANAGER) to RequestStatus.REJECTED</ID>
+    <ID>MaxLineLength:RequestTransitionsTest.kt:RequestTransitionsTest$Triple(RequestStatus.QUERIED, RequestAction.REJECT, RequestActor.ASSIGNED_MANAGER) to RequestStatus.REJECTED</ID>
+    <ID>MaxLineLength:RequestTransitionsTest.kt:RequestTransitionsTest$assertEquals(RequestStatus.PENDING, RequestTransitions.initialTarget(RequestAction.SUBMIT, RequestActor.TEAM_LEAD))</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationResponse</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$history.save(RequestHistory(requestId = requestId, eventType = "RELEASED", actorId = actorId, lineItemId = lineItemId, quantity = released, comment = reason))</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$history.save(RequestHistory(requestId = requestId, eventType = "RELEASED", actorId = actorId, lineItemId = reservation.lineItemId, quantity = reservation.quantity, comment = reservation.closeReason))</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$history.save(RequestHistory(requestId = requestId, eventType = "RESERVED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = command.lineItemId, quantity = command.quantity))</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$if (command.quantity &gt; approved - lineReserved - alreadyIssued) conflict("Reservation exceeds approved quantity remaining")</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$if (line.fulfillmentPreference != FulfillmentPreference.INTERNAL.name || line.resourceId == null) badRequest("Only internal resource lines can be reserved")</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$if (resource.type != ResourceType.INTERNAL || !resource.active) conflict("Resource is unavailable for reservation")</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$private fun forbidden: Nothing</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$return ReservationResponse(saved.id, saved.resourceId, saved.requestId, saved.lineItemId, saved.quantity, saved.status)</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$val active = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, lineItemId, ReservationStatus.ACTIVE)</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$val alreadyIssued = issues.findByRequestIdAndLineItemIdForUpdate(requestId, command.lineItemId).sumOf { it.quantity }</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$val lineReserved = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, line.lineItemId!!, ReservationStatus.ACTIVE).sumOf { it.quantity }</ID>
+    <ID>MaxLineLength:ReservationService.kt:ReservationService$val saved = reservations.save(StockReservation(resourceId = resource.id, requestId = requestId, lineItemId = command.lineItemId, teamId = request.teamId, quantity = command.quantity, createdBy = actor.id))</ID>
+    <ID>MaxLineLength:ResourceAccessControlIT.kt:ResourceAccessControlIT$val foreignResource = resources.saveAndFlush(TestDataBuilders.internalResource("FIN-TEST-1", "Finance printer", finance, 6))</ID>
+    <ID>MaxLineLength:ResourceAccessControlIT.kt:ResourceAccessControlIT$val sharedExternal = resources.saveAndFlush(TestDataBuilders.externalResource("EXT-TEST-1", "Design software license"))</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Operation(summary = "Correct resource stock", description = "Sets the resource quantity to the supplied value and records the reason.")</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Operation(summary = "Create a resource", description = "Creates a new active resource. INTERNAL resources require the caller's departmentId and quantity and cannot have a preferred vendor. EXTERNAL resources are shared catalog entries and cannot have departmentId or quantity.")</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Operation(summary = "Get a resource", description = "Returns one resource, including its stock, availability, department, and preferred vendor identifiers.")</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Operation(summary = "Update a resource", description = "Updates an internal resource in the caller's department or a shared EXTERNAL catalog entry. Set active to true or false to change its state; omit it to leave the state unchanged.")</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Parameter(description = "Filter by inventory status (internal resources)") @RequestParam(required = false) status: ResourceStatus?</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Parameter(description = "Filter by resource type: INTERNAL or EXTERNAL") @RequestParam(required = false) type: ResourceType?</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Parameter(description = "Only return resources with available quantity greater than zero", example = "false") @RequestParam(defaultValue = "false") availableOnly: Boolean</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$@Parameter(description = "Sort field: name, code, type, category, active, createdAt, quantity, or status", example = "name")</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "200", description = "Resource returned", content = [Content(schema = Schema(implementation = ResourceResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "200", description = "Resource updated", content = [Content(schema = Schema(implementation = ResourceResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "200", description = "Stock corrected", content = [Content(schema = Schema(implementation = StockCorrectionResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "201", description = "Resource created", content = [Content(schema = Schema(implementation = ResourceResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "400", description = "Invalid quantity or reason", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "403", description = "The caller's role does not permit resource access", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "404", description = "Department or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "404", description = "Resource, department, or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "409", description = "Generated resource code conflicts with an existing resource", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "409", description = "Resource type cannot change or physical stock was included in the update", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$ApiResponse(responseCode = "409", description = "Stock correction is not allowed", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$description = "Returns a paginated resource list. Department managers and team leads see internal resources from their own department plus shared external resources; managing directors have read-only access across departments. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController$val movement = stockOperations.correctResource(id, caller.id, StockCorrectionRequest(request.newQuantity, request.reason))</ID>
+    <ID>MaxLineLength:ResourceController.kt:ResourceController.Companion$private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")</ID>
+    <ID>MaxLineLength:ResourceDtos.kt:CreateResourceRequest$allowableValues = ["unit", "dozen", "pair", "set", "pack", "box", "bottle", "cartridge", "roll", "ream", "gram", "kilogram", "milliliter", "liter", "meter", "centimeter", "license", "user", "seat", "month", "day"]</ID>
+    <ID>MaxLineLength:ResourceDtos.kt:CreateResourceRequest$description = "Unit label. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day)."</ID>
+    <ID>MaxLineLength:ResourceDtos.kt:UpdateResourceRequest$allowableValues = ["unit", "dozen", "pair", "set", "pack", "box", "bottle", "cartridge", "roll", "ream", "gram", "kilogram", "milliliter", "liter", "meter", "centimeter", "license", "user", "seat", "month", "day"]</ID>
+    <ID>MaxLineLength:ResourceDtos.kt:UpdateResourceRequest$description = "Unit label. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day)."</ID>
+    <ID>MaxLineLength:ResourceRequestController.kt:ResourceRequestController$@Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")</ID>
+    <ID>MaxLineLength:ResourceRequestController.kt:ResourceRequestController$@Parameter(description = "Sort field: createdAt, requestNumber, status, requiredDate, or totalAmount", example = "createdAt")</ID>
+    <ID>MaxLineLength:ResourceRequestController.kt:ResourceRequestController$@Parameter(description = "Sort field: id, requestId, lineItemId, vendorId, estimatedCost, expectedDelivery, status, or receivedQuantity", example = "id")</ID>
+    <ID>MaxLineLength:ResourceRequestController.kt:ResourceRequestController$ApiResponse(responseCode = "400", description = "Invalid references or request data", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceRequestController.kt:ResourceRequestController$ApiResponse(responseCode = "403", description = "Team Lead role or team membership required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:ResourceRequestController.kt:ResourceRequestController$description = "Submit a request for internal stock or external procurement. Department, requester and manager are derived from the authenticated user and selected team."</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$NormalizedLine(dto, resource, preference, description, resource?.let { "N/A" } ?: dto.manufacturer.ifBlank { "N/A" }, dto.unitPrice, dto.unitOfMeasure ?: resource?.unitOfMeasure)</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$RequestHistoryResponseDto(it.id, it.requestId, it.eventType, it.fromStatus, it.toStatus, it.actorId, it.lineItemId, it.quantity, it.comment, it.createdAt)</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$conflict("Insufficient available stock; available ${availability.availableQuantity(resource, lockReservations = true)}")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$fun</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = id, eventType = "ASSIGNED", toStatus = RequestStatus.PENDING.name, actorId = caller.id, comment = reason))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = id, eventType = "SUBMITTED", toStatus = RequestStatus.PENDING.name, actorId = caller.id, comment = dto.justification.trim()))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = requestId, eventType = "QUANTITY_ADJUSTED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineId, quantity = approved, comment = "Requested ${line.quantity}; approved $approved. $comment"))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = requestId, eventType = "QUANTITY_ADJUSTED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineItemId, quantity = dto.quantity, comment = "Approved quantity changed from $previous to ${dto.quantity}. ${dto.reason}"))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = requestId, eventType = "REASSIGNED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, comment = "Manager changed from ${oldManager ?: "unassigned"} to ${manager.id}"))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = requestId, eventType = if (target == RequestStatus.PENDING) "CLARIFIED" else "CANCELLED", fromStatus = from.name, toStatus = target.name, actorId = caller.id, comment = comment))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$historyRepository.save(RequestHistory(requestId = requestId, eventType = target.name, fromStatus = from.name, toStatus = target.name, actorId = caller.id, comment = comment))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (!manager.active || manager.role != Role.DEPARTMENT_MANAGER || manager.department.id != request.departmentId) badRequest("Manager must be active and belong to the request department")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (!project.active || team.projects.none { it.id == project.id }) badRequest("Project is not active or assigned to the team")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if ((dto.decision == Decision.QUERY || dto.decision == Decision.REJECT) &amp;&amp; comment == null) badRequest("A comment is required")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (approved !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (description.length &gt; 255 || dto.manufacturer.length &gt; 120 || (dto.unitOfMeasure?.length ?: 0) &gt; 50) badRequest("Line ${index + 1}: text fields exceed their maximum length")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (dto.approvedQuantities.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (dto.category != RequestCategory.CONSUMABLE &amp;&amp; dto.batchNumber != null) badRequest("Line ${index + 1}: batch number is only valid for consumables")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (dto.category == RequestCategory.CONSUMABLE &amp;&amp; dto.batchNumber.isNullOrBlank()) badRequest("Line ${index + 1}: batch number is required for consumables")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (dto.quantity &lt; previous) reservations.releaseExcessForLine(requestId, lineItemId, dto.quantity, caller.id, dto.reason)</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (dto.unitPrice &lt; BigDecimal.ZERO || dto.unitPrice.scale() &gt; 2) badRequest("Line ${index + 1}: invalid unit price")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (lines.any { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name } &amp;&amp; request.vendorId == null) add("vendorId")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (preference == FulfillmentPreference.EXTERNAL &amp;&amp; dto.unitPrice &lt;= BigDecimal.ZERO) badRequest("Line ${index + 1}: external unit price must be positive")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (preference == FulfillmentPreference.EXTERNAL &amp;&amp; vendorId == null) badRequest("vendorId is required for external lines")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (request.status != RequestStatus.APPROVED) conflict("Approved quantities can only change on approved requests")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$if (resource?.type == ResourceType.INTERNAL &amp;&amp; approved &gt; availability.availableQuantity(resource, lockReservations = true)) conflict("Insufficient stock for line item $lineId; available ${availability.availableQuantity(resource, lockReservations = true)}")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$justification = justification</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$lineItemRepository.saveAll(normalized.map { line -&gt; ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, unitOfMeasure = line.unitOfMeasure) })</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$notifications.notify((listOfNotNull(oldManager) + manager.id).distinct(), NotificationType.REASSIGNED, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$notifications.notify(listOf(managerId), NotificationType.SUBMITTED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$notifications.notify(listOf(managerId), if (target == RequestStatus.PENDING) NotificationType.RESUBMITTED else NotificationType.CANCELLED, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$notifications.notify(listOf(request.requesterId), notification, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$notifications.notify(users.findActiveByRole(Role.ADMIN).map { it.id }, NotificationType.REASSIGNMENT_REQUIRED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber, "message" to reason))</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$private</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$private fun forbidden: Nothing</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$private fun uniqueKey: String</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$return request.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = caller.role != Role.TEAM_LEAD)</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$return requestRepository.findAll(spec, pageable).map { request -&gt; request.toResponse(lineItemRepository.findAllByRequestId(requireNotNull(request.requestId)), includeStock = caller.role != Role.TEAM_LEAD) }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$return saved.toResponse(lineEntities, lowStock.map { "${it.description}: requested ${it.dto.quantity}, physical stock ${it.resource?.quantity ?: 0}" })</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$search?.trim()?.takeIf(String::isNotEmpty)?.let { predicates += cb.like(cb.lower(root.get("requestNumber")), "%${it.lowercase()}%") }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val line = lineItemRepository.findById(lineItemId).orElseThrow { ResourceNotFoundException("Line item not found") }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val lowStock = normalized.filter { it.resource?.type == ResourceType.INTERNAL &amp;&amp; it.dto.quantity &gt; availability.availableQuantity(it.resource) }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val reason = if (managers.isEmpty()) "No active Department Manager exists for department ${team.department.id}." else "Multiple active Department Managers exist for department ${team.department.id}."</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val request = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val request = requestRepository.findForUpdateById(requestId) ?: throw ResourceNotFoundException("Request not found")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val resource = dto.resourceId?.let { resources.findById(it).orElseThrow { badRequest("Line ${index + 1}: resource not found") } }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val resource = line.resourceId?.let { resources.findForUpdateById(it) ?: conflict("Resource for line item $lineId no longer exists") }</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val resource = resources.findForUpdateById(line.resourceId!!) ?: throw ResourceNotFoundException("Resource not found")</ID>
+    <ID>MaxLineLength:ResourceRequestService.kt:ResourceRequestService$val total = normalized.fold(BigDecimal.ZERO) { sum, line -&gt; sum + line.unitPrice.multiply(BigDecimal.valueOf(line.dto.quantity.toLong())) }</ID>
+    <ID>MaxLineLength:ResourceRequestWorkflowServiceTest.kt:ResourceRequestWorkflowServiceTest$invocation.getArgument&lt;Iterable&lt;ResourceRequestLineItem&gt;&gt;(0).toList().onEachIndexed { index, line -&gt; line.lineItemId = index + 1 }</ID>
+    <ID>MaxLineLength:ResourceRequestWorkflowServiceTest.kt:ResourceRequestWorkflowServiceTest$service().decide(101, manager, com.resourcetracker.request.dto.RequestDecisionDto(com.resourcetracker.request.dto.Decision.APPROVE))</ID>
+    <ID>MaxLineLength:ResourceRequestWorkflowServiceTest.kt:ResourceRequestWorkflowServiceTest$service().decide(101, otherManager, com.resourcetracker.request.dto.RequestDecisionDto(com.resourcetracker.request.dto.Decision.APPROVE))</ID>
+    <ID>MaxLineLength:ResourceRequestWorkflowServiceTest.kt:ResourceRequestWorkflowServiceTest$val foreignProject = Project(id = 13, name = "Budget", code = "BUD-1", department = otherDepartment, startDate = LocalDate.now(clock))</ID>
+    <ID>MaxLineLength:ResourceRequestWorkflowServiceTest.kt:ResourceRequestWorkflowServiceTest$val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this, knownReservedQuantity = reserved) else null</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$if</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$movements.save(StockMovement(resourceId = saved.id, type = MovementType.OPENING, quantity = saved.quantity!!, actorId = actorId, reason = "Initial stock on resource creation"))</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$private</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$return PageImpl(selected.map { (resource, reserved) -&gt; resource.toResponse(reserved) }, pageable, availableCount)</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$val reservedById = availability.reservedQuantities(page.content.filter { it.type == ResourceType.INTERNAL }.map { it.id })</ID>
+    <ID>MaxLineLength:ResourceService.kt:ResourceService$val specification = ResourceSpecifications.filter(active, type, category, status, departmentId, keyword, scopeDepartmentId)</ID>
+    <ID>MaxLineLength:ResourceServiceTest.kt:ResourceServiceTest$`when`(departments.findById(1)).thenReturn(Optional.of(mock(com.resourcetracker.department.Department::class.java)))</ID>
+    <ID>MaxLineLength:ResourceType.kt:ResourceType$@Schema(description = "Resource ownership type. INTERNAL resources are tracked in inventory; EXTERNAL resources are not.")</ID>
+    <ID>MaxLineLength:ResourceType.kt:ResourceUnits$"Unit of measure '$unit' is not allowed for category $category. Allowed units: ${byCategory[category]?.sorted()?.joinToString()}."</ID>
+    <ID>MaxLineLength:StockAvailabilityService.kt:StockAvailabilityService$else</ID>
+    <ID>MaxLineLength:StockAvailabilityService.kt:StockAvailabilityService$if</ID>
+    <ID>MaxLineLength:StockEntities.kt:Procurement$@Enumerated(EnumType.STRING) @Column(nullable = false, length = 12) var status: ProcurementStatus = ProcurementStatus.AUTHORISED</ID>
+    <ID>MaxLineLength:StockEntities.kt:StockIssue$@Column(name = "issued_at", nullable = false, insertable = false, updatable = false) var issuedAt: LocalDateTime? = null</ID>
+    <ID>MaxLineLength:StockEntities.kt:StockMovement$@Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null</ID>
+    <ID>MaxLineLength:StockEntities.kt:StockReservation$@Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null</ID>
+    <ID>MaxLineLength:StockEntities.kt:StockReservation$@Enumerated(EnumType.STRING) @Column(nullable = false, length = 10) var status: ReservationStatus = ReservationStatus.ACTIVE</ID>
+    <ID>MaxLineLength:StockEntities.kt:StockReturn$@Column(name = "returned_at", nullable = false, insertable = false, updatable = false) var returnedAt: LocalDateTime? = null</ID>
+    <ID>MaxLineLength:StockEntities.kt:StockReturn$@Enumerated(EnumType.STRING) @Column(name = "condition_reported", length = 12) var condition: ReturnCondition? = null</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockIssueResponse</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$history.save(RequestHistory(requestId = issue.requestId, eventType = "RETURN_REQUESTED", actorId = actor.id, lineItemId = issue.lineItemId, quantity = dto.quantity, comment = dto.note))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$history.save(RequestHistory(requestId = request.requestId!!, eventType = "RETURNED", actorId = actor.id, lineItemId = issue.lineItemId, quantity = quantity, comment = "${dto.condition}: ${dto.note.orEmpty()}"))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$if (dto.newQuantity &lt; 0 || dto.reason.isBlank()) badRequest("newQuantity must be non-negative and reason is required")</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$if (dto.newQuantity &lt; minimum) conflict("Correction cannot reduce stock below reserved and unavailable quantity ($minimum)")</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$if (dto.quantity &gt; issue.quantity - issue.returnedQuantity - pending) conflict("Return exceeds unreturned issued quantity")</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$if (line.fulfillmentPreference != FulfillmentPreference.INTERNAL.name || line.resourceId == null) badRequest("Only internal resource lines can be issued")</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$if (quantity !in 1..requestedQuantity) badRequest("Verified quantity must be between 1 and requested return quantity")</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$movements.save(StockMovement(resourceId = resource.id, type = MovementType.RETURN_UNAVAILABLE, quantity = quantity, requestId = request.requestId, issueId = issue.id, returnId = saved.id, actorId = actor.id, reason = dto.note ?: dto.condition.name))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$movements.save(StockMovement(resourceId = resource.id, type = MovementType.RETURN_USABLE, quantity = quantity, requestId = request.requestId, issueId = issue.id, returnId = saved.id, actorId = actor.id, reason = dto.note))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity)</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$returns.save(StockReturn(issueId = issue.id, quantity = requestedQuantity - quantity, returnedBy = stockReturn.returnedBy, note = stockReturn.note))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$val activeReservations = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, dto.lineItemId, ReservationStatus.ACTIVE)</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$val created = returns.save(StockReturn(issueId = issueId, quantity = dto.quantity, returnedBy = actor.id, note = dto.note))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$val issue = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id))</ID>
+    <ID>MaxLineLength:StockOperationsService.kt:StockOperationsService$val movement = movements.save(StockMovement(resourceId = resource.id, type = MovementType.CORRECTION, quantity = difference, actorId = actor.id, reason = dto.reason.trim()))</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockIssueRepository$@Query("select coalesce(sum(i.quantity - i.returnedQuantity), 0) from StockIssue i where i.lineItemId = :lineItemId")</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockIssueRepository$fun</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockReservationRepository$@Query("select coalesce(sum(r.quantity), 0) from StockReservation r where r.resourceId = :resourceId and r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE")</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockReservationRepository$@Query("select r from StockReservation r where r.requestId = :requestId and r.lineItemId = :lineItemId and r.status = :status")</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockReservationRepository$fun</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockReservationRepository$fun findAllByRequestIdAndLineItemIdAndStatus: List&lt;StockReservation&gt;</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockReturnRepository$@Query("select coalesce(sum(r.quantity), 0) from StockReturn r where r.issueId = :issueId and r.status = com.resourcetracker.request.entity.ReturnStatus.PENDING")</ID>
+    <ID>MaxLineLength:StockRepositories.kt:StockReturnRepository$fun</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$@Operation(summary = "Add members to a team", description = "Admin only. Adds existing active users to the given team.")</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$@Operation(summary = "Create a team", description = "Department manager only. Returns 201, 400, 401, 403, 404 or 409.")</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$@Operation(summary = "List team members", description = "Admin only. Returns a paginated list of team members with optional filters.")</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$@Operation(summary = "Remove a member from a team", description = "Admin only. Removes a user from the team and records the removal event.")</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$@Operation(summary = "Transfer a team member", description = "Admin only. Moves a member from one team to another and records a history row.")</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$@Parameter(description = "Filter by active state. Omit to return both active and inactive teams.", example = "true")</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$description</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$description = "Any authenticated user. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."</ID>
+    <ID>MaxLineLength:TeamController.kt:TeamController$fun</ID>
+    <ID>MaxLineLength:TeamMemberHistory.kt:TeamMemberHistoryRepository$"select h from TeamMemberHistory h where h.toTeam.id = :teamId or h.fromTeam.id = :teamId order by h.createdAt desc"</ID>
+    <ID>MaxLineLength:TeamMemberSpecifications.kt:TeamMemberSpecifications$fun</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$// Only newly added projects must be active, so a team can still be edited or deactivated after one of its existing projects was deactivated.</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$if (found.any { !it.active }) throw InvalidTeamRequestException("Inactive projects cannot be assigned to a team")</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$if (user.role == Role.MEMBER &amp;&amp; user.teams.size &lt;= 1) throw BusinessRuleException("MEMBER users must retain at least one team")</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$if (user.teams.any { it.id == toTeamId }) throw BusinessRuleException("User is already a member of the target team")</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$memberHistory.save(TeamMemberHistory(user = user, fromTeam = null, toTeam = team, action = TeamMemberAction.ADDED, performedBy = actor))</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$memberHistory.save(TeamMemberHistory(user = user, fromTeam = source, toTeam = target, action = TeamMemberAction.TRANSFERRED, performedBy = actor))</ID>
+    <ID>MaxLineLength:TeamService.kt:TeamService$memberHistory.save(TeamMemberHistory(user = user, fromTeam = team, toTeam = null, action = TeamMemberAction.REMOVED, performedBy = actor))</ID>
+    <ID>MaxLineLength:UpdateResourceRequestDto.kt:ApprovedQuantityUpdateRequest$@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1000) val reason: String</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$"Team IDs are required for MEMBER and TEAM_LEAD users, and optional for ADMIN and DEPARTMENT_MANAGER users. "</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$@Operation(summary = "Resend password setup link", description = "Replaces the unused setup token and emails a new setup link.")</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$ApiResponse(responseCode = "200", description = "New password setup link sent", content = [Content(schema = Schema(implementation = UserResponse::class))])</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$ApiResponse(responseCode = "404", description = "User not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$ApiResponse(responseCode = "409", description = "Password setup is complete or the user is inactive", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:UserController.kt:UserController$fun</ID>
+    <ID>MaxLineLength:UserDtos.kt:CreateUserRequest$@field:Schema(example = "MEMBER", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN"]) val role: Role</ID>
+    <ID>MaxLineLength:UserDtos.kt:UpdateUserRequest$@field:Schema(description = "New role. Optional; requires Admin. Omit to leave the role unchanged.", nullable = true)</ID>
+    <ID>MaxLineLength:UserDtos.kt:UpdateUserRequest$@field:Schema(description = "Set to false to deactivate the account (revokes refresh tokens). Null or omitted leaves the current value unchanged.", nullable = true)</ID>
+    <ID>MaxLineLength:UserService.kt:UserService$.</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$@Operation(summary = "List vendors", description = "Returns a paginated vendor list. Search matches vendor names; status is an optional filter. Page size is capped at 100.")</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$@Operation(summary = "Update a vendor", description = "Update a vendor's name and contact information. Set active to true or false to change its status; omit it to leave status unchanged.")</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "200", description = "Vendor returned", content = [Content(schema = Schema(implementation = VendorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "200", description = "Vendor updated", content = [Content(schema = Schema(implementation = VendorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "201", description = "Vendor created", content = [Content(schema = Schema(implementation = VendorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "403", description = "Admin role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "404", description = "Vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>MaxLineLength:VendorController.kt:VendorController$ApiResponse(responseCode = "409", description = "A vendor with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))])</ID>
+    <ID>NewLineAtEndOfFile:JwtService.kt:com.resourcetracker.auth.JwtService.kt</ID>
+    <ID>NewLineAtEndOfFile:RequestCategory.kt:com.resourcetracker.request.entity.RequestCategory.kt</ID>
+    <ID>NewLineAtEndOfFile:RequestLineItemRepository.kt:com.resourcetracker.request.repository.RequestLineItemRepository.kt</ID>
+    <ID>NewLineAtEndOfFile:RequestNumberService.kt:com.resourcetracker.request.service.RequestNumberService.kt</ID>
+    <ID>NewLineAtEndOfFile:RequestNumberServiceTest.kt:com.resourcetracker.request.service.RequestNumberServiceTest.kt</ID>
+    <ID>NewLineAtEndOfFile:ResourceRequestSequence.kt:com.resourcetracker.request.entity.ResourceRequestSequence.kt</ID>
+    <ID>NewLineAtEndOfFile:Vendor.kt:com.resourcetracker.vendor.Vendor.kt</ID>
+    <ID>NewLineAtEndOfFile:VendorRepository.kt:com.resourcetracker.vendor.VendorRepository.kt</ID>
+    <ID>ReturnCount:Rbac.kt:RoleAuthorizationInterceptor$override fun preHandle: Boolean</ID>
+    <ID>ReturnCount:ResourceRequestService.kt:ResourceRequestService$private fun fulfillmentStatus: String</ID>
+    <ID>ReturnCount:ResourceService.kt:ResourceService$@Transactional(readOnly = true) fun list: Page&lt;ResourceResponse&gt;</ID>
+    <ID>ReturnCount:SecurityConfig.kt:JwtAuthenticationFilter$private fun authenticate</ID>
+    <ID>SwallowedException:ProjectService.kt:ProjectService$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:TeamService.kt:TeamService$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:UserService.kt:UserService$e: DataIntegrityViolationException</ID>
+    <ID>ThrowsCount:AuthService.kt:AuthService$@Transactional fun setPassword: PasswordSetResponse</ID>
+    <ID>ThrowsCount:AuthService.kt:AuthService$@Transactional(noRollbackFor = [ApiException::class]) fun login: TokenPair</ID>
+    <ID>ThrowsCount:AuthService.kt:AuthService$@Transactional(noRollbackFor = [ApiException::class]) fun refresh: TokenPair</ID>
+    <ID>ThrowsCount:ListQuery.kt:ListQuery.Companion$fun parse: ListQuery</ID>
+    <ID>ThrowsCount:ListQuery.kt:ListQuery.Companion$fun sort: Sort</ID>
+    <ID>ThrowsCount:ListQuery.kt:ListQuery.Companion$private fun validateFilterValues</ID>
+    <ID>ThrowsCount:ProcurementService.kt:ProcurementService$@Transactional fun update: ProcurementResponse</ID>
+    <ID>ThrowsCount:ProjectService.kt:ProjectService$@Transactional fun create: ProjectResponse</ID>
+    <ID>ThrowsCount:ProjectService.kt:ProjectService$@Transactional fun update: ProjectResponse</ID>
+    <ID>ThrowsCount:ProjectService.kt:ProjectService$@Transactional(readOnly = true) fun list: Page&lt;ProjectResponse&gt;</ID>
+    <ID>ThrowsCount:ResourceRequestService.kt:ResourceRequestService$@Transactional fun adjustApprovedQuantity: ResourceRequestResponseDto</ID>
+    <ID>ThrowsCount:ResourceService.kt:ResourceService$@Transactional fun update: ResourceResponse</ID>
+    <ID>ThrowsCount:ResourceService.kt:ResourceService$private fun validateTypeRules</ID>
+    <ID>ThrowsCount:TeamService.kt:TeamService$@Transactional fun addMembers: List&lt;User&gt;</ID>
+    <ID>ThrowsCount:TeamService.kt:TeamService$@Transactional fun removeMember: User</ID>
+    <ID>ThrowsCount:TeamService.kt:TeamService$@Transactional fun transfer: User</ID>
+    <ID>ThrowsCount:TeamService.kt:TeamService$@Transactional(readOnly = true) fun list: Page&lt;TeamResponse&gt;</ID>
+    <ID>ThrowsCount:UserService.kt:UserService$@Transactional fun create: UserResponse</ID>
+    <ID>TooManyFunctions:ResourceRepository.kt:ResourceRepository : JpaRepositoryJpaSpecificationExecutor</ID>
+    <ID>TooManyFunctions:ResourceRequestController.kt:ResourceRequestController</ID>
+    <ID>TooManyFunctions:ResourceRequestService.kt:ResourceRequestService</ID>
+    <ID>TooManyFunctions:TeamService.kt:TeamService</ID>
+    <ID>TooManyFunctions:UserService.kt:UserService</ID>
+    <ID>TooManyFunctions:V21__integer_ids.kt:V21__integer_ids : BaseJavaMigration</ID>
+    <ID>UnusedParameter:Errors.kt:GlobalExceptionHandler$ex: HttpMessageNotReadableException</ID>
+    <ID>UnusedParameter:Errors.kt:GlobalExceptionHandler$ex: OptimisticLockingFailureException</ID>
+    <ID>UnusedParameter:ProjectService.kt:ProjectService$projectId: Int</ID>
+    <ID>WildcardImport:Department.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:DepartmentController.kt:import org.springframework.web.bind.annotation.*</ID>
+    <ID>WildcardImport:ProcurementService.kt:import com.resourcetracker.request.entity.*</ID>
+    <ID>WildcardImport:ProcurementService.kt:import com.resourcetracker.request.repository.*</ID>
+    <ID>WildcardImport:Project.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:ProjectController.kt:import org.springframework.web.bind.annotation.*</ID>
+    <ID>WildcardImport:ReservationService.kt:import com.resourcetracker.request.entity.*</ID>
+    <ID>WildcardImport:ReservationService.kt:import com.resourcetracker.request.repository.*</ID>
+    <ID>WildcardImport:ResourceRequestController.kt:import com.resourcetracker.request.dto.*</ID>
+    <ID>WildcardImport:ResourceRequestController.kt:import com.resourcetracker.request.service.*</ID>
+    <ID>WildcardImport:ResourceRequestController.kt:import org.springframework.web.bind.annotation.*</ID>
+    <ID>WildcardImport:ResourceRequestLineItem.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:ResourceRequestSequence.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:ResourceRequestService.kt:import com.resourcetracker.request.dto.*</ID>
+    <ID>WildcardImport:ResourceRequestService.kt:import com.resourcetracker.request.entity.*</ID>
+    <ID>WildcardImport:ResourceRequestService.kt:import com.resourcetracker.request.repository.*</ID>
+    <ID>WildcardImport:ResourceRequestWorkflowServiceTest.kt:import com.resourcetracker.request.entity.*</ID>
+    <ID>WildcardImport:ResourceRequestWorkflowServiceTest.kt:import com.resourcetracker.request.repository.*</ID>
+    <ID>WildcardImport:StockEntities.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:StockOperationsService.kt:import com.resourcetracker.request.entity.*</ID>
+    <ID>WildcardImport:StockOperationsService.kt:import com.resourcetracker.request.repository.*</ID>
+    <ID>WildcardImport:StockRepositories.kt:import com.resourcetracker.request.entity.*</ID>
+    <ID>WildcardImport:Team.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:TeamController.kt:import org.springframework.web.bind.annotation.*</ID>
+    <ID>WildcardImport:Tokens.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:Vendor.kt:import jakarta.persistence.*</ID>
+    <ID>WildcardImport:VendorController.kt:import org.springframework.web.bind.annotation.*</ID>
+  </CurrentIssues>
+</SmellBaseline>
