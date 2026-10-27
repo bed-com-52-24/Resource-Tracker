@@ -44,6 +44,7 @@ class ResourceRequestService(
     private val availability: StockAvailabilityService,
     private val reservationRepository: StockReservationRepository,
     private val issueRepository: StockIssueRepository,
+    private val waitlistEntries: WaitlistEntryRepository,
     private val procurementService: ProcurementService,
     private val waitlistService: WaitlistService,
     private val clock: Clock,
@@ -184,7 +185,7 @@ class ResourceRequestService(
         val request = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
         if (!canView(request, caller)) throw ResourceNotFoundException("Request not found")
         return historyRepository.findAllByRequestIdOrderByCreatedAtAscIdAsc(requestId).map {
-            RequestHistoryResponseDto(it.id, it.requestId, it.eventType, it.fromStatus, it.toStatus, it.actorId, it.lineItemId, it.quantity, it.comment, it.createdAt)
+            RequestHistoryResponseDto(it.id, it.requestId, it.eventType, it.fromStatus, it.toStatus, it.actorId, it.lineItemId, it.quantity, it.comment, it.createdAt, it.actorType)
         }
     }
 
@@ -287,13 +288,15 @@ class ResourceRequestService(
             request.editedAfterQuery = true
         }
         if (action == RequestAction.CANCEL) {
-            if (request.status == RequestStatus.APPROVED && issueRepository.findAllByRequestId(requestId).any { it.quantity > 0 }) {
+            if ((request.status == RequestStatus.APPROVED || request.status == RequestStatus.WAITLISTED) &&
+                issueRepository.findAllByRequestId(requestId).any { it.quantity > 0 }
+            ) {
                 conflict("An approved request with issued stock cannot be cancelled; use the return process")
             }
-            waitlistService.cancelForRequest(requestId, caller.id)
-            reservations.releaseAllFor(requestId, caller.id, comment)
-                .sorted()
-                .forEach(waitlistService::onStockReturned)
+            // Lock order: request (locked above) -> resources -> waitlist entries -> reservations.
+            val waitlistedResourceIds = waitlistService.cancelForRequest(requestId)
+            val releasedResourceIds = reservations.releaseAllFor(requestId, caller.id, comment)
+            (waitlistedResourceIds + releasedResourceIds).distinct().sorted().forEach(waitlistService::onStockReturned)
             request.cancelledBy = caller.id
             request.cancelledAt = LocalDateTime.now(clock)
             request.cancelReason = comment
@@ -409,13 +412,35 @@ class ResourceRequestService(
                     reservedQuantity = internalResource?.let { availability.reservedQuantity(it.id) },
                     unavailableQuantity = internalResource?.unavailableQuantity,
                     availableQuantity = internalResource?.let(availability::availableQuantity),
+                    waitlist = waitlistEntries.findByLineItemId(requireNotNull(line.lineItemId))?.let(::waitlistProgress),
                 )
             },
             warnings = warnings,
-            fulfillmentStatus = fulfillmentStatus(requireNotNull(requestId), lines),
+            fulfillmentStatus = fulfillmentStatus(requireNotNull(requestId), lines, status),
         )
 
-    private fun fulfillmentStatus(requestId: Int, lines: List<ResourceRequestLineItem>): String {
+    private fun waitlistProgress(entry: WaitlistEntry): WaitlistProgressResponse {
+        val needsStock = (entry.status == WaitlistStatus.WAITING || entry.status == WaitlistStatus.FULFILLABLE) &&
+            entry.reservedQuantity < entry.quantity
+        val position = if (needsStock && entry.createdAt != null) {
+            waitlistEntries.countAhead(
+                entry.resourceId,
+                listOf(WaitlistStatus.WAITING, WaitlistStatus.FULFILLABLE),
+                entry.createdAt!!,
+                entry.id,
+            ).toInt() + 1
+        } else null
+        return WaitlistProgressResponse(
+            entry.id,
+            entry.status,
+            entry.quantity,
+            entry.reservedQuantity,
+            entry.issuedQuantity,
+            position,
+        )
+    }
+
+    private fun fulfillmentStatus(requestId: Int, lines: List<ResourceRequestLineItem>, status: RequestStatus): String {
         val activeReservations = reservationRepository.findAllByRequestIdAndStatus(requestId, ReservationStatus.ACTIVE)
         val issues = issueRepository.findAllByRequestId(requestId)
         val issued = issues.sumOf { it.quantity }
@@ -427,6 +452,7 @@ class ResourceRequestService(
             return if (issued >= approvedTotal) "ISSUED" else "PARTIALLY_ISSUED"
         }
         if (activeReservations.isNotEmpty()) return "RESERVED"
+        if (status == RequestStatus.WAITLISTED) return "WAITLISTED"
         return "NOT_STARTED"
     }
 

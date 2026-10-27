@@ -7,8 +7,27 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.time.LocalDateTime
 
 interface WaitlistEntryRepository : JpaRepository<WaitlistEntry, Int> {
+    fun findByRequestId(requestId: Int): List<WaitlistEntry>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        """
+        select entry from WaitlistEntry entry
+        where entry.requestId = :requestId
+        order by entry.id asc
+        """,
+    )
+    fun findByRequestIdForUpdate(@Param("requestId") requestId: Int): List<WaitlistEntry>
+
+    fun findByLineItemId(lineItemId: Int): WaitlistEntry?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select entry from WaitlistEntry entry where entry.lineItemId = :lineItemId")
+    fun findByLineItemIdForUpdate(@Param("lineItemId") lineItemId: Int): WaitlistEntry?
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         """
@@ -23,17 +42,22 @@ interface WaitlistEntryRepository : JpaRepository<WaitlistEntry, Int> {
         @Param("statuses") statuses: Collection<WaitlistStatus>,
     ): List<WaitlistEntry>
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         """
-        select entry from WaitlistEntry entry
-        where entry.requestId = :requestId
+        select count(entry) from WaitlistEntry entry
+        where entry.resourceId = :resourceId
           and entry.status in :statuses
-        order by entry.id asc
+          and entry.reservedQuantity < entry.quantity
+          and (
+              entry.createdAt < :createdAt
+              or (entry.createdAt = :createdAt and entry.id < :entryId)
+          )
         """,
     )
-    fun findByRequestIdAndStatusInForUpdate(
-        @Param("requestId") requestId: Int,
+    fun countAhead(
+        @Param("resourceId") resourceId: Int,
         @Param("statuses") statuses: Collection<WaitlistStatus>,
-    ): List<WaitlistEntry>
+        @Param("createdAt") createdAt: LocalDateTime,
+        @Param("entryId") entryId: Int,
+    ): Long
 }

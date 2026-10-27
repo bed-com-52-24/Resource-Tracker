@@ -39,13 +39,16 @@ class StockOperationsService(
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")
         requireAssignedManager(request, actor.id, actor.role)
-        if (request.status != RequestStatus.APPROVED) conflict("Request must be approved before issuing stock")
+        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
+            conflict("Request must be approved before issuing stock")
+        }
         if (dto.quantity <= 0) badRequest("quantity must be positive")
         val line = lines.findById(dto.lineItemId).orElseThrow { notFound("Line item not found") }
         if (line.requestId != requestId) notFound("Line item not found")
         if (line.fulfillmentPreference != FulfillmentPreference.INTERNAL.name || line.resourceId == null) badRequest("Only internal resource lines can be issued")
         val resource = resources.findForUpdateById(line.resourceId!!) ?: notFound("Resource not found")
         if (resource.type != ResourceType.INTERNAL) conflict("Only internal resources can be issued")
+        if (waitlistService.isWaiting(dto.lineItemId)) conflict("Line item is on the waitlist and has no reserved stock yet")
         val issuedSoFar = issues.findByRequestIdAndLineItemIdForUpdate(requestId, dto.lineItemId).sumOf { it.quantity }
         val approved = line.approvedQuantity ?: 0
         if (dto.quantity > approved - issuedSoFar) conflict("Issue exceeds approved quantity remaining")
@@ -74,6 +77,7 @@ class StockOperationsService(
         resource.recomputeStatus()
         resources.save(resource)
         val issue = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id))
+        waitlistService.recordIssued(dto.lineItemId, dto.quantity, actor.id)
         movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
         history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
         return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity)

@@ -65,26 +65,58 @@ class WaitlistService(
         entries.map { it.first.resourceId }.distinct().sorted().forEach(::onStockReturned)
     }
 
+    /**
+     * Cancel open entries before reservations are released. Resources are locked before entries,
+     * matching the FIFO processor's lock order.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
-    fun cancelForRequest(requestId: Int, actorId: Int) {
-        waitlist.findByRequestIdAndStatusInForUpdate(requestId, WaitlistStatus.entries).forEach { entry ->
-            val from = entry.status
-            entry.status = WaitlistStatus.CANCELLED
-            waitlist.save(entry)
+    fun cancelForRequest(requestId: Int): List<Int> {
+        val resourceIds = waitlist.findByRequestId(requestId)
+            .map { it.resourceId }
+            .distinct()
+            .sorted()
+        lockResources(resourceIds)
+        waitlist.findByRequestIdForUpdate(requestId)
+            .filter { it.status in openStatuses }
+            .forEach { entry ->
+                entry.status = WaitlistStatus.CANCELLED
+                waitlist.save(entry)
+            }
+        return resourceIds
+    }
+
+    /** Record issuance against the reserved quantity; the entry completes when all units are issued. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun recordIssued(lineItemId: Int, quantity: Int, actorId: Int) {
+        require(quantity > 0) { "Issued quantity must be positive" }
+        val entry = waitlist.findByLineItemIdForUpdate(lineItemId) ?: return
+        if (entry.status != WaitlistStatus.FULFILLABLE) return
+        check(entry.issuedQuantity + quantity <= entry.reservedQuantity) {
+            "Cannot issue more than reserved for waitlist entry ${entry.id}"
+        }
+        entry.issuedQuantity += quantity
+        if (entry.issuedQuantity == entry.quantity) {
+            entry.status = WaitlistStatus.FULFILLED
             history.save(
                 RequestHistory(
-                    requestId = requestId,
-                    eventType = "WAITLIST_CANCELLED",
-                    fromStatus = from.name,
-                    toStatus = WaitlistStatus.CANCELLED.name,
+                    requestId = entry.requestId,
+                    eventType = "WAITLIST_FULFILLED",
+                    fromStatus = WaitlistStatus.FULFILLABLE.name,
+                    toStatus = WaitlistStatus.FULFILLED.name,
                     actorId = actorId,
+                    actorType = ActorType.USER,
                     lineItemId = entry.lineItemId,
-                    quantity = entry.quantity - entry.reservedQuantity,
-                    comment = "Request cancelled",
+                    quantity = entry.quantity,
                 ),
             )
         }
+        waitlist.save(entry)
     }
+
+    /** A line still waiting for its first reservation cannot bypass older queue entries. */
+    @Transactional(readOnly = true)
+    fun isWaiting(lineItemId: Int): Boolean =
+        waitlist.findByLineItemId(lineItemId)?.status == WaitlistStatus.WAITING
 
     /**
      * Called whenever usable stock becomes free. The caller must already be in a transaction.
@@ -105,28 +137,10 @@ class WaitlistService(
     private fun applyReservation(entry: WaitlistEntry, granted: Int) {
         val becameFulfillable = entry.status == WaitlistStatus.WAITING
         entry.reservedQuantity += granted
-        entry.status = if (entry.reservedQuantity == entry.quantity) {
-            WaitlistStatus.FULFILLED
-        } else if (becameFulfillable) {
-            WaitlistStatus.FULFILLABLE
-        } else {
-            entry.status
-        }
+        if (becameFulfillable) entry.status = WaitlistStatus.FULFILLABLE
         waitlist.save(entry)
 
         if (becameFulfillable) notifyFulfillable(entry)
-        if (entry.status == WaitlistStatus.FULFILLED) {
-            history.save(
-                RequestHistory(
-                    requestId = entry.requestId,
-                    eventType = "WAITLIST_FULFILLED",
-                    actorId = null,
-                    actorType = ActorType.SYSTEM,
-                    lineItemId = entry.lineItemId,
-                    quantity = entry.quantity,
-                ),
-            )
-        }
         log.info(
             "Waitlist entry {} reserved {} ({}/{})",
             entry.id,
@@ -148,6 +162,12 @@ class WaitlistService(
                 "lineItemId" to entry.lineItemId,
             ),
         )
+    }
+
+    private fun lockResources(resourceIds: Collection<Int>) {
+        resourceIds.distinct().sorted().forEach { resourceId ->
+            resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
+        }
     }
 
     private fun notFound(message: String): Nothing =

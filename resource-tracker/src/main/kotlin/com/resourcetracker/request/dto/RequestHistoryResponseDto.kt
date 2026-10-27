@@ -1,5 +1,6 @@
 package com.resourcetracker.request.dto
 
+import com.resourcetracker.request.entity.ActorType
 import java.time.LocalDateTime
 
 data class RequestHistoryResponseDto(
@@ -13,4 +14,5 @@ data class RequestHistoryResponseDto(
     val quantity: Int?,
     val comment: String?,
     val createdAt: LocalDateTime?,
+    val actorType: ActorType = ActorType.USER,
 )
