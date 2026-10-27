@@ -7,4 +7,8 @@ import org.springframework.data.repository.Repository
 interface RequestHistoryRepository : Repository<RequestHistory, Int> {
     fun save(history: RequestHistory): RequestHistory
     fun findAllByRequestIdOrderByCreatedAtAscIdAsc(requestId: Int): List<RequestHistory>
+    fun findByRequestIdAndEventType(
+        requestId: Int, 
+        eventType: String
+        ): List<RequestHistory>
 }
