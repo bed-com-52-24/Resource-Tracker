@@ -194,6 +194,11 @@ class ResourceRequestController(
     @GetMapping("/api/v1/requests/{id}/history")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get append-only request history")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Chronological request history"),
+        ApiResponse(responseCode = "403", description = "Owner, assigned manager, Managing Director, or Admin access required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Request not found or not visible to the caller", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun history(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.history(id, serviceUser(caller))
 

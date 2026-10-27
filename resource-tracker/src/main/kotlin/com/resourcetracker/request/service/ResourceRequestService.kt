@@ -181,7 +181,7 @@ class ResourceRequestService(
     @Transactional(readOnly = true)
     fun history(requestId: Int, caller: User): List<RequestHistoryResponseDto> {
         val request = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
-        if (!canView(request, caller)) throw ResourceNotFoundException("Request not found")
+        if (!canViewHistory(request, caller)) throw ResourceNotFoundException("Request not found")
         return historyRepository.findAllByRequestIdOrderByCreatedAtAscIdAsc(requestId).map {
             RequestHistoryResponseDto(it.id, it.requestId, it.eventType, it.fromStatus, it.toStatus, it.actorId, it.lineItemId, it.quantity, it.comment, it.createdAt)
         }
@@ -368,6 +368,13 @@ class ResourceRequestService(
 
     private fun canView(request: ResourceRequest, caller: User): Boolean = when (caller.role) {
         Role.TEAM_LEAD -> caller.teams.any { it.id == request.teamId }
+        Role.DEPARTMENT_MANAGER -> request.assignedManagerId == caller.id
+        Role.ADMIN, Role.MANAGING_DIRECTOR -> true
+        Role.MEMBER -> false
+    }
+
+    private fun canViewHistory(request: ResourceRequest, caller: User): Boolean = when (caller.role) {
+        Role.TEAM_LEAD -> request.requesterId == caller.id
         Role.DEPARTMENT_MANAGER -> request.assignedManagerId == caller.id
         Role.ADMIN, Role.MANAGING_DIRECTOR -> true
         Role.MEMBER -> false
