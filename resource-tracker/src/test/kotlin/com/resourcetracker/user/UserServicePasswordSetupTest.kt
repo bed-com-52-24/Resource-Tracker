@@ -4,6 +4,7 @@ import com.resourcetracker.auth.PasswordTokenPurpose
 import com.resourcetracker.auth.PasswordTokenRepository
 import com.resourcetracker.auth.PasswordTokenService
 import com.resourcetracker.auth.RefreshTokenRepository
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
@@ -25,9 +26,10 @@ class UserServicePasswordSetupTest {
     private val refreshTokens = mock(RefreshTokenRepository::class.java)
     private val departments = mock(DepartmentRepository::class.java)
     private val teams = mock(TeamRepository::class.java)
+    private val audit = mock(AuditService::class.java)
     private val passwordTokens = mock(PasswordTokenRepository::class.java)
     private val tokenService = mock(PasswordTokenService::class.java)
-    private val service = UserService(users, refreshTokens, departments, teams, passwordTokens, tokenService)
+    private val service = UserService(users, refreshTokens, departments, teams, audit, passwordTokens, tokenService)
 
     @Test
     fun `creating a user leaves password unset and issues setup link`() {

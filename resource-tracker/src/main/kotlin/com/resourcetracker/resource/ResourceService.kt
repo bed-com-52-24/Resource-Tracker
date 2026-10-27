@@ -1,5 +1,8 @@
 package com.resourcetracker.resource
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.DepartmentRepository
@@ -19,6 +22,7 @@ class ResourceService(
     private val resourceCodeGenerator: ResourceCodeGenerator,
     private val departmentRepository: DepartmentRepository,
     private val vendorRepository: VendorRepository,
+    private val audit: AuditService,
     private val availability: StockAvailabilityService,
     private val movements: StockMovementRepository,
 ) {
@@ -40,6 +44,15 @@ class ResourceService(
         )
         resource.create()
         val saved = resourceRepository.save(resource)
+        audit.record(
+            AuditRecord.currentActor(
+                if (saved.type == ResourceType.INTERNAL) AuditAction.INVENTORY_CREATED else AuditAction.RESOURCE_CREATED,
+                if (saved.type == ResourceType.INTERNAL) "INVENTORY_ITEM" else "RESOURCE",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("code", "name", "type", "category", "departmentId", "unitOfMeasure", "quantity", "location", "reorderLevel"),
+            ),
+        )
         if (saved.type == ResourceType.INTERNAL && (saved.quantity ?: 0) > 0) {
             movements.save(StockMovement(resourceId = saved.id, type = MovementType.OPENING, quantity = saved.quantity!!, actorId = actorId, reason = "Initial stock on resource creation"))
         }
@@ -51,6 +64,7 @@ class ResourceService(
         validateTypeRules(request.type, request.departmentId, request.preferredVendorId, request.quantity)
         val resource = resourceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }
+        val before = snapshot(resource)
         if (request.type != resource.type) {
             throw BusinessRuleException("Resource type cannot be changed; create a new resource")
         }
@@ -66,7 +80,29 @@ class ResourceService(
         }
         resource.update(request.type, resource.quantity, request.location, request.reorderLevel)
         request.active?.let { applyActive(resource, it) }
-        return resourceRepository.save(resource).toResponse()
+        val saved = resourceRepository.save(resource)
+        val after = snapshot(saved)
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isNotEmpty()) {
+            val action = when {
+                "quantity" in changed -> AuditAction.INVENTORY_ADJUSTED
+                "active" in changed && saved.active -> AuditAction.RESOURCE_RESTORED
+                "active" in changed -> AuditAction.RESOURCE_ARCHIVED
+                saved.type == ResourceType.INTERNAL -> AuditAction.INVENTORY_UPDATED
+                else -> AuditAction.RESOURCE_UPDATED
+            }
+            audit.record(
+                AuditRecord.currentActor(
+                    action,
+                    if (saved.type == ResourceType.INTERNAL) "INVENTORY_ITEM" else "RESOURCE",
+                    saved.id.toString(),
+                    previousState = before,
+                    newState = after,
+                    changedFields = changed,
+                ),
+            )
+        }
+        return saved.toResponse()
     }
 
     @Transactional(readOnly = true)
@@ -157,4 +193,23 @@ class ResourceService(
         availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this) else null,
     )
 
+    private fun snapshot(resource: Resource) = mapOf(
+        "code" to resource.code,
+        "name" to resource.name,
+        "type" to resource.type.name,
+        "category" to resource.category.name,
+        "description" to resource.description,
+        "departmentId" to resource.department?.id,
+        "preferredVendorId" to resource.preferredVendor?.id,
+        "unitOfMeasure" to resource.unitOfMeasure,
+        "quantity" to resource.quantity,
+        "location" to resource.location,
+        "reorderLevel" to resource.reorderLevel,
+        "status" to resource.status?.name,
+        "active" to resource.active,
+    )
+
+    companion object {
+        private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")
+    }
 }
