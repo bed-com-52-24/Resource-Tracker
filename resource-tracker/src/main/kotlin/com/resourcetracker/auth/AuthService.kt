@@ -49,8 +49,9 @@ class AuthService(
             throw InvalidCredentialsException()
         }
         val lockedUntil = user.lockedUntil
-        if(lockedUntil != null && lockedUntil.isAfter(now)) throw AccountLockedException()
-
+        if (lockedUntil != null && lockedUntil.isAfter(now)) {
+            throw AccountLockedException(lockedUntil)
+        }
         val passwordHash = user.passwordHash
         val passwordMatches = encoder.matches(req.password, passwordHash ?: dummyHash)
         if(passwordHash == null || !passwordMatches){
