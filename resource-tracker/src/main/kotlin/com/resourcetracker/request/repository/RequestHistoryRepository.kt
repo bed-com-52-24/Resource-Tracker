@@ -10,11 +10,6 @@ import java.time.LocalDateTime
 interface RequestHistoryRepository : Repository<RequestHistory, Int> {
     fun save(history: RequestHistory): RequestHistory
     fun findAllByRequestIdOrderByCreatedAtAscIdAsc(requestId: Int): List<RequestHistory>
-    fun findByRequestIdAndEventType(
-        requestId: Int,
-        eventType: String,
-    ): List<RequestHistory>
-
     fun findAllByLineItemIdOrderByCreatedAtAscIdAsc(lineItemId: Int): List<RequestHistory>
 
     fun findAllByActorIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanEqualOrderByCreatedAtAscIdAsc(
@@ -30,4 +25,9 @@ interface RequestHistoryRepository : Repository<RequestHistory, Int> {
         to: LocalDateTime,
         pageable: Pageable,
     ): Page<RequestHistory>
+
+    fun findByRequestIdAndEventType(
+        requestId: Int,
+        eventType: String,
+    ): List<RequestHistory>
 }
