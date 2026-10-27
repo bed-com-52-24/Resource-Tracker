@@ -24,7 +24,6 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.AuthenticationEntryPoint
-import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource
@@ -57,25 +56,16 @@ class SecurityConfig {
         revoked: RevokedAccessTokenRepository,
         users: UserRepository,
         entryPoint: RestAuthenticationEntryPoint,
-        accessDeniedHandler: RestAccessDeniedHandler,
     ): SecurityFilterChain = http
         .csrf { it.disable() }
         .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
-        .exceptionHandling {
-            it.authenticationEntryPoint(entryPoint)
-                .accessDeniedHandler(accessDeniedHandler)
-        }
+        .exceptionHandling { it.authenticationEntryPoint(entryPoint) }
         .authorizeHttpRequests {
             it.requestMatchers(
                 "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/set-password",
                 "/api/v1/auth/forgot-password", "/api/v1/health", "/error",
                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
             ).permitAll()
-                .requestMatchers(
-                    "/api/v1/departments/**",
-                    "/api/v1/vendors/**",
-                    "/api/v1/projects/**",
-                ).hasRole("ADMIN")
                 .anyRequest().authenticated()
         }
         .addFilterBefore(
@@ -133,43 +123,30 @@ class RestAuthenticationEntryPoint(private val mapper: ObjectMapper) : Authentic
     override fun commence(
         request: HttpServletRequest,
         response: HttpServletResponse,
-        authException: AuthenticationException,
+        authException: AuthenticationException
     ) {
         response.status = HttpServletResponse.SC_UNAUTHORIZED
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
-        mapper.writeValue(
-            response.outputStream,
-            ErrorResponse.from(
-                request,
-                org.springframework.http.HttpStatus.UNAUTHORIZED,
-                "UNAUTHENTICATED",
-                "Authentication required",
-            ),
-        )
-    }
-}
 
-@Component
-class RestAccessDeniedHandler(private val mapper: ObjectMapper) : AccessDeniedHandler {
-    override fun handle(
-        request: HttpServletRequest,
-        response: HttpServletResponse,
-        accessDeniedException: org.springframework.security.access.AccessDeniedException,
-    ) {
-        val actualRole = (SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser)
-            ?.role?.name ?: "UNKNOWN"
-        response.status = HttpServletResponse.SC_FORBIDDEN
-        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        val correlationId = request.getHeader("X-Correlation-ID")
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9._-]{1,100}")) }
+            ?: java.util.UUID.randomUUID().toString()
+
+        response.setHeader("X-Correlation-ID", correlationId)
+
         mapper.writeValue(
             response.outputStream,
-            ErrorResponse.from(
-                request,
-                org.springframework.http.HttpStatus.FORBIDDEN,
-                "INSUFFICIENT_ROLE",
-                "Access requires ADMIN; caller role is $actualRole",
-                listOf("Required role: ADMIN", "Caller role: $actualRole"),
-            ),
+            ErrorResponse(
+                timestamp = java.time.Instant.now(),
+                status = 401,
+                error = "Unauthorized",
+                code = "UNAUTHENTICATED",
+                message = "Authentication required",
+                path = request.requestURI,
+                correlationId = correlationId,
+                details = emptyList()
+            )
         )
     }
 }

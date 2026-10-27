@@ -5,90 +5,111 @@ import com.resourcetracker.user.Role
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.web.bind.MethodArgumentNotValidException
-import org.springframework.web.bind.MissingServletRequestParameterException
-import org.springframework.web.ErrorResponse as SpringErrorResponse
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
+import java.util.UUID
 
 open class ApiException(
     val status: HttpStatus,
     val code: String,
-    message: String?,
-    val details: List<String> = emptyList(),
+    message: String
 ) : RuntimeException(message)
 
-open class ValidationException(message: String, details: List<String> = emptyList()) :
-    ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message, details)
+class ValidationException(message: String) :
+    ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", message)
 
-open class NotFoundException(message: String) :
-    ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", message)
+open class NotFoundException(message: String = "Resource not found") :
+    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
 
-open class ConflictException(message: String, code: String = "CONFLICT") :
-    ApiException(HttpStatus.CONFLICT, code, message)
+open class ConflictException(message: String = "Resource conflict") :
+    ApiException(HttpStatus.CONFLICT, "RESOURCE_CONFLICT", message)
+
+class BadRequestException(message: String) :
+    ApiException(HttpStatus.BAD_REQUEST, "BAD_REQUEST", message)
 
 class InvalidTransitionException(message: String) :
-    ConflictException(message, "INVALID_TRANSITION")
+    ApiException(HttpStatus.CONFLICT, "INVALID_TRANSITION", message)
 
 class InsufficientStockException(message: String = "Insufficient stock") :
-    ConflictException(message, "INSUFFICIENT_STOCK")
+    ApiException(HttpStatus.CONFLICT, "INSUFFICIENT_STOCK", message)
 
 class BudgetExceededException(message: String = "Budget exceeded") :
-    ConflictException(message, "BUDGET_EXCEEDED")
+    ApiException(HttpStatus.CONFLICT, "BUDGET_EXCEEDED", message)
 
 class InvalidCredentialsException :
-    ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid username or password")
+    ApiException(
+        HttpStatus.UNAUTHORIZED,
+        "INVALID_CREDENTIALS",
+        "Invalid username or password"
+    )
 
 class AccountLockedException(val until: Instant? = null) :
     ApiException(
         HttpStatus.LOCKED,
         "ACCOUNT_LOCKED",
-        "Account is temporarily locked. Try again later",
-        listOfNotNull(until?.let { "Retry after $it" }),
+        "Account is temporarily locked. Try again later"
     )
 
 class AccountDeactivatedException :
-    ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_DEACTIVATED", "This account has been deactivated")
-
-class InvalidRefreshTokenException :
-    ApiException(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", "Refresh token is invalid, expired, or already used")
-
-class UnauthenticatedException :
-    ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Authentication required")
-
-class ForbiddenRoleException(val required: List<Role>, val actual: Role) :
     ApiException(
         HttpStatus.FORBIDDEN,
-        "INSUFFICIENT_ROLE",
-        "Access requires ${required.joinToString(" or ") { it.name }}; caller role is ${actual.name}",
-        listOf(
-            "Required role: ${required.joinToString(" or ") { it.name }}",
-            "Caller role: ${actual.name}",
-        ),
+        "ACCOUNT_DEACTIVATED",
+        "This account has been deactivated"
     )
 
+class InvalidRefreshTokenException :
+    ApiException(
+        HttpStatus.UNAUTHORIZED,
+        "INVALID_REFRESH_TOKEN",
+        "Refresh token is invalid, expired or already used"
+    )
+
+class UnauthenticatedException :
+    ApiException(
+        HttpStatus.UNAUTHORIZED,
+        "UNAUTHENTICATED",
+        "Authentication required"
+    )
+
+class ForbiddenRoleException(
+    val required: List<Role>,
+    val actual: Role
+) : ApiException(
+    HttpStatus.FORBIDDEN,
+    "INSUFFICIENT_ROLE",
+    "Insufficient role"
+)
+
 class WeakPasswordException(val violations: List<String>) :
-    ApiException(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Password does not meet the password policy", violations)
+    ApiException(
+        HttpStatus.BAD_REQUEST,
+        "WEAK_PASSWORD",
+        "Password does not meet the password policy"
+    )
 
-class DuplicateResourceException(message: String = "Resource already exists") :
-    ConflictException(message, "DUPLICATE_RESOURCE")
-
+class DuplicateResourceException(
+    message: String = "Resource already exists",
+) : ApiException(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", message)
 class ResourceNotFoundException(message: String = "Resource not found") :
-    NotFoundException(message)
-
+    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
+class BadRequestException(message: String) :
+    ApiException(HttpStatus.BAD_REQUEST, "INVALID_RESOURCE_REQUEST", message)
 class BusinessRuleException(message: String) :
-    ConflictException(message, "BUSINESS_RULE_VIOLATION")
+    ApiException(
+        HttpStatus.CONFLICT,
+        "BUSINESS_RULE_VIOLATION",
+        message
+    )
 
-@JsonInclude(JsonInclude.Include.ALWAYS)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 data class ErrorResponse(
     val timestamp: Instant,
     val status: Int,
@@ -97,111 +118,122 @@ data class ErrorResponse(
     val message: String,
     val path: String,
     val correlationId: String,
-    val details: List<String>,
-) {
-    companion object {
-        fun from(
-            request: HttpServletRequest,
-            status: HttpStatusCode,
-            code: String,
-            message: String,
-            details: List<String> = emptyList(),
-        ): ErrorResponse {
-            val statusValue = status.value()
-            val reason = HttpStatus.resolve(statusValue)?.reasonPhrase ?: "Error"
-            val correlationId = request.getAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE) as? String
-                ?: request.getHeader(CorrelationIdFilter.HEADER_NAME)
-                ?: "unknown"
-            return ErrorResponse(
-                timestamp = Instant.now(),
-                status = statusValue,
-                error = reason,
-                code = code,
-                message = message,
-                path = request.requestURI,
-                correlationId = correlationId,
-                details = details,
-            )
-        }
-    }
-}
+    val details: List<String> = emptyList()
+)
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
+
     private val log = LoggerFactory.getLogger(javaClass)
 
     @ExceptionHandler(ApiException::class)
-    fun api(ex: ApiException, request: HttpServletRequest): ResponseEntity<ErrorResponse> =
-        response(request, ex.status, ex.code, ex.message ?: ex.code, ex.details)
+    fun api(
+        ex: ApiException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        val forbidden = ex as? ForbiddenRoleException
+
+        val details = when {
+            forbidden != null -> listOf(
+                "Required role: ${forbidden.required.joinToString(" or ") { it.name }}",
+                "Actual role: ${forbidden.actual.name}"
+            )
+
+            ex is WeakPasswordException -> ex.violations
+
+            ex is AccountLockedException && ex.until != null ->
+                listOf("Account lock expires at: ${ex.until}")
+
+            else -> emptyList()
+        }
+
+        return respond(
+            status = ex.status,
+            code = ex.code,
+            message = ex.message ?: ex.code,
+            details = details,
+            request = request
+        )
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun validation(ex: MethodArgumentNotValidException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        val details = ex.bindingResult.fieldErrors
-            .map { "${it.field}: ${it.defaultMessage ?: "invalid value"}" }
-            .sorted()
-        return response(
-            request,
-            HttpStatus.BAD_REQUEST,
-            "VALIDATION_ERROR",
-            "Request validation failed",
-            details,
+    fun validation(
+        ex: MethodArgumentNotValidException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        val details = ex.bindingResult.fieldErrors.map {
+            "${it.field}: ${it.defaultMessage ?: "Invalid value"}"
+        }
+
+        return respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "VALIDATION_FAILED",
+            message = "Request validation failed",
+            details = details,
+            request = request
         )
     }
 
     @ExceptionHandler(ConstraintViolationException::class)
-    fun constraintViolation(ex: ConstraintViolationException, request: HttpServletRequest): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            HttpStatus.BAD_REQUEST,
-            "VALIDATION_ERROR",
-            "Request validation failed",
-            ex.constraintViolations.map { "${it.propertyPath}: ${it.message}" }.sorted(),
-        )
-
-    @ExceptionHandler(MissingServletRequestParameterException::class)
-    fun missingParameter(
-        ex: MissingServletRequestParameterException,
-        request: HttpServletRequest,
+    fun constraintViolation(
+        ex: ConstraintViolationException,
+        request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            HttpStatus.BAD_REQUEST,
-            "VALIDATION_ERROR",
-            "Request parameter '${ex.parameterName}' is required",
-        )
-
-    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
-    fun typeMismatch(
-        ex: MethodArgumentTypeMismatchException,
-        request: HttpServletRequest,
-    ): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            HttpStatus.BAD_REQUEST,
-            "VALIDATION_ERROR",
-            "Request parameter '${ex.name}' has an invalid value",
+        respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "VALIDATION_FAILED",
+            message = "Request validation failed",
+            details = ex.constraintViolations.map { it.message }.sorted(),
+            request = request
         )
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
-    fun unreadable(request: HttpServletRequest): ResponseEntity<ErrorResponse> =
-        response(request, HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "Malformed request body")
+    fun unreadable(
+        ex: HttpMessageNotReadableException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        log.debug("Malformed request body")
 
-    @ExceptionHandler(ResponseStatusException::class)
-    fun status(ex: ResponseStatusException, request: HttpServletRequest): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            ex.statusCode,
-            codeForStatus(ex.statusCode.value()),
-            ex.reason ?: HttpStatus.resolve(ex.statusCode.value())?.reasonPhrase ?: "Request failed",
+        return respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "MALFORMED_REQUEST",
+            message = "Malformed request body",
+            request = request
+        )
+    }
+
+    @ExceptionHandler(Exception::class)
+    fun unexpected(
+        ex: Exception,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        val correlationId = correlationId(request)
+
+        log.error(
+            "Unexpected error. correlationId={}",
+            correlationId,
+            ex
         )
 
-    @ExceptionHandler(DataIntegrityViolationException::class)
-    fun integrity(request: HttpServletRequest): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            HttpStatus.CONFLICT,
-            "DATA_CONFLICT",
-            "Request conflicts with existing data",
+        return respond(
+            status = HttpStatus.INTERNAL_SERVER_ERROR,
+            code = "INTERNAL_SERVER_ERROR",
+            message = "An unexpected error occurred",
+            request = request,
+            correlationId = correlationId
+        )
+    }
+
+    @ExceptionHandler(ResponseStatusException::class)
+    fun status(
+        ex: ResponseStatusException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        respond(
+            status = ex.statusCode,
+            code = "REQUEST_FAILED",
+            message = ex.reason ?: "Request failed",
+            request = request
         )
 
     @ExceptionHandler(OptimisticLockingFailureException::class)
@@ -209,57 +241,54 @@ class GlobalExceptionHandler {
         ex: OptimisticLockingFailureException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            HttpStatus.CONFLICT,
-            "CONCURRENT_MODIFICATION",
-            "This record changed while you were acting. Reload and try again.",
+        respond(
+            status = HttpStatus.CONFLICT,
+            code = "CONCURRENT_MODIFICATION",
+            message = "This record changed while you were acting. Reload and try again.",
+            request = request
         )
 
     @ExceptionHandler(IllegalArgumentException::class)
-    fun illegalArgument(ex: IllegalArgumentException, request: HttpServletRequest): ResponseEntity<ErrorResponse> =
-        response(
-            request,
-            HttpStatus.BAD_REQUEST,
-            "INVALID_REQUEST",
-            ex.message ?: "Invalid request",
+    fun illegalArgument(
+        ex: IllegalArgumentException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> =
+        respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "INVALID_REQUEST",
+            message = ex.message ?: "Invalid request",
+            request = request
         )
 
-    @ExceptionHandler(Exception::class)
-    fun unexpected(ex: Exception, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
-        if (ex is SpringErrorResponse) {
-            return response(
-                request,
-                ex.statusCode,
-                codeForStatus(ex.statusCode.value()),
-                ex.body.detail ?: ex.body.title ?: "Request failed",
-            )
-        }
-        log.error("Unhandled request failure for {}", request.requestURI, ex)
-        return response(
-            request,
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            "INTERNAL_ERROR",
-            "An unexpected error occurred",
-        )
-    }
-
-    private fun response(
-        request: HttpServletRequest,
+    private fun respond(
         status: HttpStatusCode,
         code: String,
         message: String,
+        request: HttpServletRequest,
         details: List<String> = emptyList(),
-    ): ResponseEntity<ErrorResponse> =
-        ResponseEntity.status(status).body(ErrorResponse.from(request, status, code, message, details))
+        correlationId: String = correlationId(request)
+    ): ResponseEntity<ErrorResponse> {
+        val body = ErrorResponse(
+            timestamp = Instant.now(),
+            status = status.value(),
+            error = HttpStatus.resolve(status.value())?.reasonPhrase ?: "HTTP ${status.value()}",
+            code = code,
+            message = message,
+            path = request.requestURI,
+            correlationId = correlationId,
+            details = details
+        )
 
-    private fun codeForStatus(status: Int): String = when (status) {
-        400 -> "VALIDATION_ERROR"
-        401 -> "UNAUTHENTICATED"
-        403 -> "FORBIDDEN"
-        404 -> "NOT_FOUND"
-        409 -> "CONFLICT"
-        423 -> "ACCOUNT_LOCKED"
-        else -> "HTTP_$status"
+        return ResponseEntity.status(status)
+            .header("X-Correlation-ID", correlationId)
+            .body(body)
+    }
+
+    private fun correlationId(request: HttpServletRequest): String {
+        val supplied = request.getHeader("X-Correlation-ID")
+
+        return supplied
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9._-]{1,100}")) }
+            ?: UUID.randomUUID().toString()
     }
 }
