@@ -139,9 +139,10 @@ class StockOperationsService(
     @Transactional
     fun correctResource(resourceId: Int, actorId: Int, dto: StockCorrectionRequest): StockMovement {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
-        if (actor.role != Role.ADMIN) forbidden()
+        if (actor.role != Role.DEPARTMENT_MANAGER) forbidden()
         if (dto.newQuantity < 0 || dto.reason.isBlank()) badRequest("newQuantity must be non-negative and reason is required")
         val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
+        if (resource.department?.id != actor.department.id) notFound("Resource not found")
         if (resource.type != ResourceType.INTERNAL) badRequest("Only internal resources have physical stock")
         val current = resource.quantity ?: 0
         val difference = dto.newQuantity - current

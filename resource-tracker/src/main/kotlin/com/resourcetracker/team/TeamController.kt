@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @Validated
 @RequestMapping("/api/v1/teams")
+@RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
 @Tag(name = "Teams", description = "Create, search, update, and deactivate teams")
 @SecurityRequirement(name = "bearerAuth")
 class TeamController(private val service: TeamService) {
@@ -116,16 +117,16 @@ class TeamController(private val service: TeamService) {
     fun history(@PathVariable id: Int): List<TeamMemberHistory> = service.history(id)
 
     @PostMapping
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Create a team", description = "Admin only. Returns 201, 400, 401, 403, 404 or 409.")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Create a team", description = "Department manager only. Returns 201, 400, 401, 403, 404 or 409.")
     fun create(@Valid @RequestBody body: TeamRequest): ResponseEntity<TeamResponse> =
         ResponseEntity.status(HttpStatus.CREATED).body(service.create(body))
 
     @PutMapping("/{id}")
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(
         summary = "Update a team",
-        description = "Admin only. All fields are optional; null or omitted fields preserve their current values. " +
+        description = "Department manager only. All fields are optional; null or omitted fields preserve their current values. " +
                 "Updates name, department, manager and projects. " +
                 "If `isActive` is false, the team is deactivated; if true, it is reactivated. " +
                 "Omit `isActive` to leave the value unchanged. Returns 200, 400, 401, 403, 404 or 409."
@@ -134,10 +135,12 @@ class TeamController(private val service: TeamService) {
         service.update(id, body)
 
     @GetMapping("/{id}")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a team", description = "Any authenticated user.")
     fun get(@PathVariable id: Int): TeamResponse = service.get(id)
 
     @GetMapping
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(
         summary = "List teams",
         description = "Any authenticated user. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."

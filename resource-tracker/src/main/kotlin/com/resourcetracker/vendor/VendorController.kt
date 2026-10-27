@@ -2,6 +2,8 @@ package com.resourcetracker.vendor
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -19,30 +21,33 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @Validated
 @RequestMapping("/api/v1/vendors")
+@RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
 @Tag(name = "Vendors", description = "Create, search, update, and deactivate vendors")
 @SecurityRequirement(name = "bearerAuth")
 class VendorController(private val vendorService: VendorService) {
 
     @PostMapping
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a vendor", description = "Create a new active vendor.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Vendor created", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "A vendor with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun create(@Valid @RequestBody request: VendorRequest) =
         vendorService.create(request)
 
     @GetMapping
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
     @Operation(summary = "List vendors", description = "Returns a paginated vendor list. Search matches vendor names; status is an optional filter. Page size is capped at 100.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Vendors returned"),
         ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Admin role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
         @Parameter(description = "Search vendor names", example = "office")
@@ -64,22 +69,24 @@ class VendorController(private val vendorService: VendorService) {
     )
 
     @GetMapping("/{id}")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Get a vendor", description = "Return a vendor by its numeric identifier.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Vendor returned", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Admin role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun get(@PathVariable id: Int) = vendorService.getById(id)
 
     @PutMapping("/{id}")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Update a vendor", description = "Update a vendor's name and contact information. Set active to true or false to change its status; omit it to leave status unchanged.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Vendor updated", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "A vendor with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])

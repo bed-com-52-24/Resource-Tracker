@@ -155,7 +155,8 @@ class ResourceRequestService(
             when (caller.role) {
                 Role.TEAM_LEAD -> predicates += root.get<Int>("teamId").`in`(teamIds)
                 Role.DEPARTMENT_MANAGER -> predicates += cb.equal(root.get<Int?>("assignedManagerId"), caller.id)
-                Role.ADMIN, Role.MANAGING_DIRECTOR -> Unit
+                Role.ADMIN -> predicates += cb.isTrue(root.get<Boolean>("needsReassignment"))
+                Role.MANAGING_DIRECTOR -> Unit
                 Role.MEMBER -> forbidden()
             }
             status?.let { predicates += cb.equal(root.get<RequestStatus>("status"), it) }
@@ -369,7 +370,8 @@ class ResourceRequestService(
     private fun canView(request: ResourceRequest, caller: User): Boolean = when (caller.role) {
         Role.TEAM_LEAD -> caller.teams.any { it.id == request.teamId }
         Role.DEPARTMENT_MANAGER -> request.assignedManagerId == caller.id
-        Role.ADMIN, Role.MANAGING_DIRECTOR -> true
+        Role.ADMIN -> request.needsReassignment
+        Role.MANAGING_DIRECTOR -> true
         Role.MEMBER -> false
     }
 

@@ -13,6 +13,14 @@ import java.time.LocalDate
 interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     @Query("select coalesce(sum(r.quantity), 0) from StockReservation r where r.resourceId = :resourceId and r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE")
     fun sumActiveByResourceId(@Param("resourceId") resourceId: Int): Long
+    @Query(
+        """select r.resourceId as resourceId, sum(r.quantity) as totalQuantity
+           from StockReservation r
+           where r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE
+             and r.resourceId in :resourceIds
+           group by r.resourceId""",
+    )
+    fun sumActiveByResourceIds(@Param("resourceIds") resourceIds: Collection<Int>): List<ActiveReservationTotal>
     fun findAllByRequestIdAndStatus(requestId: Int, status: ReservationStatus): List<StockReservation>
     fun findAllByRequestIdAndLineItemIdAndStatus(requestId: Int, lineItemId: Int, status: ReservationStatus): List<StockReservation>
     fun findAllByLineItemIdAndStatus(lineItemId: Int, status: ReservationStatus): List<StockReservation>
@@ -22,6 +30,11 @@ interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from StockReservation r where r.requestId = :requestId and r.lineItemId = :lineItemId and r.status = :status")
     fun findByRequestIdAndLineItemIdAndStatusForUpdate(@Param("requestId") requestId: Int, @Param("lineItemId") lineItemId: Int, @Param("status") status: ReservationStatus): List<StockReservation>
+}
+
+interface ActiveReservationTotal {
+    fun getResourceId(): Int
+    fun getTotalQuantity(): Long
 }
 
 interface StockIssueRepository : JpaRepository<StockIssue, Int> {

@@ -1,6 +1,8 @@
 package com.resourcetracker.resource
 
 import jakarta.persistence.criteria.Predicate
+import jakarta.persistence.criteria.JoinType
+import com.resourcetracker.department.Department
 import org.springframework.data.jpa.domain.Specification
 
 object ResourceSpecifications {
@@ -12,6 +14,7 @@ object ResourceSpecifications {
         status: ResourceStatus?,
         departmentId: Int?,
         keyword: String?,
+        scopeDepartmentId: Int? = null,
     ): Specification<Resource> = Specification { root, _, cb ->
         val predicates = mutableListOf<Predicate>()
 
@@ -20,6 +23,15 @@ object ResourceSpecifications {
         category?.let { predicates.add(cb.equal(root.get<ResourceCategory>("category"), it)) }
         status?.let { predicates.add(cb.equal(root.get<ResourceStatus>("status"), it)) }
         departmentId?.let { predicates.add(cb.equal(root.get<Int>("department").get<Int>("id"), it)) }
+        scopeDepartmentId?.let { scope ->
+            val department = root.join<Resource, Department>("department", JoinType.LEFT)
+            predicates.add(
+                cb.or(
+                    cb.equal(root.get<ResourceType>("type"), ResourceType.EXTERNAL),
+                    cb.equal(department.get<Int>("id"), scope),
+                ),
+            )
+        }
 
         keyword?.trim()?.takeIf { it.isNotEmpty() }?.let {
             val like = "%${it.lowercase()}%"
