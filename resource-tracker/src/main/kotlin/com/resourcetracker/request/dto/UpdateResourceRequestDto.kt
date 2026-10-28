@@ -2,6 +2,7 @@ package com.resourcetracker.request.dto
 
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
+import io.swagger.v3.oas.annotations.media.Schema
 
 enum class RequesterUpdateStatus { PENDING, CANCELLED }
 
@@ -17,7 +18,8 @@ data class RequestDecisionDto(
     val approvedQuantities: Map<Int, Int> = emptyMap(),
 )
 
-enum class Decision { APPROVE, REJECT, QUERY }
+@Schema(description = "APPROVE reserves stock now; WAITLIST approves into the FIFO waitlist (internal lines only); REJECT/QUERY as before")
+enum class Decision { QUERY, APPROVE, REJECT, WAITLIST }
 
 data class ManagerReassignmentDto(val managerId: Int)
 

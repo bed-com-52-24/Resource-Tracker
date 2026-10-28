@@ -8,6 +8,7 @@ import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
@@ -28,6 +29,54 @@ class ReservationService(
     private val users: UserRepository,
     private val clock: Clock,
 ) {
+    /**
+     * System-initiated reservation for a waitlist entry. The active waitlist entry is the authority;
+     * this does not require an assigned manager or an APPROVED request.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun reserveForWaitlist(entry: WaitlistEntry, requested: Int): Int {
+        if (entry.status != WaitlistStatus.WAITING && entry.status != WaitlistStatus.FULFILLABLE) {
+            conflict("Waitlist entry is not active")
+        }
+        if (requested <= 0) return 0
+        val resource = resources.findForUpdateById(entry.resourceId) ?: notFound("Resource not found")
+        if (resource.type != ResourceType.INTERNAL || !resource.active) return 0
+
+        val granted = minOf(requested, availability.availableQuantity(resource, lockReservations = true))
+        if (granted <= 0) return 0
+
+        // Use a plain request read here: locking it after the resource would invert reserve()'s
+        // request-then-resource order and could deadlock with a manager reservation.
+        val request = requests.findById(entry.requestId).orElseThrow { notFound("Request not found") }
+
+        reservations.save(
+            StockReservation(
+                resourceId = resource.id,
+                requestId = entry.requestId,
+                lineItemId = entry.lineItemId,
+                teamId = request.teamId,
+                quantity = granted,
+                createdBy = null,
+                actorType = ActorType.SYSTEM,
+                waitlistEntryId = entry.id,
+            ),
+        )
+        history.save(
+            RequestHistory(
+                requestId = entry.requestId,
+                eventType = "RESERVED",
+                fromStatus = request.status.name,
+                toStatus = request.status.name,
+                actorId = null,
+                actorType = ActorType.SYSTEM,
+                lineItemId = entry.lineItemId,
+                quantity = granted,
+                comment = "Auto-reserved from waitlist",
+            ),
+        )
+        return granted
+    }
+
     @Transactional
     fun reserveApprovedInternalLines(requestId: Int, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
         lineItems
@@ -64,7 +113,7 @@ class ReservationService(
     }
 
     @Transactional
-    fun releaseAllFor(requestId: Int, actorId: Int, reason: String?) {
+    fun releaseAllFor(requestId: Int, actorId: Int, reason: String?): Set<Int> {
         val active = reservations.findAllByRequestIdAndStatus(requestId, ReservationStatus.ACTIVE)
         active.forEach { reservation ->
             reservation.status = ReservationStatus.RELEASED
@@ -73,6 +122,7 @@ class ReservationService(
             reservations.save(reservation)
             history.save(RequestHistory(requestId = requestId, eventType = "RELEASED", actorId = actorId, lineItemId = reservation.lineItemId, quantity = reservation.quantity, comment = reservation.closeReason))
         }
+        return active.map { it.resourceId }.toSet()
     }
 
     @Transactional

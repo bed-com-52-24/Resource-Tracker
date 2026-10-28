@@ -14,12 +14,14 @@ class RequestTransitionsTest {
         val expected = mapOf(
             Triple(RequestStatus.PENDING, RequestAction.QUERY, RequestActor.ASSIGNED_MANAGER) to RequestStatus.QUERIED,
             Triple(RequestStatus.PENDING, RequestAction.APPROVE, RequestActor.ASSIGNED_MANAGER) to RequestStatus.APPROVED,
+            Triple(RequestStatus.PENDING, RequestAction.WAITLIST, RequestActor.ASSIGNED_MANAGER) to RequestStatus.WAITLISTED,
             Triple(RequestStatus.PENDING, RequestAction.REJECT, RequestActor.ASSIGNED_MANAGER) to RequestStatus.REJECTED,
             Triple(RequestStatus.QUERIED, RequestAction.CLARIFY, RequestActor.TEAM_LEAD) to RequestStatus.PENDING,
             Triple(RequestStatus.QUERIED, RequestAction.REJECT, RequestActor.ASSIGNED_MANAGER) to RequestStatus.REJECTED,
             Triple(RequestStatus.PENDING, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
             Triple(RequestStatus.QUERIED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
             Triple(RequestStatus.APPROVED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
+            Triple(RequestStatus.WAITLISTED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
         )
         assertEquals(expected.keys, RequestTransitions.allowedPairs())
         expected.forEach { (transition, target) ->

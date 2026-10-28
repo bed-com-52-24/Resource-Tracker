@@ -21,10 +21,12 @@ class StockReservation(
     @Column(nullable = false) var quantity: Int,
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 10) var status: ReservationStatus = ReservationStatus.ACTIVE,
     @Column(name = "expires_at") var expiresAt: LocalDateTime? = null,
-    @Column(name = "created_by", nullable = false) var createdBy: Int,
+    @Column(name = "created_by") var createdBy: Int?,
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
     @Column(name = "closed_at") var closedAt: LocalDateTime? = null,
     @Column(name = "close_reason", length = 255) var closeReason: String? = null,
+    @Enumerated(EnumType.STRING) @Column(name = "actor_type", nullable = false, length = 10) var actorType: ActorType = ActorType.USER,
+    @Column(name = "waitlist_entry_id") var waitlistEntryId: Int? = null,
 )
 
 @Entity

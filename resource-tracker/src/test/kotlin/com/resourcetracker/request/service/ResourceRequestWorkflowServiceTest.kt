@@ -52,7 +52,9 @@ class ResourceRequestWorkflowServiceTest {
     private val availability = org.mockito.kotlin.mock<StockAvailabilityService>()
     private val reservationRows = org.mockito.kotlin.mock<StockReservationRepository>()
     private val issueRows = org.mockito.kotlin.mock<StockIssueRepository>()
+    private val waitlistEntries = org.mockito.kotlin.mock<WaitlistEntryRepository>()
     private val procurements = org.mockito.kotlin.mock<ProcurementService>()
+    private val waitlistService = org.mockito.kotlin.mock<WaitlistService>()
     private val clock = Clock.systemUTC()
 
     private val department = Department(id = 1, name = "Operations")
@@ -69,7 +71,7 @@ class ResourceRequestWorkflowServiceTest {
 
     private fun service() = ResourceRequestService(
         requests, lines, history, numbers, teams, projects, vendors, resources, users,
-        notifications, reservations, availability, reservationRows, issueRows, procurements, clock,
+        notifications, reservations, availability, reservationRows, issueRows, waitlistEntries, procurements, waitlistService, clock,
     )
 
     private fun setup(managerList: List<User>) {
@@ -137,7 +139,7 @@ class ResourceRequestWorkflowServiceTest {
     @Test
     fun `a manager who is not assigned cannot decide the request`() {
         val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
         val otherManager = User(
             id = 56, username = "other", email = "other@example.test", fullName = "Other Manager",
             passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
@@ -154,7 +156,7 @@ class ResourceRequestWorkflowServiceTest {
     @Test
     fun `a queried request cannot be approved before clarification`() {
         val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
         val manager = User(
             id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
             passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
@@ -202,7 +204,7 @@ class ResourceRequestWorkflowServiceTest {
             unitOfMeasure = "unit",
             quantity = 2,
         )
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
         whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
         whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
         whenever(resources.findForUpdateById(resource.id)).thenReturn(resource)
