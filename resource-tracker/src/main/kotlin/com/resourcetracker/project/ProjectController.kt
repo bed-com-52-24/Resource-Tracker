@@ -2,6 +2,8 @@ package com.resourcetracker.project
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -17,18 +19,19 @@ import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
-import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 
 @RestController
 @Validated
 @RequestMapping("/api/v1/projects")
+@RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
 @Tag(name = "Projects", description = "Create, search, update, and deactivate projects")
 @SecurityRequirement(name = "bearerAuth")
 class ProjectController(private val service: ProjectService) {
 
     @PostMapping
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Create a project", description = "Create a new project.")
     @ApiResponses(
         value = [
@@ -49,7 +52,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin role required",
+                description = "Department manager role required",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
             ApiResponse(
@@ -63,6 +66,7 @@ class ProjectController(private val service: ProjectService) {
         ResponseEntity.status(HttpStatus.CREATED).body(service.create(body))
 
     @PutMapping("/{id}")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(
         summary = "Update a project",
         description = "Updates an existing project. All fields are optional; null or omitted fields preserve their current values. " +
@@ -89,7 +93,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin role required",
+                description = "Department manager role required",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
             ApiResponse(
@@ -108,6 +112,7 @@ class ProjectController(private val service: ProjectService) {
         service.update(id, body)
 
     @GetMapping("/{id}")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a project", description = "Return a project by its integer ID.")
     @ApiResponses(
         value = [
@@ -123,7 +128,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin role required",
+                description = "Admin role is not permitted for project access",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
             ApiResponse(
@@ -136,6 +141,7 @@ class ProjectController(private val service: ProjectService) {
     fun get(@PathVariable @Min(1) id: Int): ProjectResponse = service.get(id)
 
     @GetMapping
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(
         summary = "List projects",
         description = "Lists all projects by default. Optionally filters by department, active status, dates, or search text. Sorting uses one field and direction."
@@ -155,7 +161,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin role required",
+                description = "Admin role is not permitted for project access",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
         ]
@@ -190,24 +196,4 @@ class ProjectController(private val service: ProjectService) {
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "startDate", "endDate", "active", "createdAt")
     }
-
-    // ---- Local error handling (move to a shared @RestControllerAdvice when the team adds one) ----
-    @ExceptionHandler(NotFoundException::class)
-    fun notFound(e: NotFoundException) = error(HttpStatus.NOT_FOUND, e.message)
-
-    @ExceptionHandler(ConflictException::class)
-    fun conflict(e: ConflictException) = error(HttpStatus.CONFLICT, e.message)
-
-    @ExceptionHandler(BadRequestException::class)
-    fun badRequest(e: BadRequestException) = error(HttpStatus.BAD_REQUEST, e.message)
-
-    @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun invalid(e: MethodArgumentNotValidException): ResponseEntity<Map<String, Any?>> {
-        val details = e.bindingResult.fieldErrors.associate { it.field to it.defaultMessage }
-        return ResponseEntity.badRequest()
-            .body(mapOf("status" to 400, "error" to "Validation failed", "details" to details))
-    }
-
-    private fun error(status: HttpStatus, message: String?): ResponseEntity<Map<String, Any?>> =
-        ResponseEntity.status(status).body(mapOf("status" to status.value(), "error" to message))
 }

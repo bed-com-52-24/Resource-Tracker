@@ -1,5 +1,8 @@
 package com.resourcetracker.department
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -11,8 +14,11 @@ import com.resourcetracker.project.ProjectRepository
 @Service
 class DepartmentService(
     private val departmentRepository: DepartmentRepository,
-    private val projectRepository: ProjectRepository, ) {
+    private val projectRepository: ProjectRepository,
+    private val audit: AuditService,
+) {
 
+    @Transactional
     fun create(request: DepartmentRequest): DepartmentResponse {
         val name = request.name.trim()
         if (departmentRepository.existsByNameIgnoreCase(name)) {
@@ -20,6 +26,15 @@ class DepartmentService(
         }
         val saved = departmentRepository.save(
             Department(name = name, description = request.description)
+        )
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.DEPARTMENT_CREATED,
+                "DEPARTMENT",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("name", "description", "status"),
+            ),
         )
         return saved.toResponse()
     }
@@ -57,6 +72,7 @@ class DepartmentService(
     @Transactional
     fun update(id: Int, request: UpdateDepartmentRequest): DepartmentResponse {
         val department = findOrThrow(id)
+        val before = snapshot(department)
         request.name?.let {
             val name = it.trim()
             if (!department.name.equals(name, ignoreCase = true) &&
@@ -68,7 +84,27 @@ class DepartmentService(
         }
         request.active?.let { applyActive(department, it) }
         request.description?.let { department.description = it }
-        return departmentRepository.save(department).toResponse()
+        val saved = departmentRepository.save(department)
+        val after = snapshot(saved)
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isNotEmpty()) {
+            val action = when {
+                "status" in changed && saved.status == "ACTIVE" -> AuditAction.DEPARTMENT_RESTORED
+                "status" in changed -> AuditAction.DEPARTMENT_ARCHIVED
+                else -> AuditAction.DEPARTMENT_UPDATED
+            }
+            audit.record(
+                AuditRecord.currentActor(
+                    action,
+                    "DEPARTMENT",
+                    saved.id.toString(),
+                    previousState = before,
+                    newState = after,
+                    changedFields = changed,
+                ),
+            )
+        }
+        return saved.toResponse()
     }
 
     private fun applyActive(department: Department, active: Boolean) {
@@ -97,6 +133,12 @@ class DepartmentService(
 
     private fun Department.toResponse() =
         DepartmentResponse(id, name, description, status)
+
+    private fun snapshot(department: Department) = mapOf(
+        "name" to department.name,
+        "description" to department.description,
+        "status" to department.status,
+    )
 
     private companion object {
         val BLOCKING_PROJECT_STATUSES = listOf("ACTIVE")

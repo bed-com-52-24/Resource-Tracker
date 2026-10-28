@@ -2,6 +2,8 @@ package com.resourcetracker.department
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -20,11 +22,13 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @Validated
 @RequestMapping("/api/v1/departments")
+@RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
 @Tag(name = "Departments", description = "Create, search, update, and deactivate departments")
 @SecurityRequirement(name = "bearerAuth")
 class DepartmentController(private val departmentService: DepartmentService) {
 
     @PostMapping
+    @RequiresRoles(Role.ADMIN)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a department", description = "Create a new active department.")
     @ApiResponses(value = [
@@ -38,6 +42,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         departmentService.create(request)
 
     @GetMapping
+    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "List departments", description = "Returns a paginated department list. Search matches department names; active status is an optional filter. Page size is capped at 100.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Departments returned"),
@@ -65,6 +70,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     )
 
     @GetMapping("/{id}")
+    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a department", description = "Return a department by its numeric identifier.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
@@ -75,6 +81,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     fun get(@PathVariable id: Int) = departmentService.getById(id)
 
     @PutMapping("/{id}")
+    @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Update a department", description = "All fields are optional; null or omitted fields preserve their current values. Updates name and description. If `active` is false, the department is deactivated; " +
         "if true, it is reactivated. Omit `active` to leave the status unchanged."
     )

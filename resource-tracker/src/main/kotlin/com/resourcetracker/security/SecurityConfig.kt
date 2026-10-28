@@ -66,11 +66,6 @@ class SecurityConfig {
                 "/api/v1/auth/forgot-password", "/api/v1/health", "/error",
                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
             ).permitAll()
-                .requestMatchers(
-                    "/api/v1/departments/**",
-                    "/api/v1/vendors/**",
-                    "/api/v1/projects/**",
-                ).hasRole("ADMIN")
                 .anyRequest().authenticated()
         }
         .addFilterBefore(
@@ -128,14 +123,30 @@ class RestAuthenticationEntryPoint(private val mapper: ObjectMapper) : Authentic
     override fun commence(
         request: HttpServletRequest,
         response: HttpServletResponse,
-        authException: AuthenticationException,
+        authException: AuthenticationException
     ) {
         response.status = HttpServletResponse.SC_UNAUTHORIZED
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+
+        val correlationId = request.getHeader("X-Correlation-ID")
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9._-]{1,100}")) }
+            ?: java.util.UUID.randomUUID().toString()
+
+        response.setHeader("X-Correlation-ID", correlationId)
+
         mapper.writeValue(
             response.outputStream,
-            ErrorResponse(401, "UNAUTHENTICATED", "Authentication required"),
+            ErrorResponse(
+                timestamp = java.time.Instant.now(),
+                status = 401,
+                error = "Unauthorized",
+                code = "UNAUTHENTICATED",
+                message = "Authentication required",
+                path = request.requestURI,
+                correlationId = correlationId,
+                details = emptyList()
+            )
         )
     }
 }

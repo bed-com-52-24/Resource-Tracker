@@ -1,4 +1,3 @@
--- 1. Waitlist table. FIFO order = created_at, then waitlist_entry_id as tie-breaker.
 CREATE TABLE waitlist_entries (
     waitlist_entry_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     request_id        INT NOT NULL,
@@ -28,22 +27,6 @@ CREATE INDEX idx_waitlist_fifo    ON waitlist_entries (resource_id, status, crea
 CREATE INDEX idx_waitlist_request ON waitlist_entries (request_id);
 CREATE INDEX idx_waitlist_line    ON waitlist_entries (line_item_id);
 
--- 2. Explicit SYSTEM actor: USER rows keep a user id, SYSTEM rows have none (no fake user).
-ALTER TABLE stock_reservations
-    MODIFY created_by INT NULL,
-    ADD COLUMN actor_type VARCHAR(10) NOT NULL DEFAULT 'USER',
-    ADD COLUMN waitlist_entry_id INT NULL,
-    ADD CONSTRAINT fk_reservation_waitlist FOREIGN KEY (waitlist_entry_id) REFERENCES waitlist_entries (waitlist_entry_id),
-    ADD CONSTRAINT chk_reservation_actor CHECK (
-        (actor_type = 'USER' AND created_by IS NOT NULL) OR (actor_type = 'SYSTEM' AND created_by IS NULL));
-
-ALTER TABLE request_history
-    MODIFY actor_id INT NULL,
-    ADD COLUMN actor_type VARCHAR(10) NOT NULL DEFAULT 'USER',
-    ADD CONSTRAINT chk_history_actor CHECK (
-        (actor_type = 'USER' AND actor_id IS NOT NULL) OR (actor_type = 'SYSTEM' AND actor_id IS NULL));
-
--- 3. Allow the WAITLISTED request status (statuses after V29: PENDING, QUERIED, APPROVED, REJECTED, CANCELLED).
 ALTER TABLE resource_requests DROP CHECK chk_request_status;
 ALTER TABLE resource_requests ADD CONSTRAINT chk_request_status CHECK (status IN (
     'PENDING', 'QUERIED', 'APPROVED', 'REJECTED', 'CANCELLED', 'WAITLISTED'));

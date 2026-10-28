@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
 import jakarta.validation.constraints.PositiveOrZero
+import jakarta.validation.constraints.Positive
 
 @Schema(description = "Information required to create a resource")
 data class CreateResourceRequest(
@@ -17,10 +18,20 @@ data class CreateResourceRequest(
     val type: ResourceType,
 
     @field:NotNull
+    @field:Schema(
+        description = "Resource category",
+        allowableValues = ["CONSUMABLE", "EQUIPMENT", "SOFTWARE", "OTHER"],
+        example = "EQUIPMENT",
+    )
     val category: ResourceCategory,
 
     @field:NotBlank
     @field:Size(max = 50)
+    @field:Schema(
+        description = "Unit label. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day).",
+        allowableValues = ["unit", "dozen", "pair", "set", "pack", "box", "bottle", "cartridge", "roll", "ream", "gram", "kilogram", "milliliter", "liter", "meter", "centimeter", "license", "user", "seat", "month", "day"],
+        example = "unit",
+    )
     val unitOfMeasure: String,
 
     @field:Size(max = 500)
@@ -33,7 +44,9 @@ data class CreateResourceRequest(
     @field:Min(0)
     val reorderLevel: Int = 0,
 
+    @field:Positive
     val departmentId: Int? = null,
+    @field:Positive
     val preferredVendorId: Int? = null,
 )
 
@@ -47,10 +60,20 @@ data class UpdateResourceRequest(
     val type: ResourceType,
 
     @field:NotNull
+    @field:Schema(
+        description = "Resource category",
+        allowableValues = ["CONSUMABLE", "EQUIPMENT", "SOFTWARE", "OTHER"],
+        example = "EQUIPMENT",
+    )
     val category: ResourceCategory,
 
     @field:NotBlank
     @field:Size(max = 50)
+    @field:Schema(
+        description = "Unit label. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day).",
+        allowableValues = ["unit", "dozen", "pair", "set", "pack", "box", "bottle", "cartridge", "roll", "ream", "gram", "kilogram", "milliliter", "liter", "meter", "centimeter", "license", "user", "seat", "month", "day"],
+        example = "unit",
+    )
     val unitOfMeasure: String,
 
     @field:Size(max = 500)
@@ -63,7 +86,9 @@ data class UpdateResourceRequest(
     @field:Min(0)
     val reorderLevel: Int = 0,
 
+    @field:Positive
     val departmentId: Int? = null,
+    @field:Positive
     val preferredVendorId: Int? = null,
     val active: Boolean? = null,
 )
@@ -90,5 +115,14 @@ data class ResourceResponse(
 
 data class CorrectionRequestDto(
     @field:PositiveOrZero val newQuantity: Int,
+    @field:Size(max = 500)
     @field:NotBlank val reason: String,
+)
+
+@Schema(description = "Audit record for a stock correction")
+data class StockCorrectionResponse(
+    val movementId: Int,
+    val resourceId: Int,
+    val quantityChange: Int,
+    val reason: String?,
 )

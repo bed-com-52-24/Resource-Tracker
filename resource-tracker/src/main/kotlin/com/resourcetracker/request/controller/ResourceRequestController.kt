@@ -198,8 +198,13 @@ class ResourceRequestController(
         service.get(id, serviceUser(caller))
 
     @GetMapping("/api/v1/requests/{id}/history")
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get append-only request history")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Chronological request history"),
+        ApiResponse(responseCode = "403", description = "Owner, assigned manager, Managing Director, or Admin access required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Request not found or not visible to the caller", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun history(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.history(id, serviceUser(caller))
 
@@ -242,7 +247,7 @@ class ResourceRequestController(
     ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
     @GetMapping("/api/v1/procurements")
-    @RequiresRoles(Role.ADMIN, Role.DEPARTMENT_MANAGER)
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
     fun procurements(
         @Parameter(description = "Search associated request numbers", example = "REQ-2026")

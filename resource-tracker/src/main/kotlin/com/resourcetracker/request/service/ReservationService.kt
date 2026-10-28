@@ -78,6 +78,18 @@ class ReservationService(
     }
 
     @Transactional
+    fun reserveApprovedInternalLines(requestId: Int, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
+        lineItems
+            .filter { it.fulfillmentPreference == FulfillmentPreference.INTERNAL.name && it.resourceId != null }
+            .sortedBy { it.resourceId }
+            .forEach { line ->
+                val lineId = requireNotNull(line.lineItemId)
+                val approvedQuantity = line.approvedQuantity ?: line.quantity
+                reserve(requestId, actorId, CreateReservationRequest(lineId, approvedQuantity))
+            }
+    }
+
+    @Transactional
     fun reserve(requestId: Int, actorId: Int, command: CreateReservationRequest): ReservationResponse {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")

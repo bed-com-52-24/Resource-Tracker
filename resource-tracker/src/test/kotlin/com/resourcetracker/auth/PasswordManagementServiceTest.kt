@@ -2,6 +2,7 @@ package com.resourcetracker.auth
 
 import com.resourcetracker.common.ApiException
 import com.resourcetracker.common.InvalidCredentialsException
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.config.SecurityProps
 import com.resourcetracker.department.Department
 import com.resourcetracker.user.ForgotPasswordRequest
@@ -33,6 +34,7 @@ class PasswordManagementServiceTest {
     private val jwt = mock(JwtService::class.java)
     private val passwordTokens = mock(PasswordTokenRepository::class.java)
     private val tokenService = mock(PasswordTokenService::class.java)
+    private val audit = mock(AuditService::class.java)
     private val now = Instant.parse("2026-10-22T00:00:00Z")
     private val props = SecurityProps(jwtSecret = "0123456789abcdef0123456789abcdef")
 
@@ -46,6 +48,7 @@ class PasswordManagementServiceTest {
             jwt,
             props,
             Clock.fixed(at, ZoneOffset.UTC),
+            audit,
             passwordTokens,
             tokenService,
         )
