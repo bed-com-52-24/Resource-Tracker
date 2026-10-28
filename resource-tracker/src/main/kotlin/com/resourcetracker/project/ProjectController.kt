@@ -2,7 +2,10 @@ package com.resourcetracker.project
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.audit.Auditable
+import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -32,6 +35,7 @@ class ProjectController(private val service: ProjectService) {
 
     @PostMapping
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Auditable(action = AuditAction.PROJECT_CREATED, itemType = "Project", itemIdExpression = "#body.code")
     @Operation(summary = "Create a project", description = "Create a new project.")
     @ApiResponses(
         value = [
@@ -67,6 +71,7 @@ class ProjectController(private val service: ProjectService) {
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Auditable(action = AuditAction.PROJECT_UPDATED, itemType = "Project", itemIdExpression = "#id")
     @Operation(
         summary = "Update a project",
         description = "Updates an existing project. All fields are optional; null or omitted fields preserve their current values. " +
@@ -167,7 +172,7 @@ class ProjectController(private val service: ProjectService) {
         ]
     )
     fun list(
-        @Parameter(description = "Search project names or codes", example = "facilities")
+        @Parameter(description = "Search project names or codes (optional)")
         @RequestParam(required = false) search: String?,
         @Parameter(description = "Zero-based page number", example = "0")
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -183,15 +188,16 @@ class ProjectController(private val service: ProjectService) {
         @RequestParam(required = false) active: Boolean?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startFrom: LocalDate?,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) startTo: LocalDate?,
-    ): Page<ProjectResponse> =
-        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
-            val order = pageable.sort.first()
-            service.list(
-                departmentId, active, startFrom, startTo, search,
-                pageable.pageNumber, pageable.pageSize,
-                listOf("${order.property}:${order.direction.name.lowercase()}"),
-            )
-        }
+    ): PagedResponse<ProjectResponse> {
+        val pageable = ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name")
+        val order = pageable.sort.first()
+        val result = service.list(
+            departmentId, active, startFrom, startTo, search,
+            pageable.pageNumber, pageable.pageSize,
+            listOf("${order.property}:${order.direction.name.lowercase()}"),
+        )
+        return PagedResponse.from(result)
+    }
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "startDate", "endDate", "active", "createdAt")

@@ -2,6 +2,7 @@ package com.resourcetracker.department
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
@@ -51,7 +52,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
-        @Parameter(description = "Search department names", example = "engineering")
+        @Parameter(description = "Search department names (optional)")
         @RequestParam(required = false) search: String?,
         @Parameter(description = "Zero-based page number", example = "0")
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -63,11 +64,11 @@ class DepartmentController(private val departmentService: DepartmentService) {
         @RequestParam(defaultValue = "asc") direction: String,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive departments.", example = "true")
         @RequestParam(required = false) active: Boolean?,
-    ) = departmentService.search(
+    ): PagedResponse<DepartmentResponse> = PagedResponse.from(departmentService.search(
         active,
         search,
         ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name")
-    )
+    ))
 
     @GetMapping("/{id}")
     @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)

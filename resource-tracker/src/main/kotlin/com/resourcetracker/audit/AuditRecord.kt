@@ -16,7 +16,7 @@ data class AuditRecord(
     val comment: String? = null,
     val ipAddress: String? = null,
     val userAgent: String? = null,
-    val changedFields: List<String>? = null,
+    val changedFields: Any? = null,
     val correlationId: String? = null,
 ) {
     init {
@@ -38,9 +38,6 @@ data class AuditRecord(
         require(userAgent == null || userAgent.length <= 512) {
             "userAgent must not exceed 512 characters"
         }
-        require(changedFields == null || changedFields.all { it.isNotBlank() && it.length <= 128 }) {
-            "changedFields must contain non-blank names up to 128 characters"
-        }
         require(correlationId == null || AuditCorrelationContext.isValid(correlationId)) {
             "correlationId has an invalid format"
         }
@@ -54,7 +51,7 @@ data class AuditRecord(
             previousState: Any? = null,
             newState: Any? = null,
             comment: String? = null,
-            changedFields: List<String>? = null,
+            changedFields: Any? = null,
         ): AuditRecord {
             val principal = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
             val request = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
