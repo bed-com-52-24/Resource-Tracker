@@ -2,7 +2,6 @@ package com.resourcetracker.request.dto
 
 import com.resourcetracker.request.entity.RequestCategory
 import com.resourcetracker.request.entity.RequestStatus
-import com.resourcetracker.request.entity.WaitlistStatus
 import io.swagger.v3.oas.annotations.media.Schema
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -26,15 +25,6 @@ data class RequestLineItemResponseDto(
     val availableQuantity: Int? = null,
     @Schema(description = "Present only when the line item is waitlisted")
     val waitlist: WaitlistProgressResponse? = null,
-)
-
-data class WaitlistProgressResponse(
-    val entryId: Int,
-    val status: WaitlistStatus,
-    val quantity: Int,
-    val reservedQuantity: Int,
-    val issuedQuantity: Int,
-    val position: Int?,
 )
 
 data class ResourceRequestResponseDto(

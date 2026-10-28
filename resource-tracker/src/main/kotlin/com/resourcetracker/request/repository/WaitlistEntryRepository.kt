@@ -10,54 +10,53 @@ import org.springframework.data.repository.query.Param
 import java.time.LocalDateTime
 
 interface WaitlistEntryRepository : JpaRepository<WaitlistEntry, Int> {
-    fun findByRequestId(requestId: Int): List<WaitlistEntry>
 
+    /**
+     * Entries of one resource that still need stock, oldest first, row-locked.
+     * The lock makes concurrent transactions queue instead of reserving the same units.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
         """
-        select entry from WaitlistEntry entry
-        where entry.requestId = :requestId
-        order by entry.id asc
-        """,
-    )
-    fun findByRequestIdForUpdate(@Param("requestId") requestId: Int): List<WaitlistEntry>
-
-    fun findByLineItemId(lineItemId: Int): WaitlistEntry?
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select entry from WaitlistEntry entry where entry.lineItemId = :lineItemId")
-    fun findByLineItemIdForUpdate(@Param("lineItemId") lineItemId: Int): WaitlistEntry?
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query(
+        select w from WaitlistEntry w
+        where w.resourceId = :resourceId
+          and w.status in :statuses
+          and w.reservedQuantity < w.quantity
+        order by w.createdAt asc, w.id asc
         """
-        select entry from WaitlistEntry entry
-        where entry.resourceId = :resourceId
-          and entry.status in :statuses
-        order by entry.createdAt asc, entry.id asc
-        """,
     )
     fun findOpenForUpdateByResourceIdFifo(
         @Param("resourceId") resourceId: Int,
         @Param("statuses") statuses: Collection<WaitlistStatus>,
     ): List<WaitlistEntry>
 
+    /** Plain read: used to find which resources to lock before locking entries. */
+    fun findByRequestId(requestId: Int): List<WaitlistEntry>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select w from WaitlistEntry w where w.requestId = :requestId order by w.id")
+    fun findByRequestIdForUpdate(@Param("requestId") requestId: Int): List<WaitlistEntry>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select w from WaitlistEntry w where w.lineItemId = :lineItemId")
+    fun findByLineItemIdForUpdate(@Param("lineItemId") lineItemId: Int): WaitlistEntry?
+
+    fun findByLineItemId(lineItemId: Int): WaitlistEntry?
+
+    /** Entries ahead of the given one that still need stock (used for the queue position). */
     @Query(
         """
-        select count(entry) from WaitlistEntry entry
-        where entry.resourceId = :resourceId
-          and entry.status in :statuses
-          and entry.reservedQuantity < entry.quantity
-          and (
-              entry.createdAt < :createdAt
-              or (entry.createdAt = :createdAt and entry.id < :entryId)
-          )
-        """,
+        select count(w) from WaitlistEntry w
+        where w.resourceId = :resourceId
+          and w.status in :statuses
+          and w.reservedQuantity < w.quantity
+          and (w.createdAt < :createdAt or (w.createdAt = :createdAt and w.id < :id))
+        """
     )
     fun countAhead(
         @Param("resourceId") resourceId: Int,
         @Param("statuses") statuses: Collection<WaitlistStatus>,
         @Param("createdAt") createdAt: LocalDateTime,
-        @Param("entryId") entryId: Int,
+        @Param("id") id: Int,
     ): Long
 }
