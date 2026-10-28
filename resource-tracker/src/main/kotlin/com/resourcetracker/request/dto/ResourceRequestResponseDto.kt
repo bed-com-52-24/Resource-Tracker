@@ -1,5 +1,11 @@
 package com.resourcetracker.request.dto
 
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.ProjectReference
+import com.resourcetracker.common.ResourceReference
+import com.resourcetracker.common.TeamReference
+import com.resourcetracker.common.UserReference
+import com.resourcetracker.common.VendorReference
 import com.resourcetracker.request.entity.RequestCategory
 import com.resourcetracker.request.entity.RequestStatus
 import java.math.BigDecimal
@@ -14,7 +20,7 @@ data class RequestLineItemResponseDto(
     val quantity: Int,
     val category: RequestCategory,
     val batchNumber: String?,
-    val resourceId: Int? = null,
+    val resource: ResourceReference? = null,
     val fulfillmentPreference: String = "INTERNAL",
     val unitOfMeasure: String? = null,
     val approvedQuantity: Int? = null,
@@ -27,12 +33,12 @@ data class RequestLineItemResponseDto(
 data class ResourceRequestResponseDto(
     val requestId: Int,
     val requestNumber: String,
-    val departmentId: Int,
-    val projectId: Int,
-    val teamId: Int,
-    val vendorId: Int?,
-    val requesterId: Int,
-    val assignedManagerId: Int?,
+    val department: DepartmentReference,
+    val project: ProjectReference,
+    val team: TeamReference,
+    val vendor: VendorReference?,
+    val requester: UserReference,
+    val assignedManager: UserReference?,
     val needsReassignment: Boolean = false,
     val requiredDate: LocalDate? = null,
     val justification: String?,

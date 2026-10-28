@@ -1,6 +1,7 @@
 package com.resourcetracker.team
 
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.TeamReference
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
@@ -59,7 +60,7 @@ class TeamController(private val service: TeamService) {
                 fullName = user.fullName ?: user.username,
                 role = user.role,
                 active = user.active,
-                teamIds = user.teams.map { it.id }.sorted(),
+                teams = user.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
             )
         }
 
@@ -75,7 +76,7 @@ class TeamController(private val service: TeamService) {
                 fullName = user.fullName ?: user.username,
                 role = user.role,
                 active = user.active,
-                teamIds = user.teams.map { it.id }.sorted(),
+                teams = user.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
             )
         }
 
@@ -91,7 +92,7 @@ class TeamController(private val service: TeamService) {
             fullName = user.fullName ?: user.username,
             role = user.role,
             active = user.active,
-            teamIds = user.teams.map { it.id }.sorted(),
+            teams = user.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
         )
     }
 
@@ -107,7 +108,7 @@ class TeamController(private val service: TeamService) {
             fullName = user.fullName ?: user.username,
             role = user.role,
             active = user.active,
-            teamIds = user.teams.map { it.id }.sorted(),
+            teams = user.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
         )
     }
 

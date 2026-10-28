@@ -1,5 +1,8 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.ProjectReference
+import com.resourcetracker.common.UserReference
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -14,8 +17,6 @@ data class TeamRequest(
 
     val projectIds: Set<Int> = emptySet()
 )
-
-data class ProjectSummary(val id: Int, val name: String, val code: String)
 
 data class UpdateTeamRequest(
     @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
@@ -41,11 +42,9 @@ data class UpdateTeamRequest(
 data class TeamResponse(
     val id: Int,
     val name: String,
-    val departmentId: Int,
-    val departmentName: String,
-    val managerId: Int?,
-    val managerName: String?,
-    val projects: List<ProjectSummary>,
+    val department: DepartmentReference,
+    val manager: UserReference?,
+    val projects: List<ProjectReference>,
     val isActive: Boolean
 )
 
@@ -64,16 +63,14 @@ data class TeamMemberResponse(
     val fullName: String,
     val role: com.resourcetracker.user.Role,
     val active: Boolean,
-    val teamIds: List<Int>,
+    val teams: List<com.resourcetracker.common.TeamReference>,
 )
 
 fun Team.toResponse() = TeamResponse(
     id = id,
     name = name,
-    departmentId = department.id,
-    departmentName = department.name,
-    managerId = manager?.id,
-    managerName = manager?.let { it.fullName ?: it.username },
-    projects = projects.map { ProjectSummary(it.id, it.name, it.code) }.sortedBy { it.name },
+    department = DepartmentReference(department.id, department.name),
+    manager = manager?.let { UserReference(it.id, it.fullName ?: it.username) },
+    projects = projects.map { ProjectReference(it.id, it.name, it.code) }.sortedBy { it.name },
     isActive = isActive
 )

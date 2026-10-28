@@ -1,5 +1,11 @@
 package com.resourcetracker.request.service
 
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.ProjectReference
+import com.resourcetracker.common.ResourceReference
+import com.resourcetracker.common.TeamReference
+import com.resourcetracker.common.UserReference
+import com.resourcetracker.common.VendorReference
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
@@ -384,19 +390,39 @@ class ResourceRequestService(
 
     private fun user(id: Int): User = users.findById(id).orElseThrow { ResourceNotFoundException("User not found") }
 
-    private fun ResourceRequest.toResponse(lines: List<ResourceRequestLineItem>, warnings: List<String> = emptyList(), includeStock: Boolean = false) =
-        ResourceRequestResponseDto(
-            requestId = requireNotNull(requestId), requestNumber = requestNumber, departmentId = departmentId,
-            projectId = projectId, teamId = teamId, vendorId = vendorId, requesterId = requesterId,
-            assignedManagerId = assignedManagerId, needsReassignment = needsReassignment, requiredDate = requiredDate,
+    private fun ResourceRequest.toResponse(
+        lines: List<ResourceRequestLineItem>,
+        warnings: List<String> = emptyList(),
+        includeStock: Boolean = false,
+    ): ResourceRequestResponseDto {
+        val team = teams.findById(teamId).orElseThrow { ResourceNotFoundException("Team not found") }
+        val project = projects.findById(projectId).orElseThrow { ResourceNotFoundException("Project not found") }
+        val requester = user(requesterId)
+        val assignedManager = assignedManagerId?.let(::user)
+
+        return ResourceRequestResponseDto(
+            requestId = requireNotNull(requestId), requestNumber = requestNumber,
+            department = DepartmentReference(requireNotNull(team.department.id), team.department.name),
+            project = ProjectReference(project.id, project.name, project.code),
+            team = TeamReference(team.id, team.name),
+            vendor = vendorId?.let { id ->
+                vendors.findById(id).orElseThrow { ResourceNotFoundException("Vendor not found") }
+                    .let { VendorReference(it.id, it.name) }
+            },
+            requester = UserReference(requester.id, requester.fullName ?: requester.username),
+            assignedManager = assignedManager?.let { UserReference(it.id, it.fullName ?: it.username) },
+            needsReassignment = needsReassignment, requiredDate = requiredDate,
             justification = justification, totalAmount = totalAmount, status = status, editedAfterQuery = editedAfterQuery,
             createdAt = createdAt ?: LocalDateTime.MIN, updatedAt = updatedAt ?: LocalDateTime.MIN,
             lineItems = lines.map { line ->
-                val resource = if (includeStock) line.resourceId?.let { resources.findById(it).orElse(null) } else null
-                val internalResource = resource?.takeIf { it.type == ResourceType.INTERNAL }
+                val resource = line.resourceId?.let {
+                    resources.findById(it).orElseThrow { ResourceNotFoundException("Resource not found") }
+                }
+                val internalResource = resource?.takeIf { includeStock && it.type == ResourceType.INTERNAL }
                 RequestLineItemResponseDto(
                     requireNotNull(line.lineItemId), line.description, line.manufacturer, line.unitPrice,
-                    line.quantity, line.category, line.batchNumber, line.resourceId, line.fulfillmentPreference,
+                    line.quantity, line.category, line.batchNumber,
+                    resource?.let { ResourceReference(it.id, it.code, it.name) }, line.fulfillmentPreference,
                     line.unitOfMeasure, line.approvedQuantity,
                     physicalQuantity = internalResource?.quantity,
                     reservedQuantity = internalResource?.let { availability.reservedQuantity(it.id) },
@@ -407,6 +433,7 @@ class ResourceRequestService(
             warnings = warnings,
             fulfillmentStatus = fulfillmentStatus(requireNotNull(requestId), lines),
         )
+    }
 
     private fun fulfillmentStatus(requestId: Int, lines: List<ResourceRequestLineItem>): String {
         val activeReservations = reservationRepository.findAllByRequestIdAndStatus(requestId, ReservationStatus.ACTIVE)

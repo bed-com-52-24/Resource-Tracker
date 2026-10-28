@@ -4,6 +4,8 @@ import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.UserRepository
 import com.resourcetracker.user.PasswordSetRequest
 import com.resourcetracker.user.ForgotPasswordRequest
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.TeamReference
 import com.resourcetracker.common.UnauthenticatedException
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -53,7 +55,7 @@ data class TokenPair(
 
 data class ProfileResponse(
     val id: Int, val username:String, val email: String, val fullName: String,
-    val role: String, val department: String, val teams: List<String>, val teamIds: List<Int>, val active: Boolean,
+    val role: String, val department: DepartmentReference, val teams: List<TeamReference>, val active: Boolean,
 )
 
 @RestController
@@ -99,7 +101,10 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         val u = users.findById(caller.id).orElseThrow{ UnauthenticatedException() }
         return ProfileResponse(
             u.id, u.username, u.email, u.fullName ?: u.username,
-            u.role.name, u.department.name, u.teams.map { it.name }.sorted(), u.teams.map { it.id }.sorted(), u.active,
+            u.role.name,
+            DepartmentReference(u.department.id, u.department.name),
+            u.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
+            u.active,
         )
     }
 

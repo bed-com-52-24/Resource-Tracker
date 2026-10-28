@@ -1,8 +1,12 @@
 package com.resourcetracker.resource
 
+<<<<<<< HEAD
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
+=======
+import com.resourcetracker.department.Department
+>>>>>>> 31a7d1a (Return related entities as nested DTOs)
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.common.BusinessRuleException
@@ -125,12 +129,14 @@ class ResourceServiceTest {
     @Test
     fun `zero quantity is out of stock`() {
         `when`(codes.next()).thenReturn("R-2")
-        `when`(departments.findById(1)).thenReturn(Optional.of(mock(com.resourcetracker.department.Department::class.java)))
+        `when`(departments.findById(1)).thenReturn(Optional.of(Department(id = 1, name = "Engineering")))
         `when`(resources.save(org.mockito.ArgumentMatchers.any())).thenAnswer { it.arguments[0] }
 
         val response = service.create(internalRequest(0), 1)
 
         assertEquals(ResourceStatus.OUT_OF_STOCK, response.status)
+        assertEquals(1, response.department?.id)
+        assertEquals("Engineering", response.department?.name)
     }
 
     @Test
@@ -145,7 +151,7 @@ class ResourceServiceTest {
             status = ResourceStatus.OUT_OF_STOCK,
         )
         `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
-        `when`(departments.findById(1)).thenReturn(Optional.of(mock(com.resourcetracker.department.Department::class.java)))
+        `when`(departments.findById(1)).thenReturn(Optional.of(Department(id = 1, name = "Engineering")))
         `when`(resources.save(resource)).thenReturn(resource)
 
         assertThrows(BusinessRuleException::class.java) {

@@ -5,7 +5,6 @@ import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.service.*
-import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
@@ -33,9 +32,7 @@ import java.time.LocalDate
 @SecurityRequirement(name = "bearerAuth")
 class ResourceRequestController(
     private val service: ResourceRequestService,
-    private val reservationService: ReservationService,
     private val stockOperations: StockOperationsService,
-    private val procurements: ProcurementService,
 ) {
 
     @PostMapping("/api/v1/requests")
@@ -125,25 +122,6 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.decide(id, serviceUser(caller), dto)
 
-    @PostMapping("/api/v1/requests/{id}/reservations")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Reserve approved internal stock")
-    fun reserve(
-        @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody dto: CreateReservationRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = reservationService.reserve(id, caller.id, dto)
-
-    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/approved-quantity")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Adjust approved line quantity")
-    fun adjustApprovedQuantity(
-        @PathVariable @Min(1) id: Int,
-        @PathVariable @Min(1) lineItemId: Int,
-        @Valid @RequestBody dto: ApprovedQuantityUpdateRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.adjustApprovedQuantity(id, lineItemId, serviceUser(caller), dto)
-
     @PutMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD)
     @Operation(summary = "Clarify or cancel an owned request")
@@ -211,26 +189,6 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.reassign(id, serviceUser(caller), dto.managerId)
 
-    @PostMapping("/api/v1/requests/{id}/issues")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Issue approved stock for a request")
-    fun issue(
-        @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody request: StockIssueRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.issue(id, caller.id, request)
-
-    @PostMapping("/api/v1/issues/{issueId}/returns")
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Request a return for an issued resource")
-    fun returnStock(
-        @PathVariable @Min(1) issueId: Int,
-        @Valid @RequestBody request: CreateReturnRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.requestReturn(issueId, caller.id, request)
-
     @PutMapping("/api/v1/returns/{returnId}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Verify a resource return")
@@ -240,6 +198,7 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
+<<<<<<< HEAD
     @GetMapping("/api/v1/procurements")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
@@ -268,5 +227,7 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = procurements.update(id, caller.id, request)
 
+=======
+>>>>>>> 31a7d1a (Return related entities as nested DTOs)
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }

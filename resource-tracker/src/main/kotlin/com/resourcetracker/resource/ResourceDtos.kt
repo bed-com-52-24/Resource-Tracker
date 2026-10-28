@@ -1,5 +1,7 @@
 package com.resourcetracker.resource
 
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.VendorReference
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -106,8 +108,8 @@ data class ResourceResponse(
     val location: String?,
     val reorderLevel: Int,
     val status: ResourceStatus?,
-    val departmentId: Int?,
-    val preferredVendorId: Int?,
+    val department: DepartmentReference?,
+    val preferredVendor: VendorReference?,
     val reservedQuantity: Int = 0,
     val unavailableQuantity: Int = 0,
     val availableQuantity: Int? = null,

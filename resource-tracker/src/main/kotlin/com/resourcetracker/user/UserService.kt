@@ -1,5 +1,7 @@
 package com.resourcetracker.user
 
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.TeamReference
 import com.resourcetracker.auth.RefreshTokenRepository
 import com.resourcetracker.auth.PasswordTokenPurpose
 import com.resourcetracker.auth.PasswordTokenRepository
@@ -203,10 +205,8 @@ class UserService(
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName ?: username,
         role = role,
-        departmentId = department.id,
-        departmentName = department.name,
-        teamIds = teams.map { it.id }.sorted(),
-        teamNames = teams.map { it.name }.sorted(),
+        department = DepartmentReference(department.id, department.name),
+        teams = teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
         active = active,
         passwordSet = passwordHash != null,
     )
