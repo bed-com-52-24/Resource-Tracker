@@ -1,8 +1,12 @@
 package com.resourcetracker.resource
 
+import com.resourcetracker.audit.AuditService
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.common.BusinessRuleException
+import com.resourcetracker.common.BadRequestException
 import com.resourcetracker.request.service.StockAvailabilityService
 import com.resourcetracker.request.repository.StockMovementRepository
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -10,6 +14,8 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.verify
 import java.util.Optional
 
 class ResourceServiceTest {
@@ -17,9 +23,10 @@ class ResourceServiceTest {
     private val codes = mock(ResourceCodeGenerator::class.java)
     private val departments = mock(DepartmentRepository::class.java)
     private val vendors = mock(VendorRepository::class.java)
+    private val audit = mock(AuditService::class.java)
     private val availability = mock(StockAvailabilityService::class.java)
     private val movements = mock(StockMovementRepository::class.java)
-    private val service = ResourceService(resources, codes, departments, vendors, availability, movements)
+    private val service = ResourceService(resources, codes, departments, vendors, audit, availability, movements)
 
     private fun resource(active: Boolean) = Resource(
         id = 1,
@@ -71,8 +78,31 @@ class ResourceServiceTest {
     }
 
     @Test
+    fun `resource metadata changes are audited`() {
+        val resource = resource(active = true)
+        `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
+        `when`(resources.save(resource)).thenReturn(resource)
+
+        service.update(
+            resource.id,
+            UpdateResourceRequest(
+                name = "Updated projector",
+                type = ResourceType.EXTERNAL,
+                category = ResourceCategory.EQUIPMENT,
+                unitOfMeasure = "unit",
+            ),
+        )
+
+        val auditRecord = argumentCaptor<AuditRecord>()
+        verify(audit).record(auditRecord.capture())
+        assertEquals(AuditAction.RESOURCE_UPDATED, auditRecord.firstValue.action)
+        assertEquals("Projector", (auditRecord.firstValue.previousState as Map<*, *>)["name"])
+        assertEquals("Updated projector", (auditRecord.firstValue.newState as Map<*, *>)["name"])
+    }
+
+    @Test
     fun `internal create requires quantity`() {
-        assertThrows(BusinessRuleException::class.java) {
+        assertThrows(BadRequestException::class.java) {
             service.create(internalRequest(null), 1)
         }
     }
@@ -87,7 +117,7 @@ class ResourceServiceTest {
             quantity = 1,
         )
 
-        assertThrows(BusinessRuleException::class.java) {
+        assertThrows(BadRequestException::class.java) {
             service.create(request, 1)
         }
     }
@@ -122,12 +152,12 @@ class ResourceServiceTest {
             service.update(
                 resource.id,
                 UpdateResourceRequest(
-                name = "Projector",
-                type = ResourceType.INTERNAL,
-                category = ResourceCategory.EQUIPMENT,
-                unitOfMeasure = "unit",
-                quantity = 5,
-                departmentId = 1,
+                    name = "Projector",
+                    type = ResourceType.INTERNAL,
+                    category = ResourceCategory.EQUIPMENT,
+                    unitOfMeasure = "unit",
+                    quantity = 5,
+                    departmentId = 1,
                 ),
             )
         }

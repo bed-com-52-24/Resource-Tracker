@@ -1,17 +1,23 @@
 package com.resourcetracker.project
 
+import com.resourcetracker.audit.AuditService
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.common.ConflictException
 import com.resourcetracker.common.NotFoundException
 import com.resourcetracker.common.ValidationException
 import com.resourcetracker.resource.ResourceRepository
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.verify
 import java.time.LocalDate
 import java.util.Optional
 
@@ -20,7 +26,8 @@ class ProjectServiceTest {
     private val projects = mock(ProjectRepository::class.java)
     private val departments = mock(DepartmentRepository::class.java)
     private val resources = mock(ResourceRepository::class.java)
-    private val service = ProjectService(projects, departments, resources)
+    private val audit = mock(AuditService::class.java)
+    private val service = ProjectService(projects, departments, resources, audit)
 
     private val deptId = 1
     private val dept = Department(id = deptId, name = "Engineering")
@@ -77,6 +84,10 @@ class ProjectServiceTest {
         assertTrue(project.active)
         service.deactivate(id)
         assertFalse(project.active)
+        val auditRecord = argumentCaptor<AuditRecord>()
+        verify(audit).record(auditRecord.capture())
+        assertEquals(AuditAction.PROJECT_ARCHIVED, auditRecord.firstValue.action)
+        assertEquals(listOf("active"), auditRecord.firstValue.changedFields)
     }
 
     @Test

@@ -8,10 +8,19 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.data.jpa.repository.Lock
 import jakarta.persistence.LockModeType
+import java.time.LocalDate
 
 interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     @Query("select coalesce(sum(r.quantity), 0) from StockReservation r where r.resourceId = :resourceId and r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE")
     fun sumActiveByResourceId(@Param("resourceId") resourceId: Int): Long
+    @Query(
+        """select r.resourceId as resourceId, sum(r.quantity) as totalQuantity
+           from StockReservation r
+           where r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE
+             and r.resourceId in :resourceIds
+           group by r.resourceId""",
+    )
+    fun sumActiveByResourceIds(@Param("resourceIds") resourceIds: Collection<Int>): List<ActiveReservationTotal>
     fun findAllByRequestIdAndStatus(requestId: Int, status: ReservationStatus): List<StockReservation>
     fun findAllByRequestIdAndLineItemIdAndStatus(requestId: Int, lineItemId: Int, status: ReservationStatus): List<StockReservation>
     fun findAllByLineItemIdAndStatus(lineItemId: Int, status: ReservationStatus): List<StockReservation>
@@ -21,6 +30,11 @@ interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from StockReservation r where r.requestId = :requestId and r.lineItemId = :lineItemId and r.status = :status")
     fun findByRequestIdAndLineItemIdAndStatusForUpdate(@Param("requestId") requestId: Int, @Param("lineItemId") lineItemId: Int, @Param("status") status: ReservationStatus): List<StockReservation>
+}
+
+interface ActiveReservationTotal {
+    fun getResourceId(): Int
+    fun getTotalQuantity(): Long
 }
 
 interface StockIssueRepository : JpaRepository<StockIssue, Int> {
@@ -34,6 +48,55 @@ interface StockIssueRepository : JpaRepository<StockIssue, Int> {
     fun findAllByRequestId(requestId: Int): List<StockIssue>
     @Query("select coalesce(sum(i.quantity - i.returnedQuantity), 0) from StockIssue i where i.lineItemId = :lineItemId")
     fun sumOutstandingByLineItemId(@Param("lineItemId") lineItemId: Int): Long
+
+    @Query(
+        """
+        select i.resourceId as resourceId,
+               sum(i.quantity) as totalIssuedQuantity,
+               sum(i.quantity - i.returnedQuantity) as outstandingQuantity,
+               sum(case when request.requiredDate < :asOfDate
+                        then i.quantity - i.returnedQuantity else 0 end) as overdueQuantity
+        from StockIssue i
+        join ResourceRequest request on request.requestId = i.requestId
+        where i.resourceId in :resourceIds
+        group by i.resourceId
+        """,
+    )
+    fun summarizeResources(
+        @Param("resourceIds") resourceIds: Collection<Int>,
+        @Param("asOfDate") asOfDate: LocalDate,
+    ): List<ResourceIssueSummary>
+
+    @Query(
+        """
+        select i.resourceId as resourceId,
+               request.requiredDate as expectedDate,
+               sum(i.quantity - i.returnedQuantity) as quantity
+        from StockIssue i
+        join ResourceRequest request on request.requestId = i.requestId
+        where i.resourceId in :resourceIds
+          and i.returnedQuantity < i.quantity
+          and request.requiredDate >= :asOfDate
+        group by i.resourceId, request.requiredDate
+        """,
+    )
+    fun findExpectedReturns(
+        @Param("resourceIds") resourceIds: Collection<Int>,
+        @Param("asOfDate") asOfDate: LocalDate,
+    ): List<ExpectedReturnProjection>
+}
+
+interface ResourceIssueSummary {
+    val resourceId: Int
+    val totalIssuedQuantity: Long
+    val outstandingQuantity: Long
+    val overdueQuantity: Long
+}
+
+interface ExpectedReturnProjection {
+    val resourceId: Int
+    val expectedDate: LocalDate
+    val quantity: Long
 }
 
 interface StockReturnRepository : JpaRepository<StockReturn, Int> {

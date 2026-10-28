@@ -1,5 +1,8 @@
 package com.resourcetracker.project
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.common.ConflictException
@@ -18,7 +21,8 @@ import java.time.LocalDate
 class ProjectService(
     private val projects: ProjectRepository,
     private val departments: DepartmentRepository,
-    private val resources: ResourceRepository
+    private val resources: ResourceRepository,
+    private val audit: AuditService,
 ) {
     private val allowedSortFields = setOf("name", "code", "startDate", "endDate", "active", "createdAt")
 
@@ -39,12 +43,22 @@ class ProjectService(
                 startDate = req.startDate, endDate = req.endDate
             )
         )
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.PROJECT_CREATED,
+                "PROJECT",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("name", "code", "departmentId", "startDate", "endDate", "active"),
+            ),
+        )
         return saved.toResponse()
     }
 
     @Transactional
     fun update(id: Int, req: UpdateProjectRequest): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
+        val before = snapshot(project)
         val dept = req.departmentId?.let {
             departments.findByIdOrNull(it)?.takeIf { department -> department.status == "ACTIVE" }
                 ?: throw NotFoundException("Department not found or inactive")
@@ -68,14 +82,17 @@ class ProjectService(
         req.endDate?.let { project.endDate = it }
         req.active?.let { applyActive(project, it) }
         project.updatedAt = Instant.now()
+        recordUpdate(project, before, snapshot(project))
         return project.toResponse()
     }
 
     @Transactional
     fun deactivate(id: Int): ProjectResponse {
         val project = projects.findByIdOrNull(id) ?: throw NotFoundException("Project not found")
+        val before = snapshot(project)
         applyActive(project, false)
         project.updatedAt = Instant.now()
+        recordUpdate(project, before, snapshot(project))
         return project.toResponse()
     }
 
@@ -118,6 +135,35 @@ class ProjectService(
     }
 
     private fun hasActiveRequests(projectId: Int): Boolean = false
+
+    private fun snapshot(project: Project) = mapOf(
+        "name" to project.name,
+        "code" to project.code,
+        "departmentId" to project.department.id,
+        "startDate" to project.startDate,
+        "endDate" to project.endDate,
+        "active" to project.active,
+    )
+
+    private fun recordUpdate(project: Project, before: Map<String, Any?>, after: Map<String, Any?>) {
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isEmpty()) return
+        val action = when {
+            "active" in changed && project.active -> AuditAction.PROJECT_RESTORED
+            "active" in changed -> AuditAction.PROJECT_ARCHIVED
+            else -> AuditAction.PROJECT_UPDATED
+        }
+        audit.record(
+            AuditRecord.currentActor(
+                action,
+                "PROJECT",
+                project.id.toString(),
+                previousState = before,
+                newState = after,
+                changedFields = changed,
+            ),
+        )
+    }
 
     private fun validateDates(start: LocalDate, end: LocalDate?) {
         if (end != null && end.isBefore(start))

@@ -37,6 +37,6 @@ class CorrelationIdFilter : OncePerRequestFilter() {
         const val REQUEST_ATTRIBUTE = "com.resourcetracker.correlationId"
         const val MDC_KEY = "correlationId"
 
-        private val VALID_CORRELATION_ID = Regex("[A-Za-z0-9._-]{1,64}")
+        private val VALID_CORRELATION_ID = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
     }
 }

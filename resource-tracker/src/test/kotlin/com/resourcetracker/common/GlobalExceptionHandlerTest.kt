@@ -11,9 +11,10 @@ class GlobalExceptionHandlerTest {
 
     @Test
     fun `api errors use the standard response contract`() {
-        val request = MockHttpServletRequest("GET", "/api/v1/resources/9").apply {
-            setAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE, "trace-123")
-        }
+        val request =
+            MockHttpServletRequest("GET", "/api/v1/resources/9").apply {
+                setAttribute(CorrelationIdFilter.REQUEST_ATTRIBUTE, "trace-123")
+            }
 
         val response = handler.api(NotFoundException("Resource not found"), request)
 
@@ -31,10 +32,11 @@ class GlobalExceptionHandlerTest {
     fun `forbidden role errors disclose required and actual roles`() {
         val request = MockHttpServletRequest("POST", "/api/v1/resources")
 
-        val response = handler.api(
-            ForbiddenRoleException(listOf(Role.ADMIN), Role.TEAM_LEAD),
-            request,
-        )
+        val response =
+            handler.api(
+                ForbiddenRoleException(listOf(Role.ADMIN), Role.TEAM_LEAD),
+                request,
+            )
 
         assertEquals(403, response.statusCode.value())
         assertEquals(

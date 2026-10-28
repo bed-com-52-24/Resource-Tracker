@@ -99,7 +99,7 @@ class DuplicateResourceException(
     message: String = "Resource already exists",
 ) : ApiException(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", message)
 class ResourceNotFoundException(message: String = "Resource not found") :
-    NotFoundException(message)
+    ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
 class BusinessRuleException(message: String) :
     ApiException(
         HttpStatus.CONFLICT,
@@ -287,7 +287,7 @@ class GlobalExceptionHandler {
             ?: request.getHeader(CorrelationIdFilter.HEADER_NAME)
 
         return supplied
-            ?.takeIf { it.matches(Regex("[A-Za-z0-9._-]{1,100}")) }
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")) }
             ?: UUID.randomUUID().toString()
     }
 }

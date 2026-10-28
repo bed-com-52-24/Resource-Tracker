@@ -33,6 +33,7 @@ class RequestNumberServiceTest {
             withDatabaseName("resource_tracker")
             withUsername("test")
             withPassword("test")
+            withCommand("--log-bin-trust-function-creators=1")
         }
 
         @DynamicPropertySource

@@ -66,13 +66,13 @@ class ProcurementService(
         direction: String,
     ): Page<ProcurementResponse> {
         val actor = users.findById(actorId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "User not found") }
-        if (actor.role != Role.ADMIN && actor.role != Role.DEPARTMENT_MANAGER) forbidden()
+        if (actor.role != Role.DEPARTMENT_MANAGER) forbidden()
         val keyword = search?.trim()?.takeIf(String::isNotEmpty)
         if (keyword != null && keyword.length > 200) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Search must be 200 characters or less")
         }
         val pageable = ListQuery.pageable(page, size, sort, direction, SORT_FIELDS, "id")
-        return procurements.searchForActor(status, actor.id, actor.role == Role.ADMIN, keyword, pageable)
+        return procurements.searchForActor(status, actor.id, false, keyword, pageable)
             .map { it.toResponse() }
     }
 

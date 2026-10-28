@@ -1,5 +1,8 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.ResourceNotFoundException
@@ -27,6 +30,7 @@ class TeamService(
     private val departments: DepartmentRepository,
     private val users: UserRepository,
     private val projects: ProjectRepository,
+    private val audit: AuditService,
     private val memberHistory: TeamMemberHistoryRepository,
 ) {
     private val allowedSortFields = setOf("name", "isActive", "createdAt")
@@ -43,12 +47,22 @@ class TeamService(
         val saved = teams.save(
             Team(name = name, department = dept, manager = manager, projects = teamProjects.toMutableSet())
         )
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.TEAM_CREATED,
+                "TEAM",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("name", "departmentId", "managerId", "projectIds", "isActive"),
+            ),
+        )
         return saved.toResponse()
     }
 
     @Transactional
     fun update(id: Int, req: UpdateTeamRequest): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
+        val before = snapshot(team)
         val dept = req.departmentId?.let(::activeDepartment) ?: team.department
         req.name?.let {
             val name = it.trim()
@@ -65,14 +79,17 @@ class TeamService(
         }
         req.isActive?.let { applyActive(team, it) }
         team.updatedAt = Instant.now()
+        recordUpdate(team, before, snapshot(team))
         return team.toResponse()
     }
 
     @Transactional
     fun deactivate(id: Int): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
+        val before = snapshot(team)
         applyActive(team, false)
         team.updatedAt = Instant.now()
+        recordUpdate(team, before, snapshot(team))
         return team.toResponse()
     }
 
@@ -180,6 +197,34 @@ class TeamService(
 
     private fun applyActive(team: Team, active: Boolean) {
         team.isActive = active
+    }
+
+    private fun snapshot(team: Team) = mapOf(
+        "name" to team.name,
+        "departmentId" to team.department.id,
+        "managerId" to team.manager?.id,
+        "projectIds" to team.projects.map { it.id }.sorted(),
+        "isActive" to team.isActive,
+    )
+
+    private fun recordUpdate(team: Team, before: Map<String, Any?>, after: Map<String, Any?>) {
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isEmpty()) return
+        val action = when {
+            "isActive" in changed && team.isActive -> AuditAction.TEAM_RESTORED
+            "isActive" in changed -> AuditAction.TEAM_ARCHIVED
+            else -> AuditAction.TEAM_UPDATED
+        }
+        audit.record(
+            AuditRecord.currentActor(
+                action,
+                "TEAM",
+                team.id.toString(),
+                previousState = before,
+                newState = after,
+                changedFields = changed,
+            ),
+        )
     }
 
     // Only newly added projects must be active, so a team can still be edited or deactivated after one of its existing projects was deactivated.

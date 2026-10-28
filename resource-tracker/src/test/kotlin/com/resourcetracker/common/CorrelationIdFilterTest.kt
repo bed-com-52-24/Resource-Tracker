@@ -13,9 +13,10 @@ class CorrelationIdFilterTest {
 
     @Test
     fun `valid correlation ids are propagated to the request and response`() {
-        val request = MockHttpServletRequest("GET", "/api/v1/resources").apply {
-            addHeader(CorrelationIdFilter.HEADER_NAME, "trace-123")
-        }
+        val request =
+            MockHttpServletRequest("GET", "/api/v1/resources").apply {
+                addHeader(CorrelationIdFilter.HEADER_NAME, "trace-123")
+            }
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, FilterChain { _, _ -> })
@@ -26,15 +27,17 @@ class CorrelationIdFilterTest {
 
     @Test
     fun `invalid correlation ids are replaced with a generated id`() {
-        val request = MockHttpServletRequest("GET", "/api/v1/resources").apply {
-            addHeader(CorrelationIdFilter.HEADER_NAME, "invalid id\n")
-        }
+        val request =
+            MockHttpServletRequest("GET", "/api/v1/resources").apply {
+                addHeader(CorrelationIdFilter.HEADER_NAME, "invalid id\n")
+            }
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, FilterChain { _, _ -> })
 
-        val correlationId = response.getHeader(CorrelationIdFilter.HEADER_NAME)
-            ?: error("Correlation ID response header was not set")
+        val correlationId =
+            response.getHeader(CorrelationIdFilter.HEADER_NAME)
+                ?: error("Correlation ID response header was not set")
         assertTrue(correlationId.matches(Regex("[0-9a-f-]{36}")))
         assertNotEquals("invalid id\n", correlationId)
     }

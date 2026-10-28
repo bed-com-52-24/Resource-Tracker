@@ -1,5 +1,6 @@
 package com.resourcetracker.request.service
 
+import com.resourcetracker.approval.ExternalBudgetHandler
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
@@ -45,6 +46,7 @@ class ResourceRequestService(
     private val reservationRepository: StockReservationRepository,
     private val issueRepository: StockIssueRepository,
     private val procurementService: ProcurementService,
+    private val externalBudgetHandler: ExternalBudgetHandler,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -155,7 +157,8 @@ class ResourceRequestService(
             when (caller.role) {
                 Role.TEAM_LEAD -> predicates += root.get<Int>("teamId").`in`(teamIds)
                 Role.DEPARTMENT_MANAGER -> predicates += cb.equal(root.get<Int?>("assignedManagerId"), caller.id)
-                Role.ADMIN, Role.MANAGING_DIRECTOR -> Unit
+                Role.ADMIN -> predicates += cb.isTrue(root.get<Boolean>("needsReassignment"))
+                Role.MANAGING_DIRECTOR -> Unit
                 Role.MEMBER -> forbidden()
             }
             status?.let { predicates += cb.equal(root.get<RequestStatus>("status"), it) }
@@ -181,7 +184,7 @@ class ResourceRequestService(
     @Transactional(readOnly = true)
     fun history(requestId: Int, caller: User): List<RequestHistoryResponseDto> {
         val request = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
-        if (!canView(request, caller)) throw ResourceNotFoundException("Request not found")
+        if (!canViewHistory(request, caller)) throw ResourceNotFoundException("Request not found")
         return historyRepository.findAllByRequestIdOrderByCreatedAtAscIdAsc(requestId).map {
             RequestHistoryResponseDto(it.id, it.requestId, it.eventType, it.fromStatus, it.toStatus, it.actorId, it.lineItemId, it.quantity, it.comment, it.createdAt)
         }
@@ -229,6 +232,7 @@ class ResourceRequestService(
                 }
             }
             lineItemRepository.saveAll(lines)
+            externalBudgetHandler.commitApprovedLines(requestId, lines, caller.id, comment)
         }
         request.status = target
         request.decidedBy = caller.id
@@ -368,6 +372,14 @@ class ResourceRequestService(
 
     private fun canView(request: ResourceRequest, caller: User): Boolean = when (caller.role) {
         Role.TEAM_LEAD -> caller.teams.any { it.id == request.teamId }
+        Role.DEPARTMENT_MANAGER -> request.assignedManagerId == caller.id
+        Role.ADMIN -> request.needsReassignment
+        Role.MANAGING_DIRECTOR -> true
+        Role.MEMBER -> false
+    }
+
+    private fun canViewHistory(request: ResourceRequest, caller: User): Boolean = when (caller.role) {
+        Role.TEAM_LEAD -> request.requesterId == caller.id
         Role.DEPARTMENT_MANAGER -> request.assignedManagerId == caller.id
         Role.ADMIN, Role.MANAGING_DIRECTOR -> true
         Role.MEMBER -> false

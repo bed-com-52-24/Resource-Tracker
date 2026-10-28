@@ -2,10 +2,13 @@ package com.resourcetracker.resource
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
-import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.request.service.StockCorrectionRequest
+import com.resourcetracker.request.service.StockOperationsService
+import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.user.Role
+import com.resourcetracker.user.UserRepository
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -17,40 +20,41 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
-import org.springframework.http.HttpStatus
-import org.springframework.validation.annotation.Validated
+import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.validation.annotation.Validated
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @Validated
 @RequestMapping("/api/v1/resources")
-@Tag(name = "Resources", description = "Create, update, and deactivate resources")
+@RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+@Tag(name = "Resources", description = "Browse resources and manage inventory and stock corrections")
 @SecurityRequirement(name = "bearerAuth")
 class ResourceController(
     private val resources: ResourceService,
-    private val stockOperations: com.resourcetracker.request.service.StockOperationsService,
+    private val stockOperations: StockOperationsService,
+    private val users: UserRepository,
 ) {
 
     @GetMapping
     @Operation(
         summary = "List resources",
-        description = "Returns a paginated resource list. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
+        description = "Returns a paginated resource list. Department managers and team leads see internal resources from their own department plus shared external resources; managing directors have read-only access across departments. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resources returned"),
         ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "The caller's role does not permit resource access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
         @Parameter(description = "Search resource names or codes", example = "laptop")
@@ -63,12 +67,16 @@ class ResourceController(
         @RequestParam(defaultValue = "name") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "asc")
         @RequestParam(defaultValue = "asc") direction: String,
-        @RequestParam(required = false) active: Boolean?,
-        @RequestParam(required = false) type: ResourceType?,
-        @RequestParam(required = false) category: ResourceCategory?,
-        @RequestParam(required = false) status: ResourceStatus?,
-        @RequestParam(defaultValue = "false") availableOnly: Boolean,
-        @RequestParam(required = false) departmentId: Int?,
+        @Parameter(description = "Filter by active state") @RequestParam(required = false) active: Boolean?,
+        @Parameter(description = "Filter by resource type: INTERNAL or EXTERNAL") @RequestParam(required = false) type: ResourceType?,
+        @Parameter(
+            description = "Filter by category",
+            schema = Schema(allowableValues = ["CONSUMABLE", "EQUIPMENT", "SOFTWARE", "OTHER"]),
+        ) @RequestParam(required = false) category: ResourceCategory?,
+        @Parameter(description = "Filter by inventory status (internal resources)") @RequestParam(required = false) status: ResourceStatus?,
+        @Parameter(description = "Only return resources with available quantity greater than zero", example = "false") @RequestParam(defaultValue = "false") availableOnly: Boolean,
+        @Parameter(description = "Filter by owning department ID") @RequestParam(required = false) departmentId: Int?,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
     ): Page<ResourceResponse> = resources.list(
         active = active,
         type = type,
@@ -78,50 +86,90 @@ class ResourceController(
         availableOnly = availableOnly,
         keyword = search,
         pageable = ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name"),
+        scopeDepartmentId = departmentScope(caller),
     )
 
     @PostMapping
-    @RequiresRoles(Role.ADMIN)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Create a resource", description = "Creates a new active resource.")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Create a resource", description = "Creates a new active resource. INTERNAL resources require the caller's departmentId and quantity and cannot have a preferred vendor. EXTERNAL resources are shared catalog entries and cannot have departmentId or quantity.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Resource created", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
-        ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Department or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "409", description = "Resource type rules were violated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "409", description = "Generated resource code conflicts with an existing resource", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun create(@Valid @RequestBody request: CreateResourceRequest, @AuthenticationPrincipal caller: AuthenticatedUser): ResourceResponse =
-        resources.create(request, caller.id)
+    fun create(
+        @Valid @RequestBody request: CreateResourceRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): ResponseEntity<ResourceResponse> {
+        val response = resources.create(request, caller.id, departmentScope(caller))
+        val location = ServletUriComponentsBuilder.fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(response.id)
+            .toUri()
+        return ResponseEntity.created(location).body(response)
+    }
 
     @PutMapping("/{id}")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Update a resource", description = "Updates an existing resource. Set active to true or false to change its state; omit it to leave the state unchanged.")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Update a resource", description = "Updates an internal resource in the caller's department or a shared EXTERNAL catalog entry. Set active to true or false to change its state; omit it to leave the state unchanged.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource updated", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
-        ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Resource, department, or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "409", description = "Resource type rules were violated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "409", description = "Resource type cannot change or physical stock was included in the update", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun update(
-        @PathVariable @Min(1) id: Int,
+        @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
         @Valid @RequestBody request: UpdateResourceRequest,
-    ): ResourceResponse = resources.update(id, request)
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): ResourceResponse = resources.update(id, request, departmentScope(caller))
 
     @GetMapping("/{id}")
-    fun get(@PathVariable @Min(1) id: Int): ResourceResponse = resources.get(id)
+    @Operation(summary = "Get a resource", description = "Returns one resource, including its stock, availability, department, and preferred vendor identifiers.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Resource returned", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "The caller's role does not permit resource access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
+    fun get(
+        @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): ResourceResponse = resources.get(id, departmentScope(caller))
 
     @PostMapping("/{id}/corrections")
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Correct resource stock", description = "Sets the resource quantity to the supplied value and records the reason.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Stock corrected", content = [Content(schema = Schema(implementation = StockCorrectionResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid quantity or reason", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "409", description = "Stock correction is not allowed", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun correctStock(
-        @PathVariable @Min(1) id: Int,
+        @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
         @Valid @RequestBody request: CorrectionRequestDto,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.correctResource(id, caller.id, StockCorrectionRequest(request.newQuantity, request.reason))
+    ): StockCorrectionResponse {
+        val movement = stockOperations.correctResource(id, caller.id, StockCorrectionRequest(request.newQuantity, request.reason))
+        return StockCorrectionResponse(
+            movementId = movement.id,
+            resourceId = movement.resourceId,
+            quantityChange = movement.quantity,
+            reason = movement.reason,
+        )
+    }
+
+    private fun departmentScope(caller: AuthenticatedUser): Int? =
+        if (caller.role == Role.MANAGING_DIRECTOR) null
+        else users.findById(caller.id).orElseThrow { ResourceNotFoundException("User not found") }.department.id
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

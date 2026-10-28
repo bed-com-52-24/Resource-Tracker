@@ -1,12 +1,16 @@
 package com.resourcetracker.request.service
 
+import com.resourcetracker.approval.ExternalBudgetHandler
+import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.project.Project
 import com.resourcetracker.project.ProjectRepository
 import com.resourcetracker.request.dto.CreateResourceRequestDto
+import com.resourcetracker.request.dto.Decision
 import com.resourcetracker.request.dto.RequestLineItemDto
+import com.resourcetracker.request.dto.RequestDecisionDto
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.resource.ResourceRepository
@@ -49,6 +53,7 @@ class ResourceRequestWorkflowServiceTest {
     private val reservationRows = org.mockito.kotlin.mock<StockReservationRepository>()
     private val issueRows = org.mockito.kotlin.mock<StockIssueRepository>()
     private val procurements = org.mockito.kotlin.mock<ProcurementService>()
+    private val externalBudgetHandler = org.mockito.kotlin.mock<ExternalBudgetHandler>()
     private val clock = Clock.systemUTC()
 
     private val department = Department(id = 1, name = "Operations")
@@ -65,7 +70,8 @@ class ResourceRequestWorkflowServiceTest {
 
     private fun service() = ResourceRequestService(
         requests, lines, history, numbers, teams, projects, vendors, resources, users,
-        notifications, reservations, availability, reservationRows, issueRows, procurements, clock,
+        notifications, reservations, availability, reservationRows, issueRows, procurements,
+        externalBudgetHandler, clock,
     )
 
     private fun setup(managerList: List<User>) {
@@ -163,5 +169,99 @@ class ResourceRequestWorkflowServiceTest {
 
         assertEquals(HttpStatus.CONFLICT, exception.statusCode)
         verify(requests, never()).saveAndFlush(request)
+    }
+
+    @Test
+    fun `approving a request commits its external lines through the budget handler`() {
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Laptop",
+            manufacturer = "Acme",
+            departmentId = department.id,
+            requesterId = caller.id,
+            vendorId = 4,
+            assignedManagerId = 55,
+            requiredDate = LocalDate.now(clock).plusDays(2),
+        )
+        val line = ResourceRequestLineItem(
+            lineItemId = 5,
+            requestId = 101,
+            description = "Laptop",
+            manufacturer = "Acme",
+            unitPrice = java.math.BigDecimal("100.00"),
+            quantity = 1,
+            fulfillmentPreference = FulfillmentPreference.EXTERNAL.name,
+        )
+        val manager = User(
+            id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
+            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+        )
+        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.saveAndFlush(request)).thenReturn(request)
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
+
+        service().decide(101, manager, RequestDecisionDto(Decision.APPROVE))
+
+        verify(externalBudgetHandler).commitApprovedLines(101, listOf(line), manager.id, null)
+    }
+
+    @Test
+    fun `authorized caller receives request history in chronological order`() {
+        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", teamId = team.id, requesterId = caller.id)
+        val submitted = RequestHistory(id = 1, requestId = 101, eventType = "SUBMITTED", actorId = caller.id)
+        val approved = RequestHistory(id = 2, requestId = 101, eventType = "APPROVED", fromStatus = "PENDING", toStatus = "APPROVED", actorId = 55)
+        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(history.findAllByRequestIdOrderByCreatedAtAscIdAsc(101)).thenReturn(listOf(submitted, approved))
+
+        val result = service().history(101, caller)
+
+        assertEquals(listOf("SUBMITTED", "APPROVED"), result.map { it.eventType })
+        assertEquals(listOf(1, 2), result.map { it.id })
+    }
+
+    @Test
+    fun `caller cannot retrieve history for a request they do not own`() {
+        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", teamId = 99, requesterId = 55)
+        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+
+        assertThrows<ResourceNotFoundException> { service().history(101, caller) }
+
+        verify(history, never()).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
+    }
+
+    @Test
+    fun `team lead who is not the request owner cannot retrieve its history`() {
+        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", teamId = team.id, requesterId = 55)
+        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+
+        assertThrows<ResourceNotFoundException> { service().history(101, caller) }
+
+        verify(history, never()).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
+    }
+
+    @Test
+    fun `assigned manager and elevated roles can retrieve request history`() {
+        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", requesterId = 55, assignedManagerId = 56)
+        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(history.findAllByRequestIdOrderByCreatedAtAscIdAsc(101)).thenReturn(emptyList())
+        val manager = User(
+            id = 56, username = "manager", email = "manager@example.test", fullName = "Manager",
+            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+        )
+        val admin = User(
+            id = 57, username = "admin", email = "admin@example.test", fullName = "Admin",
+            passwordHash = "hash", role = Role.ADMIN, department = department,
+        )
+        val managingDirector = User(
+            id = 58, username = "md", email = "md@example.test", fullName = "MD",
+            passwordHash = "hash", role = Role.MANAGING_DIRECTOR, department = department,
+        )
+
+        assertTrue(service().history(101, manager).isEmpty())
+        assertTrue(service().history(101, admin).isEmpty())
+        assertTrue(service().history(101, managingDirector).isEmpty())
+
+        verify(history, org.mockito.kotlin.times(3)).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
     }
 }

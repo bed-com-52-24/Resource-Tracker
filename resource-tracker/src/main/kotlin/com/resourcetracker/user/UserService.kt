@@ -10,6 +10,9 @@ import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.audit.AuditAction
+import com.resourcetracker.audit.AuditRecord
+import com.resourcetracker.audit.AuditService
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.dao.DataIntegrityViolationException
@@ -22,6 +25,7 @@ class UserService(
     private val refreshTokens: RefreshTokenRepository,
     private val departments: DepartmentRepository,
     private val teams: TeamRepository,
+    private val audit: AuditService,
     private val passwordTokens: PasswordTokenRepository,
     private val passwordTokenService: PasswordTokenService,
 ) {
@@ -62,18 +66,28 @@ class UserService(
         )
         requireMemberHasTeam(user)
 
-        return try {
-            val saved = users.saveAndFlush(user)
-            passwordTokenService.issue(saved, PasswordTokenPurpose.SETUP, expiresAt = null)
-            saved.toResponse()
+        val saved = try {
+            users.saveAndFlush(user)
         } catch (e: DataIntegrityViolationException) {
             throw DuplicateResourceException("Username or email is already in use")
         }
+        passwordTokenService.issue(saved, PasswordTokenPurpose.SETUP, expiresAt = null)
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.USER_CREATED,
+                "USER",
+                saved.id.toString(),
+                newState = snapshot(saved),
+                changedFields = listOf("username", "email", "fullName", "role", "departmentId", "teamIds", "active"),
+            ),
+        )
+        return saved.toResponse()
     }
 
     @Transactional
     fun update(id: Int, request: UpdateUserRequest): UserResponse {
         val user = find(id)
+        val before = snapshot(user)
 
         request.role?.let { newRole ->
             if(newRole != user.role){
@@ -81,10 +95,30 @@ class UserService(
             }
         }
 
-        request.active?.let{applyActive(user, it)}
+        request.active?.let { applyActive(user, it) }
         requireMemberHasTeam(user)
-
-        return users.save(user).toResponse()
+        val saved = users.saveAndFlush(user)
+        val after = snapshot(saved)
+        val changed = changedFields(before, after)
+        if (changed.isNotEmpty()) {
+            val action = when {
+                "role" in changed -> AuditAction.USER_ROLE_UPDATED
+                "active" in changed && saved.active -> AuditAction.USER_RESTORED
+                "active" in changed -> AuditAction.USER_ARCHIVED
+                else -> AuditAction.USER_UPDATED
+            }
+            audit.record(
+                AuditRecord.currentActor(
+                    action,
+                    "USER",
+                    saved.id.toString(),
+                    previousState = before,
+                    newState = after,
+                    changedFields = changed,
+                ),
+            )
+        }
+        return saved.toResponse()
     }
 
     @Transactional
@@ -130,14 +164,14 @@ class UserService(
     }
 
     private fun applyRole(user: User, newRole: Role) {
-    requireAssignable(newRole)
-    if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
-        ensureAnotherActiveAdmin(user)
-    }
-    if (newRole == Role.MEMBER && user.teams.isEmpty()) {
-        throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
-    }
-    user.role = newRole
+        requireAssignable(newRole)
+        if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
+            ensureAnotherActiveAdmin(user)
+        }
+        if (newRole == Role.MEMBER && user.teams.isEmpty()) {
+            throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
+        }
+        user.role = newRole
     }
 
     private fun requireMemberHasTeam(user: User) {
@@ -145,16 +179,16 @@ class UserService(
             throw BusinessRuleException("MEMBER users must belong to at least one active team")
         }
     }
-    
+
     private fun applyActive(user: User, active: Boolean){
-        if(user.active == active) return
-        
-        if(!active){
-            if(user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
+        if (user.active == active) return
+
+        if (!active) {
+            if (user.role == Role.ADMIN) ensureAnotherActiveAdmin(user)
             user.active = false
             refreshTokens.revokeAllByUserId(user.id)
             passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.SETUP)
-        }else{
+        } else {
             user.active = true
         }
     }
@@ -176,6 +210,19 @@ class UserService(
         active = active,
         passwordSet = passwordHash != null,
     )
+
+    private fun snapshot(user: User) = mapOf(
+        "username" to user.username,
+        "email" to user.email,
+        "fullName" to user.fullName,
+        "role" to user.role.name,
+        "departmentId" to user.department.id,
+        "teamIds" to user.teams.map { it.id }.sorted(),
+        "active" to user.active,
+    )
+
+    private fun changedFields(before: Map<String, Any?>, after: Map<String, Any?>): List<String> =
+        before.keys.filter { before[it] != after[it] }
 
     private fun activeDepartment(id: Int) =
         departments.findById(id).orElseThrow { ResourceNotFoundException("Department $id not found") }
