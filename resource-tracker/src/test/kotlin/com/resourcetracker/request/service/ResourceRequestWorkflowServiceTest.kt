@@ -10,7 +10,10 @@ import com.resourcetracker.request.dto.CreateResourceRequestDto
 import com.resourcetracker.request.dto.RequestLineItemDto
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
+import com.resourcetracker.resource.Resource
+import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.resource.ResourceRepository
+import com.resourcetracker.resource.ResourceType
 import com.resourcetracker.team.Team
 import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.user.Role
@@ -164,6 +167,54 @@ class ResourceRequestWorkflowServiceTest {
 
         assertEquals(HttpStatus.CONFLICT, exception.statusCode)
         verify(requests, never()).saveAndFlush(request)
+    }
+
+    @Test
+    fun `approving a request reserves its internal lines through the stock reservation service`() {
+        val manager = User(
+            id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
+            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+        )
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Projector",
+            manufacturer = "N/A",
+            requiredDate = LocalDate.now(clock).plusDays(3),
+            assignedManagerId = manager.id,
+            requesterId = caller.id,
+        )
+        val line = ResourceRequestLineItem(
+            lineItemId = 20,
+            requestId = 101,
+            description = "Projector",
+            manufacturer = "N/A",
+            quantity = 2,
+            resourceId = 4,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+        )
+        val resource = Resource(
+            id = 4,
+            code = "R-4",
+            name = "Projector",
+            type = ResourceType.INTERNAL,
+            category = ResourceCategory.EQUIPMENT,
+            unitOfMeasure = "unit",
+            quantity = 2,
+        )
+        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
+        whenever(resources.findForUpdateById(resource.id)).thenReturn(resource)
+        whenever(availability.availableQuantity(resource, lockReservations = true)).thenReturn(2)
+
+        service().decide(
+            101,
+            manager,
+            com.resourcetracker.request.dto.RequestDecisionDto(com.resourcetracker.request.dto.Decision.APPROVE),
+        )
+
+        verify(reservations).reserveApprovedInternalLines(101, listOf(line), manager.id)
     }
 
     @Test

@@ -100,8 +100,6 @@ class DuplicateResourceException(
 ) : ApiException(HttpStatus.CONFLICT, "DUPLICATE_RESOURCE", message)
 class ResourceNotFoundException(message: String = "Resource not found") :
     ApiException(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", message)
-class BadRequestException(message: String) :
-    ApiException(HttpStatus.BAD_REQUEST, "INVALID_RESOURCE_REQUEST", message)
 class BusinessRuleException(message: String) :
     ApiException(
         HttpStatus.CONFLICT,
