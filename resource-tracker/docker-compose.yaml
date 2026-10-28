@@ -37,7 +37,7 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     env_file:
-      - .env
+      - ${RESOURCE_TRACKER_ENV_FILE:-.env}
     environment:
       DB_HOST: mysql
       DB_PORT: 3306

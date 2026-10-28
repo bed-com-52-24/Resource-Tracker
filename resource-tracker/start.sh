@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Pseah Networks - Application Startup Script
+# Resource tracker - Application Startup Script
 #
 # Usage:
 #   ./start.sh development
@@ -44,7 +44,7 @@ case "$ENVIRONMENT" in
 esac
 
 echo "============================================================"
-echo "Pseah Networks"
+echo "Resource Tracker Startup Script"
 echo "============================================================"
 echo "Environment : $ENVIRONMENT"
 echo "Env file    : $ENV_FILE"

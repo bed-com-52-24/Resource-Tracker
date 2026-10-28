@@ -19,7 +19,7 @@ class AuditEntry(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
 
-    @Column(name = "occurred_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "occurred_at", nullable = false, insertable = true, updatable = false)
     val occurredAt: Instant? = null,
 
     @Column(name = "actor_id")

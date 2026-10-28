@@ -117,6 +117,11 @@
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator-test</artifactId>
 			<scope>test</scope>
@@ -219,7 +224,10 @@
 				<artifactId>maven-failsafe-plugin</artifactId>
 				<version>3.5.3</version>
 				<configuration>
-					<argLine>${jacoco.agent.it}</argLine>
+											<argLine>${jacoco.agent.it}</argLine>
+						<systemPropertyVariables>
+							<spring.profiles.active>test</spring.profiles.active>
+						</systemPropertyVariables>
 				</configuration>
 				<executions>
 					<execution>
@@ -312,17 +320,16 @@
 				<groupId>org.jetbrains.kotlin</groupId>
 				<artifactId>kotlin-maven-plugin</artifactId>
 				<version>${kotlin.version}</version>
-				<extensions>true</extensions>
 				<executions>
 					<execution>
-						<id>compile</id>
+						<id>default-compile</id>
 						<phase>compile</phase>
 						<goals>
 							<goal>compile</goal>
 						</goals>
 					</execution>
 					<execution>
-						<id>test-compile</id>
+						<id>default-test-compile</id>
 						<phase>test-compile</phase>
 						<goals>
 							<goal>test-compile</goal>

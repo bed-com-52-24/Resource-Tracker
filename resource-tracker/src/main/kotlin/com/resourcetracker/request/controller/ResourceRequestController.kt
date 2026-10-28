@@ -117,7 +117,13 @@ class ResourceRequestController(
 
     @PostMapping("/api/v1/requests/{id}/decision")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Query, approve, or reject a request")
+    @Operation(
+        summary = "Query, approve, reject, or waitlist a request",
+        description = "WAITLIST approves the request into the FIFO waitlist; all request lines must be internal resources.",
+    )
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "409", description = "Request cannot transition to the selected decision or cannot be waitlisted"),
+    ])
     fun decide(
         @PathVariable @Min(1) id: Int,
         @Valid @RequestBody dto: RequestDecisionDto,

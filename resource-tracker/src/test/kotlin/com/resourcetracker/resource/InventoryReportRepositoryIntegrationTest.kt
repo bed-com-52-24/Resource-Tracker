@@ -10,18 +10,12 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.data.domain.PageRequest
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
-import org.testcontainers.containers.MySQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Testcontainers(disabledWithoutDocker = true)
+@org.springframework.test.context.ActiveProfiles("test")
 class InventoryReportRepositoryIntegrationTest {
     @Autowired
     private lateinit var issues: StockIssueRepository
@@ -70,25 +64,5 @@ class InventoryReportRepositoryIntegrationTest {
                 PageRequest.of(0, 20),
             ).isEmpty,
         )
-    }
-
-    companion object {
-        @Container
-        @JvmStatic
-        val mysql = MySQLContainer<Nothing>("mysql:8.4").apply {
-            withDatabaseName("resource_tracker")
-            withUsername("test")
-            withPassword("test")
-            withStartupTimeout(Duration.ofMinutes(5))
-        }
-
-        @DynamicPropertySource
-        @JvmStatic
-        fun configureProperties(registry: DynamicPropertyRegistry) {
-            registry.add("spring.datasource.url", mysql::getJdbcUrl)
-            registry.add("spring.datasource.username", mysql::getUsername)
-            registry.add("spring.datasource.password", mysql::getPassword)
-            registry.add("spring.datasource.driver-class-name") { "com.mysql.cj.jdbc.Driver" }
-        }
     }
 }

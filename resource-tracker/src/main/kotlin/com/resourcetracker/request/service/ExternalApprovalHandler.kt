@@ -1,4 +1,4 @@
-package com.resourcetracker.approval
+package com.resourcetracker.request.service
 
 import com.resourcetracker.request.entity.ResourceRequestLineItem
 

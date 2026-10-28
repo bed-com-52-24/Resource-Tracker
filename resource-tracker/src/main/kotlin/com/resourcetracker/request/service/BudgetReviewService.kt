@@ -1,8 +1,8 @@
-package com.resourcetracker.approval
+package com.resourcetracker.request.service
 
+import com.resourcetracker.request.entity.FulfillmentPreference
 import com.resourcetracker.request.repository.RequestLineItemRepository
 import com.resourcetracker.request.repository.ResourceRequestRepository
-import com.resourcetracker.request.entity.FulfillmentPreference
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -15,17 +15,15 @@ data class BudgetReview(
     val committed: BigDecimal,
     val remaining: BigDecimal,
     val requestCost: BigDecimal,
-    val exceedsBudget: Boolean
+    val exceedsBudget: Boolean,
 )
 
 @Service
 class BudgetReviewService(
     private val requestRepository: ResourceRequestRepository,
     private val lineRepository: RequestLineItemRepository,
-    private val budget: BudgetPort
+    private val budget: BudgetPort,
 ) {
-
-    /** What the assigned manager sees before approving external items. */
     @Transactional(readOnly = true)
     fun review(requestId: Int, actorId: Int): BudgetReview {
         val request = requestRepository.findById(requestId).orElseThrow {
@@ -37,15 +35,15 @@ class BudgetReviewService(
 
         val cost = lineRepository.findAllByRequestId(requestId)
             .filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
-            .fold(BigDecimal.ZERO) { sum, line -> sum + budget.lineCost(requireNotNull(line.lineItemId)) }
+            .fold(BigDecimal.ZERO) { sum, line ->
+                sum + (line.unitPrice.multiply(BigDecimal.valueOf((line.approvedQuantity ?: line.quantity).toLong())))
+            }
 
         val departmentId = budget.departmentOfRequest(requestId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found")
         val status = budget.status(departmentId)
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Department $departmentId has no budget set up")
 
-        return BudgetReview(
-            departmentId, status.budget, status.committed, status.remaining, cost, cost > status.remaining
-        )
+        return BudgetReview(departmentId, status.budget, status.committed, status.remaining, cost, cost > status.remaining)
     }
 }

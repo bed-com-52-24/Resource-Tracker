@@ -7,11 +7,6 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
-import org.testcontainers.containers.MySQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -20,32 +15,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @SpringBootTest(properties = ["app.security.jwt-secret=resource-tracker-request-number-test-secret-32"])
-@Testcontainers(disabledWithoutDocker = true)
 class RequestNumberServiceTest {
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
-
-    companion object {
-        @Container
-        @JvmStatic
-        val mysql = MySQLContainer<Nothing>("mysql:8.4").apply {
-            withDatabaseName("resource_tracker")
-            withUsername("test")
-            withPassword("test")
-        }
-
-        @DynamicPropertySource
-        @JvmStatic
-        fun configureProperties(registry: DynamicPropertyRegistry) {
-            registry.add("spring.datasource.url", mysql::getJdbcUrl)
-            registry.add("spring.datasource.username", mysql::getUsername)
-            registry.add("spring.datasource.password", mysql::getPassword)
-            registry.add("spring.datasource.driver-class-name") {
-                "com.mysql.cj.jdbc.Driver"
-            }
-        }
-    }
 
     @BeforeEach
     fun cleanSequenceTable() {
