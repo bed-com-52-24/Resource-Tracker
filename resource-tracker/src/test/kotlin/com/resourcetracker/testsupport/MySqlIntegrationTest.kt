@@ -14,13 +14,7 @@ import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.mysql.MySQLContainer
 
-@Testcontainers
 @ActiveProfiles("test")
 abstract class MySqlIntegrationTest {
     @Autowired
@@ -41,27 +35,6 @@ abstract class MySqlIntegrationTest {
     protected fun tokenFor(role: Role, department: Department, username: String = role.name.lowercase()): String {
         val user = users.saveAndFlush(TestDataBuilders.user(role, department, username))
         return jwtService.issueAccessToken(user).token
-    }
-
-    companion object {
-        @Container
-        @JvmStatic
-        val mysql = MySQLContainer("mysql:8.4").apply {
-            withDatabaseName("resource_tracker_test")
-            withUsername("resource_tracker")
-            withPassword("resource_tracker")
-        }
-
-        @JvmStatic
-        @DynamicPropertySource
-        fun databaseProperties(registry: DynamicPropertyRegistry) {
-            registry.add("spring.datasource.url", mysql::getJdbcUrl)
-            registry.add("spring.datasource.username", mysql::getUsername)
-            registry.add("spring.datasource.password", mysql::getPassword)
-            registry.add("app.security.jwt-secret") {
-                "integration-test-secret-that-is-long-enough-for-hmac-sha256-123456"
-            }
-        }
     }
 }
 
@@ -103,5 +76,5 @@ object TestDataBuilders {
 }
 
 object JwtTestTokens {
-    fun bearer(token: String): String = "Bearer $token"
+    fun bearer(token: String) = "Bearer $token"
 }

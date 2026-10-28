@@ -1,6 +1,7 @@
 package com.resourcetracker.user
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -146,7 +147,7 @@ class UserController(private val users: UserService) {
             ApiResponse(
                 responseCode = "200",
                 description = "User page",
-                content = [Content(schema = Schema(implementation = UserPageResponse::class))]
+                content = [Content(schema = Schema(implementation = PagedResponse::class))]
             ),
             ApiResponse(
                 responseCode = "401",
@@ -161,7 +162,7 @@ class UserController(private val users: UserService) {
         ]
     )
     fun list(
-        @Parameter(description = "Search username, email, or full name", example = "jane")
+        @Parameter(description = "Search username, email, or full name (optional)")
             @RequestParam(required = false) search: String?,
         @Parameter(description = "Zero-based page number", example = "0")
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -174,20 +175,14 @@ class UserController(private val users: UserService) {
         @RequestParam(defaultValue = "username") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "asc")
         @RequestParam(defaultValue = "asc") direction: String,
-    ): UserPageResponse {
+    ): PagedResponse<UserResponse> {
         val sortField = sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "username"
         val sortDirection = if (direction.equals("desc", ignoreCase = true)) Sort.Direction.DESC else Sort.Direction.ASC
         val result: Page<UserResponse> = users.list(
             search,
             PageRequest.of(page, size.coerceAtMost(MAX_PAGE_SIZE), Sort.by(sortDirection, sortField)),
         )
-        return UserPageResponse(
-            content = result.content,
-            page = result.number,
-            size = result.size,
-            totalElements = result.totalElements,
-            totalPages = result.totalPages,
-        )
+        return PagedResponse.from(result)
     }
 
     companion object {
