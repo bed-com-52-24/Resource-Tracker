@@ -1,6 +1,5 @@
 
-
-package com.resourcetracker.approval
+package com.resourcetracker.request.service
 
 import com.resourcetracker.request.entity.FulfillmentPreference
 import com.resourcetracker.request.repository.RequestLineItemRepository
@@ -17,17 +16,15 @@ data class BudgetReview(
     val committed: BigDecimal,
     val remaining: BigDecimal,
     val requestCost: BigDecimal,
-    val exceedsBudget: Boolean
+    val exceedsBudget: Boolean,
 )
 
 @Service
 class BudgetReviewService(
     private val requestRepository: ResourceRequestRepository,
     private val lineRepository: RequestLineItemRepository,
-    private val budget: BudgetPort
+    private val budget: BudgetPort,
 ) {
-
-    /** What the assigned manager sees before approving external items. */
     @Transactional(readOnly = true)
     fun review(requestId: Int, actorId: Int): BudgetReview {
         val request = requestRepository.findById(requestId).orElseThrow {

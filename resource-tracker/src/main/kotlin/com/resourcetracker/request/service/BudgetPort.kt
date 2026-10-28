@@ -1,5 +1,5 @@
 
-package com.resourcetracker.approval
+package com.resourcetracker.request.service
 
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
@@ -15,7 +15,6 @@ data class BudgetStatus(
     val remaining: BigDecimal get() = budget - committed
 }
 
-/** Everything the approval code needs from the budget. */
 interface BudgetPort {
     fun lineCost(lineId: Int): BigDecimal
     fun departmentOfRequest(requestId: Int): Int?
@@ -26,7 +25,6 @@ interface BudgetPort {
 
 @Component
 class JdbcBudgetPort(private val jdbc: JdbcTemplate) : BudgetPort {
-
     private val statusMapper = RowMapper<BudgetStatus> { rs, _ ->
         BudgetStatus(
             rs.getInt("department_id"),
@@ -37,21 +35,21 @@ class JdbcBudgetPort(private val jdbc: JdbcTemplate) : BudgetPort {
 
     override fun lineCost(lineId: Int): BigDecimal =
         jdbc.queryForObject(
-            "SELECT unit_price * quantity FROM request_line_items WHERE line_id = ?",
+            "SELECT unit_price * COALESCE(approved_quantity, quantity) FROM resource_request_line_items WHERE line_item_id = ?",
             BigDecimal::class.java,
             lineId
         ) ?: BigDecimal.ZERO
 
     override fun departmentOfRequest(requestId: Int): Int? =
         jdbc.query(
-        "SELECT department_id FROM resource_requests WHERE request_id = ?",
+            "SELECT department_id FROM resource_requests WHERE request_id = ?",
             RowMapper<Int> { rs, _ -> rs.getInt(1) },
             requestId
         ).firstOrNull()
 
     override fun status(departmentId: Int): BudgetStatus? =
         jdbc.query(
-           "SELECT department_id, budget_amount, committed_amount FROM department_budget WHERE department_id = ?",
+            "SELECT department_id, budget_amount, committed_amount FROM department_budget WHERE department_id = ?",
             statusMapper,
             departmentId
         ).firstOrNull()

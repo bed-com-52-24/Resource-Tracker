@@ -1,5 +1,6 @@
 package com.resourcetracker.approval
 
+import com.resourcetracker.request.service.BudgetStatus
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
@@ -19,7 +20,7 @@ import org.springframework.web.server.ResponseStatusException
 import java.math.BigDecimal
 
 class ExternalBudgetHandlerTest {
-    private val budget = mock<BudgetPort>()
+    private val budget = mock<com.resourcetracker.request.service.BudgetPort>()
     private val audit = mock<AuditService>()
     private val procurement = mock<ProcurementNotifier>()
     private val handler = ExternalBudgetHandler(budget, audit, procurement)
@@ -28,7 +29,11 @@ class ExternalBudgetHandlerTest {
     fun `approved external line commits budget and creates procurement notice`() {
         whenever(budget.departmentOfRequest(101)).thenReturn(3)
         whenever(budget.status(3)).thenReturn(
-            BudgetStatus(3, BigDecimal("100.00"), BigDecimal("20.00")),
+            com.resourcetracker.request.service.BudgetStatus(
+                 3,
+                 BigDecimal("100.00"),
+                 BigDecimal("20.00")
+                 ),
         )
         whenever(budget.tryCommit(3, BigDecimal("25.00"))).thenReturn(true)
 
@@ -45,7 +50,11 @@ class ExternalBudgetHandlerTest {
     fun `over-budget approval without a comment is rejected without side effects`() {
         whenever(budget.departmentOfRequest(101)).thenReturn(3)
         whenever(budget.status(3)).thenReturn(
-            BudgetStatus(3, BigDecimal("100.00"), BigDecimal("95.00")),
+            com.resourcetracker.request.service.BudgetStatus(
+                  3,
+                  BigDecimal("100.00"),
+                  BigDecimal("20.00")
+                  ),
         )
         whenever(budget.tryCommit(3, BigDecimal("25.00"))).thenReturn(false)
 
@@ -64,7 +73,11 @@ class ExternalBudgetHandlerTest {
     fun `over-budget approval with a reason commits and records an override`() {
         whenever(budget.departmentOfRequest(101)).thenReturn(3)
         whenever(budget.status(3)).thenReturn(
-            BudgetStatus(3, BigDecimal("100.00"), BigDecimal("95.00")),
+            com.resourcetracker.request.service.BudgetStatus(
+                 3,
+                 BigDecimal("100.00"),
+                 BigDecimal("20.00")
+                 ),
         )
         whenever(budget.tryCommit(3, BigDecimal("25.00"))).thenReturn(false)
 

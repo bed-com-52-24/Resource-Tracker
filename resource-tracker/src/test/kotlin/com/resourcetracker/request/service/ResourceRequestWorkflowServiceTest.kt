@@ -1,3 +1,5 @@
+
+
 package com.resourcetracker.request.service
 
 import com.resourcetracker.approval.ExternalBudgetHandler
@@ -13,7 +15,10 @@ import com.resourcetracker.request.dto.RequestLineItemDto
 import com.resourcetracker.request.dto.RequestDecisionDto
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
+import com.resourcetracker.resource.Resource
+import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.resource.ResourceRepository
+import com.resourcetracker.resource.ResourceType
 import com.resourcetracker.team.Team
 import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.user.Role
@@ -21,7 +26,6 @@ import com.resourcetracker.user.User
 import com.resourcetracker.user.UserRepository
 import com.resourcetracker.vendor.VendorRepository
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -38,6 +42,7 @@ import java.time.LocalDate
 import java.util.Optional
 
 class ResourceRequestWorkflowServiceTest {
+
     private val requests = org.mockito.kotlin.mock<ResourceRequestRepository>()
     private val lines = org.mockito.kotlin.mock<RequestLineItemRepository>()
     private val history = org.mockito.kotlin.mock<RequestHistoryRepository>()
@@ -52,43 +57,95 @@ class ResourceRequestWorkflowServiceTest {
     private val availability = org.mockito.kotlin.mock<StockAvailabilityService>()
     private val reservationRows = org.mockito.kotlin.mock<StockReservationRepository>()
     private val issueRows = org.mockito.kotlin.mock<StockIssueRepository>()
+    private val waitlistEntries = org.mockito.kotlin.mock<WaitlistEntryRepository>()
     private val procurements = org.mockito.kotlin.mock<ProcurementService>()
     private val externalBudgetHandler = org.mockito.kotlin.mock<ExternalBudgetHandler>()
+    private val waitlistService = org.mockito.kotlin.mock<WaitlistService>()
+
     private val clock = Clock.systemUTC()
 
     private val department = Department(id = 1, name = "Operations")
     private val team = Team(id = 8, name = "Field Team", department = department)
+
     private val project = Project(
-        id = 12, name = "Facilities", code = "FAC-1", department = department,
-        startDate = LocalDate.now(clock).minusDays(1), active = true,
+        id = 12,
+        name = "Facilities",
+        code = "FAC-1",
+        department = department,
+        startDate = LocalDate.now(clock).minusDays(1),
+        active = true,
     )
+
     private val caller = User(
-        id = 7, username = "lead", email = "lead@example.test", fullName = "Team Lead",
-        passwordHash = "hash", role = Role.TEAM_LEAD, department = department,
+        id = 7,
+        username = "lead",
+        email = "lead@example.test",
+        fullName = "Team Lead",
+        passwordHash = "hash",
+        role = Role.TEAM_LEAD,
+        department = department,
         teams = mutableSetOf(team),
     )
 
     private fun service() = ResourceRequestService(
-        requests, lines, history, numbers, teams, projects, vendors, resources, users,
-        notifications, reservations, availability, reservationRows, issueRows, procurements,
-        externalBudgetHandler, clock,
+        requests,
+        lines,
+        history,
+        numbers,
+        teams,
+        projects,
+        vendors,
+        resources,
+        users,
+        notifications,
+        reservations,
+        availability,
+        reservationRows,
+        issueRows,
+        waitlistEntries,
+        procurements,
+        externalBudgetHandler,
+        waitlistService,
+        clock,
     )
 
     private fun setup(managerList: List<User>) {
         team.projects.add(project)
+
         whenever(users.findById(7)).thenReturn(Optional.of(caller))
-        whenever(users.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, department.id)).thenReturn(managerList)
+        whenever(
+            users.findActiveByRoleAndDepartmentId(
+                Role.DEPARTMENT_MANAGER,
+                department.id,
+            ),
+        ).thenReturn(managerList)
+
         whenever(users.findActiveByRole(Role.ADMIN)).thenReturn(emptyList())
         whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
         whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
         whenever(numbers.generateRequestNumber()).thenReturn("REQ-2026-000001")
+
         whenever(requests.save(any())).thenAnswer { invocation ->
-            invocation.getArgument<ResourceRequest>(0).apply { requestId = 101 }
+            invocation.getArgument<ResourceRequest>(0).apply {
+                requestId = 101
+            }
         }
+
         whenever(lines.saveAll(any<Iterable<ResourceRequestLineItem>>())).thenAnswer { invocation ->
-            invocation.getArgument<Iterable<ResourceRequestLineItem>>(0).toList().onEachIndexed { index, line -> line.lineItemId = index + 1 }
+            invocation.getArgument<Iterable<ResourceRequestLineItem>>(0)
+                .toList()
+                .onEachIndexed { index, line ->
+                    line.lineItemId = index + 1
+                }
         }
-        whenever(reservationRows.findAllByRequestIdAndStatus(101, ReservationStatus.ACTIVE)).thenReturn(emptyList())
+
+        whenever(
+            reservationRows.findAllByRequestIdAndStatus(
+                101,
+                ReservationStatus.ACTIVE,
+            ),
+        ).thenReturn(emptyList())
+
         whenever(issueRows.findAllByRequestId(101)).thenReturn(emptyList())
     }
 
@@ -97,7 +154,12 @@ class ResourceRequestWorkflowServiceTest {
         projectId = project.id,
         justification = "Needed for field work",
         requiredDate = LocalDate.now(clock).plusDays(2),
-        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4)),
+        lineItems = listOf(
+            RequestLineItemDto(
+                description = "Safety cones",
+                quantity = 4,
+            ),
+        ),
     )
 
     @Test
@@ -108,28 +170,60 @@ class ResourceRequestWorkflowServiceTest {
 
         val request = argumentCaptor<ResourceRequest>()
         verify(requests).save(request.capture())
+
         assertEquals(RequestStatus.PENDING, request.firstValue.status)
         assertEquals(null, request.firstValue.assignedManagerId)
         assertTrue(request.firstValue.needsReassignment)
+
         val events = argumentCaptor<RequestHistory>()
         verify(history, org.mockito.kotlin.times(2)).save(events.capture())
-        assertEquals(setOf("SUBMITTED", "ASSIGNED"), events.allValues.map { it.eventType }.toSet())
-        verify(notifications).notify(eq(emptyList()), eq(NotificationType.REASSIGNMENT_REQUIRED), any())
+
+        assertEquals(
+            setOf("SUBMITTED", "ASSIGNED"),
+            events.allValues.map { it.eventType }.toSet(),
+        )
+
+        verify(notifications).notify(
+            eq(emptyList()),
+            eq(NotificationType.REASSIGNMENT_REQUIRED),
+            any(),
+        )
+
         assertTrue(response.needsReassignment)
     }
 
     @Test
     fun `request for another department is forbidden before it is persisted`() {
         val otherDepartment = Department(id = 2, name = "Finance")
-        val foreignTeam = Team(id = 9, name = "Finance Team", department = otherDepartment)
+        val foreignTeam = Team(
+            id = 9,
+            name = "Finance Team",
+            department = otherDepartment,
+        )
+
         caller.teams.add(foreignTeam)
+
         whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
         whenever(teams.findById(foreignTeam.id)).thenReturn(Optional.of(foreignTeam))
-        val foreignProject = Project(id = 13, name = "Budget", code = "BUD-1", department = otherDepartment, startDate = LocalDate.now(clock))
+
+        val foreignProject = Project(
+            id = 13,
+            name = "Budget",
+            code = "BUD-1",
+            department = otherDepartment,
+            startDate = LocalDate.now(clock),
+        )
+
         whenever(projects.findById(foreignProject.id)).thenReturn(Optional.of(foreignProject))
 
         val exception = assertThrows<ResponseStatusException> {
-            service().createRequest(body().copy(teamId = foreignTeam.id, projectId = foreignProject.id), caller.id)
+            service().createRequest(
+                body().copy(
+                    teamId = foreignTeam.id,
+                    projectId = foreignProject.id,
+                ),
+                caller.id,
+            )
         }
 
         assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
@@ -138,15 +232,33 @@ class ResourceRequestWorkflowServiceTest {
 
     @Test
     fun `a manager who is not assigned cannot decide the request`() {
-        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Cones",
+            manufacturer = "N/A",
+            assignedManagerId = 55,
+            requesterId = caller.id,
+        )
+
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+
         val otherManager = User(
-            id = 56, username = "other", email = "other@example.test", fullName = "Other Manager",
-            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+            id = 56,
+            username = "other",
+            email = "other@example.test",
+            fullName = "Other Manager",
+            passwordHash = "hash",
+            role = Role.DEPARTMENT_MANAGER,
+            department = department,
         )
 
         val exception = assertThrows<ResponseStatusException> {
-            service().decide(101, otherManager, com.resourcetracker.request.dto.RequestDecisionDto(com.resourcetracker.request.dto.Decision.APPROVE))
+            service().decide(
+                101,
+                otherManager,
+                RequestDecisionDto(Decision.APPROVE),
+            )
         }
 
         assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
@@ -155,16 +267,35 @@ class ResourceRequestWorkflowServiceTest {
 
     @Test
     fun `a queried request cannot be approved before clarification`() {
-        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", assignedManagerId = 55, requesterId = caller.id)
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
-        val manager = User(
-            id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
-            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Cones",
+            manufacturer = "N/A",
+            assignedManagerId = 55,
+            requesterId = caller.id,
         )
+
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+
+        val manager = User(
+            id = 55,
+            username = "manager",
+            email = "manager@example.test",
+            fullName = "Manager",
+            passwordHash = "hash",
+            role = Role.DEPARTMENT_MANAGER,
+            department = department,
+        )
+
         request.status = RequestStatus.QUERIED
 
         val exception = assertThrows<ResponseStatusException> {
-            service().decide(101, manager, com.resourcetracker.request.dto.RequestDecisionDto(com.resourcetracker.request.dto.Decision.APPROVE))
+            service().decide(
+                101,
+                manager,
+                RequestDecisionDto(Decision.APPROVE),
+            )
         }
 
         assertEquals(HttpStatus.CONFLICT, exception.statusCode)
@@ -173,6 +304,16 @@ class ResourceRequestWorkflowServiceTest {
 
     @Test
     fun `approving a request commits its external lines through the budget handler`() {
+        val manager = User(
+            id = 55,
+            username = "manager",
+            email = "manager@example.test",
+            fullName = "Manager",
+            passwordHash = "hash",
+            role = Role.DEPARTMENT_MANAGER,
+            department = department,
+        )
+
         val request = ResourceRequest(
             requestId = 101,
             requestNumber = "REQ-2026-000001",
@@ -181,9 +322,10 @@ class ResourceRequestWorkflowServiceTest {
             departmentId = department.id,
             requesterId = caller.id,
             vendorId = 4,
-            assignedManagerId = 55,
+            assignedManagerId = manager.id,
             requiredDate = LocalDate.now(clock).plusDays(2),
         )
+
         val line = ResourceRequestLineItem(
             lineItemId = 5,
             requestId = 101,
@@ -193,26 +335,121 @@ class ResourceRequestWorkflowServiceTest {
             quantity = 1,
             fulfillmentPreference = FulfillmentPreference.EXTERNAL.name,
         )
-        val manager = User(
-            id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
-            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
-        )
-        whenever(requests.findById(101)).thenReturn(Optional.of(request))
-        whenever(requests.saveAndFlush(request)).thenReturn(request)
+
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer {
+            it.getArgument<ResourceRequest>(0)
+        }
         whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
 
-        service().decide(101, manager, RequestDecisionDto(Decision.APPROVE))
+        service().decide(
+            101,
+            manager,
+            RequestDecisionDto(Decision.APPROVE),
+        )
 
-        verify(externalBudgetHandler).commitApprovedLines(101, listOf(line), manager.id, null)
+        verify(externalBudgetHandler).commitApprovedLines(
+            101,
+            listOf(line),
+            manager.id,
+            null,
+        )
+    }
+
+    @Test
+    fun `approving a request reserves its internal lines through the stock reservation service`() {
+        val manager = User(
+            id = 55,
+            username = "manager",
+            email = "manager@example.test",
+            fullName = "Manager",
+            passwordHash = "hash",
+            role = Role.DEPARTMENT_MANAGER,
+            department = department,
+        )
+
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Projector",
+            manufacturer = "N/A",
+            requiredDate = LocalDate.now(clock).plusDays(3),
+            assignedManagerId = manager.id,
+            requesterId = caller.id,
+        )
+
+        val line = ResourceRequestLineItem(
+            lineItemId = 20,
+            requestId = 101,
+            description = "Projector",
+            manufacturer = "N/A",
+            quantity = 2,
+            resourceId = 4,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+        )
+
+        val resource = Resource(
+            id = 4,
+            code = "R-4",
+            name = "Projector",
+            type = ResourceType.INTERNAL,
+            category = ResourceCategory.EQUIPMENT,
+            unitOfMeasure = "unit",
+            quantity = 2,
+        )
+
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer {
+            it.getArgument<ResourceRequest>(0)
+        }
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
+        whenever(resources.findForUpdateById(resource.id)).thenReturn(resource)
+        whenever(availability.availableQuantity(resource, lockReservations = true)).thenReturn(2)
+
+        service().decide(
+            101,
+            manager,
+            RequestDecisionDto(Decision.APPROVE),
+        )
+
+        verify(reservations).reserveApprovedInternalLines(
+            101,
+            listOf(line),
+            manager.id,
+        )
     }
 
     @Test
     fun `authorized caller receives request history in chronological order`() {
-        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", teamId = team.id, requesterId = caller.id)
-        val submitted = RequestHistory(id = 1, requestId = 101, eventType = "SUBMITTED", actorId = caller.id)
-        val approved = RequestHistory(id = 2, requestId = 101, eventType = "APPROVED", fromStatus = "PENDING", toStatus = "APPROVED", actorId = 55)
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Cones",
+            manufacturer = "N/A",
+            teamId = team.id,
+            requesterId = caller.id,
+        )
+
+        val submitted = RequestHistory(
+            id = 1,
+            requestId = 101,
+            eventType = "SUBMITTED",
+            actorId = caller.id,
+        )
+
+        val approved = RequestHistory(
+            id = 2,
+            requestId = 101,
+            eventType = "APPROVED",
+            fromStatus = "PENDING",
+            toStatus = "APPROVED",
+            actorId = 55,
+        )
+
         whenever(requests.findById(101)).thenReturn(Optional.of(request))
-        whenever(history.findAllByRequestIdOrderByCreatedAtAscIdAsc(101)).thenReturn(listOf(submitted, approved))
+        whenever(
+            history.findAllByRequestIdOrderByCreatedAtAscIdAsc(101),
+        ).thenReturn(listOf(submitted, approved))
 
         val result = service().history(101, caller)
 
@@ -222,46 +459,97 @@ class ResourceRequestWorkflowServiceTest {
 
     @Test
     fun `caller cannot retrieve history for a request they do not own`() {
-        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", teamId = 99, requesterId = 55)
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Cones",
+            manufacturer = "N/A",
+            teamId = 99,
+            requesterId = 55,
+        )
+
         whenever(requests.findById(101)).thenReturn(Optional.of(request))
 
-        assertThrows<ResourceNotFoundException> { service().history(101, caller) }
+        assertThrows<ResourceNotFoundException> {
+            service().history(101, caller)
+        }
 
         verify(history, never()).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
     }
 
     @Test
     fun `team lead who is not the request owner cannot retrieve its history`() {
-        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", teamId = team.id, requesterId = 55)
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Cones",
+            manufacturer = "N/A",
+            teamId = team.id,
+            requesterId = 55,
+        )
+
         whenever(requests.findById(101)).thenReturn(Optional.of(request))
 
-        assertThrows<ResourceNotFoundException> { service().history(101, caller) }
+        assertThrows<ResourceNotFoundException> {
+            service().history(101, caller)
+        }
 
         verify(history, never()).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
     }
 
     @Test
     fun `assigned manager and elevated roles can retrieve request history`() {
-        val request = ResourceRequest(requestId = 101, requestNumber = "REQ-2026-000001", itemDescription = "Cones", manufacturer = "N/A", requesterId = 55, assignedManagerId = 56)
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Cones",
+            manufacturer = "N/A",
+            requesterId = 55,
+            assignedManagerId = 56,
+        )
+
         whenever(requests.findById(101)).thenReturn(Optional.of(request))
-        whenever(history.findAllByRequestIdOrderByCreatedAtAscIdAsc(101)).thenReturn(emptyList())
+        whenever(
+            history.findAllByRequestIdOrderByCreatedAtAscIdAsc(101),
+        ).thenReturn(emptyList())
+
         val manager = User(
-            id = 56, username = "manager", email = "manager@example.test", fullName = "Manager",
-            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+            id = 56,
+            username = "manager",
+            email = "manager@example.test",
+            fullName = "Manager",
+            passwordHash = "hash",
+            role = Role.DEPARTMENT_MANAGER,
+            department = department,
         )
+
         val admin = User(
-            id = 57, username = "admin", email = "admin@example.test", fullName = "Admin",
-            passwordHash = "hash", role = Role.ADMIN, department = department,
+            id = 57,
+            username = "admin",
+            email = "admin@example.test",
+            fullName = "Admin",
+            passwordHash = "hash",
+            role = Role.ADMIN,
+            department = department,
         )
+
         val managingDirector = User(
-            id = 58, username = "md", email = "md@example.test", fullName = "MD",
-            passwordHash = "hash", role = Role.MANAGING_DIRECTOR, department = department,
+            id = 58,
+            username = "md",
+            email = "md@example.test",
+            fullName = "MD",
+            passwordHash = "hash",
+            role = Role.MANAGING_DIRECTOR,
+            department = department,
         )
 
         assertTrue(service().history(101, manager).isEmpty())
         assertTrue(service().history(101, admin).isEmpty())
         assertTrue(service().history(101, managingDirector).isEmpty())
 
-        verify(history, org.mockito.kotlin.times(3)).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
+        verify(
+            history,
+            org.mockito.kotlin.times(3),
+        ).findAllByRequestIdOrderByCreatedAtAscIdAsc(101)
     }
 }
