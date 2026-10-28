@@ -1,14 +1,11 @@
 package com.resourcetracker.resource
 
-<<<<<<< HEAD
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.BadRequestException
-=======
 import com.resourcetracker.common.DepartmentReference
 import com.resourcetracker.common.VendorReference
->>>>>>> 31a7d1a (Return related entities as nested DTOs)
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.DepartmentRepository
@@ -233,7 +230,6 @@ class ResourceService(
         vendorRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Vendor not found with id $id") }
 
-<<<<<<< HEAD
     private fun Resource.toResponse(reservedQuantity: Int? = null): ResourceResponse {
         val reserved = if (type == ResourceType.INTERNAL) reservedQuantity ?: availability.reservedQuantity(id) else 0
         return ResourceResponse(
@@ -249,8 +245,8 @@ class ResourceService(
             location = location,
             reorderLevel = reorderLevel,
             status = status,
-            departmentId = department?.id,
-            preferredVendorId = preferredVendor?.id,
+            department = department?.let { DepartmentReference(requireNotNull(it.id), it.name) },
+            preferredVendor = preferredVendor?.let { VendorReference(it.id, it.name) },
             reservedQuantity = reserved,
             unavailableQuantity = if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
             availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this, knownReservedQuantity = reserved) else null,
@@ -271,26 +267,6 @@ class ResourceService(
         "reorderLevel" to resource.reorderLevel,
         "status" to resource.status?.name,
         "active" to resource.active,
-=======
-    private fun Resource.toResponse() = ResourceResponse(
-        id = id,
-        code = code,
-        name = name,
-        type = type,
-        category = category,
-        unitOfMeasure = unitOfMeasure,
-        description = description,
-        active = active,
-        quantity = quantity,
-        location = location,
-        reorderLevel = reorderLevel,
-        status = status,
-        department = department?.let { DepartmentReference(requireNotNull(it.id), it.name) },
-        preferredVendor = preferredVendor?.let { VendorReference(it.id, it.name) },
-        reservedQuantity = if (type == ResourceType.INTERNAL) availability.reservedQuantity(id) else 0,
-        unavailableQuantity = if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
-        availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this) else null,
->>>>>>> 31a7d1a (Return related entities as nested DTOs)
     )
 
     companion object {

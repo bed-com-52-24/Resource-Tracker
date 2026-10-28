@@ -1,3 +1,4 @@
+-- Inventory reconciliation records and lookup indexes.
 CREATE TABLE resource_reconciliations (
     reconciliation_id INT NOT NULL AUTO_INCREMENT,
     resource_id INT NOT NULL,

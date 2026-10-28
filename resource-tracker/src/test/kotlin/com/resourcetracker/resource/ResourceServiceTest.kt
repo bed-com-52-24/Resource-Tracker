@@ -1,12 +1,9 @@
 package com.resourcetracker.resource
 
-<<<<<<< HEAD
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
-=======
 import com.resourcetracker.department.Department
->>>>>>> 31a7d1a (Return related entities as nested DTOs)
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.common.BusinessRuleException

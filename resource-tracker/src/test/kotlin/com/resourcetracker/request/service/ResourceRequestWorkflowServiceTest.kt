@@ -1,5 +1,6 @@
 package com.resourcetracker.request.service
 
+import com.resourcetracker.approval.ExternalApprovalHandler
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
 import com.resourcetracker.notification.NotificationService
@@ -50,6 +51,7 @@ class ResourceRequestWorkflowServiceTest {
     private val reservationRows = org.mockito.kotlin.mock<StockReservationRepository>()
     private val issueRows = org.mockito.kotlin.mock<StockIssueRepository>()
     private val procurements = org.mockito.kotlin.mock<ProcurementService>()
+    private val externalApprovalHandler = org.mockito.kotlin.mock<ExternalApprovalHandler>()
     private val clock = Clock.systemUTC()
 
     private val department = Department(id = 1, name = "Operations")
@@ -66,7 +68,7 @@ class ResourceRequestWorkflowServiceTest {
 
     private fun service() = ResourceRequestService(
         requests, lines, history, numbers, teams, projects, vendors, resources, users,
-        notifications, reservations, availability, reservationRows, issueRows, procurements, clock,
+        notifications, reservations, availability, reservationRows, issueRows, procurements, externalApprovalHandler, clock,
     )
 
     private fun setup(managerList: List<User>) {

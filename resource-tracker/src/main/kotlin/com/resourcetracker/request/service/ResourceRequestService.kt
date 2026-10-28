@@ -1,5 +1,7 @@
 package com.resourcetracker.request.service
 
+import com.resourcetracker.approval.ExternalApprovalHandler
+import com.resourcetracker.approval.LineDecision
 import com.resourcetracker.common.DepartmentReference
 import com.resourcetracker.common.ProjectReference
 import com.resourcetracker.common.ResourceReference
@@ -51,6 +53,7 @@ class ResourceRequestService(
     private val reservationRepository: StockReservationRepository,
     private val issueRepository: StockIssueRepository,
     private val procurementService: ProcurementService,
+    private val externalApprovalHandler: ExternalApprovalHandler,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -236,6 +239,17 @@ class ResourceRequestService(
                 }
             }
             lineItemRepository.saveAll(lines)
+            lines.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }.forEach { line ->
+                externalApprovalHandler.handle(
+                    LineDecision(
+                        requestId = requestId,
+                        actorId = caller.id,
+                        line = line,
+                        approved = true,
+                        comment = comment,
+                    ),
+                )
+            }
         }
         request.status = target
         request.decidedBy = caller.id

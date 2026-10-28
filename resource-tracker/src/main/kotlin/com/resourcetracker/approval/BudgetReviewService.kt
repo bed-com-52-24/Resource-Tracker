@@ -1,5 +1,8 @@
 package com.resourcetracker.approval
 
+import com.resourcetracker.request.repository.RequestLineItemRepository
+import com.resourcetracker.request.repository.ResourceRequestRepository
+import com.resourcetracker.request.entity.FulfillmentPreference
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,8 +20,8 @@ data class BudgetReview(
 
 @Service
 class BudgetReviewService(
-    private val requestRepository: ApprovalRequestRepository,
-    private val lineRepository: ApprovalLineItemRepository,
+    private val requestRepository: ResourceRequestRepository,
+    private val lineRepository: RequestLineItemRepository,
     private val budget: BudgetPort
 ) {
 
@@ -32,9 +35,9 @@ class BudgetReviewService(
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "Only the assigned manager can review this request")
         }
 
-        val cost = lineRepository.findByRequestId(requestId)
-            .filter { it.source == "EXTERNAL" }
-            .fold(BigDecimal.ZERO) { sum, line -> sum + budget.lineCost(line.id) }
+        val cost = lineRepository.findAllByRequestId(requestId)
+            .filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
+            .fold(BigDecimal.ZERO) { sum, line -> sum + budget.lineCost(requireNotNull(line.lineItemId)) }
 
         val departmentId = budget.departmentOfRequest(requestId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found")

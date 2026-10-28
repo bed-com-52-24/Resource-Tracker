@@ -3,6 +3,7 @@ package com.resourcetracker.request.controller
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.dto.*
+import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.service.*
 import com.resourcetracker.security.AuthenticatedUser
@@ -33,6 +34,7 @@ import java.time.LocalDate
 class ResourceRequestController(
     private val service: ResourceRequestService,
     private val stockOperations: StockOperationsService,
+    private val procurementService: ProcurementService,
 ) {
 
     @PostMapping("/api/v1/requests")
@@ -198,7 +200,6 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
-<<<<<<< HEAD
     @GetMapping("/api/v1/procurements")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
@@ -216,7 +217,7 @@ class ResourceRequestController(
         @Parameter(description = "Filter by procurement status", example = "ORDERED")
         @RequestParam(required = false) status: ProcurementStatus?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = procurements.list(caller.id, status, search, page, size, sort, direction)
+    ) = procurementService.list(caller.id, status, search, page, size, sort, direction)
 
     @PutMapping("/api/v1/procurements/{id}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
@@ -225,9 +226,7 @@ class ResourceRequestController(
         @PathVariable @Min(1) id: Int,
         @Valid @RequestBody request: UpdateProcurementRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = procurements.update(id, caller.id, request)
+    ) = procurementService.update(id, caller.id, request)
 
-=======
->>>>>>> 31a7d1a (Return related entities as nested DTOs)
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }

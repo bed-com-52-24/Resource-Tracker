@@ -1,9 +1,13 @@
 package com.resourcetracker.approval
 
+import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.user.Role
+import com.resourcetracker.security.RequiresRoles
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -11,7 +15,6 @@ import org.springframework.web.bind.annotation.*
 @Tag(name = "Approval workflow", description = "Approve, reject or query a pending resource request")
 class BudgetReviewController(
     private val reviewService: BudgetReviewService,
-    private val currentUser: CurrentUser
 ) {
 
     @Operation(
@@ -25,5 +28,9 @@ class BudgetReviewController(
         ApiResponse(responseCode = "409", description = "Department has no budget set up")
     )
     @GetMapping("/{id}/budget")
-    fun budget(@PathVariable id: Int) = reviewService.review(id, currentUser.id())
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    fun budget(
+        @PathVariable id: Int,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = reviewService.review(id, caller.id)
 }
