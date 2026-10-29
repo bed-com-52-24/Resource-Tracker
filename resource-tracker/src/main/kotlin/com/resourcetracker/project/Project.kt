@@ -8,7 +8,7 @@ import java.time.LocalDate
 @Entity
 @Table(
     name = "projects",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["department_id", "name"])]
+    uniqueConstraints = [UniqueConstraint(columnNames = ["department_id", "project_name"])]
 )
 class Project(
     @Id

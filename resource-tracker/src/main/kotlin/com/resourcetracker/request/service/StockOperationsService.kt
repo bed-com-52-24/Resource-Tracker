@@ -33,6 +33,7 @@ class StockOperationsService(
     private val waitlistService: WaitlistService,
     private val users: UserRepository,
     private val clock: Clock,
+    private val requestCompletion: RequestCompletionService,
 ) {
     @Transactional
     fun issue(requestId: Int, actorId: Int, dto: StockIssueRequest): StockIssueResponse {
@@ -80,6 +81,7 @@ class StockOperationsService(
         waitlistService.recordIssued(dto.lineItemId, dto.quantity, actor.id)
         movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
         history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
+        requestCompletion.completeIfFulfilled(requestId, actor.id)
         return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity)
     }
 

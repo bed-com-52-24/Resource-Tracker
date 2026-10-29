@@ -92,6 +92,7 @@ class NotificationService(
                 ?: "Request ${requestId ?: "unknown"} needs manager reassignment."
             NotificationType.REASSIGNED -> "Request ${requestId ?: "unknown"} has a new assigned manager."
             NotificationType.CANCELLED -> "Request ${requestId ?: "unknown"} was cancelled."
+            NotificationType.COMPLETED -> "Request ${requestId ?: "unknown"} has been fulfilled."
         }
     }
 

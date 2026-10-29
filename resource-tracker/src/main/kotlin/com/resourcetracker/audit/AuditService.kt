@@ -1,7 +1,6 @@
 package com.resourcetracker.audit
 
 import com.resourcetracker.security.AuthenticatedUser
-import org.springframework.scheduling.annotation.Async
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -26,18 +25,12 @@ class AuditService(
         )
         val correlationId = prepared.correlationId ?: AuditCorrelationContext.currentOrNew()
 
-        // We call the async writer to avoid blocking the main transaction's response time
-        asyncWrite(prepared, correlationId)
-    }
-
-    @Async
-    protected fun asyncWrite(record: AuditRecord, correlationId: String) {
         writer.insert(
-            record,
+            prepared,
             correlationId,
-            snapshots.serialize(record.previousState),
-            snapshots.serialize(record.newState),
-            snapshots.serialize(record.changedFields),
+            snapshots.serialize(prepared.previousState),
+            snapshots.serialize(prepared.newState),
+            snapshots.serialize(prepared.changedFields),
         )
     }
 }

@@ -6,6 +6,8 @@ import com.resourcetracker.audit.AuditService
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.resource.ResourceRepository
+import com.resourcetracker.request.entity.RequestStatus
+import com.resourcetracker.request.repository.ResourceRequestRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.repository.findByIdOrNull
@@ -19,6 +21,7 @@ class ProjectService(
     private val projects: ProjectRepository,
     private val departments: DepartmentRepository,
     private val resources: ResourceRepository,
+    private val resourceRequests: ResourceRequestRepository,
     private val audit: AuditService,
 ) {
     private val allowedSortFields = setOf("name", "code", "startDate", "endDate", "active", "createdAt")
@@ -131,7 +134,12 @@ class ProjectService(
         project.active = active
     }
 
-    private fun hasActiveRequests(projectId: Int): Boolean = false
+    private fun hasActiveRequests(projectId: Int): Boolean {
+        return resourceRequests.existsByProjectIdAndStatusNotIn(
+            projectId,
+            listOf(RequestStatus.REJECTED, RequestStatus.CANCELLED, RequestStatus.COMPLETED),
+        )
+    }
 
     private fun snapshot(project: Project) = mapOf(
         "name" to project.name,

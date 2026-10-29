@@ -14,4 +14,5 @@ enum class NotificationType {
     REASSIGNMENT_REQUIRED,
     REASSIGNED,
     CANCELLED,
+    COMPLETED,
 }

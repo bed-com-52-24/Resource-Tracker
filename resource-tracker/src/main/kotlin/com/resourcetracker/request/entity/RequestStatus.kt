@@ -4,6 +4,7 @@ enum class RequestStatus {
     PENDING,
     QUERIED,
     APPROVED,
+    COMPLETED,
     REJECTED,
     WAITLISTED,
     CANCELLED
@@ -37,6 +38,11 @@ object RequestTransitions {
 
     fun target(from: RequestStatus, action: RequestAction, actor: RequestActor): RequestStatus? =
         rules[from to action]?.takeIf { it.actor == actor }?.to
+
+    fun completionTarget(from: RequestStatus): RequestStatus? = when (from) {
+        RequestStatus.APPROVED, RequestStatus.WAITLISTED -> RequestStatus.COMPLETED
+        else -> null
+    }
 
     fun allowedPairs(): Set<Triple<RequestStatus, RequestAction, RequestActor>> =
         rules.mapTo(linkedSetOf()) { (key, rule) -> Triple(key.first, key.second, rule.actor) }

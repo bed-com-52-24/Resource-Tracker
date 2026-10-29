@@ -1,6 +1,7 @@
 package com.resourcetracker.request.repository
 
 import com.resourcetracker.request.entity.ResourceRequest
+import com.resourcetracker.request.entity.RequestStatus
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -33,4 +34,8 @@ interface ResourceRequestRepository :
         @Param("requestId") requestId: Int,
         @Param("requesterId") requesterId: Int
     ): ResourceRequest?
+    fun existsByProjectIdAndStatusNotIn(
+        projectId: Int,
+        statuses: Collection<RequestStatus>
+    ): Boolean
 }

@@ -11,7 +11,7 @@ class AuditEntryWriter(private val jdbc: JdbcTemplate) {
             INSERT INTO audit_entry (
                 occurred_at, actor_id, actor_role, action, item_type, item_id, previous_state, new_state,
                 comment, ip_address, user_agent, changed_fields, correlation_id
-            ) VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, CAST(? AS JSON), ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, CAST(? AS JSON), ?)
             """.trimIndent(),
             java.time.Instant.now(),
             record.actorId,

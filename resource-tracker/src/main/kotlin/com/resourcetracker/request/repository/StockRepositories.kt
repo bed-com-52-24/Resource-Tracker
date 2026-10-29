@@ -120,6 +120,10 @@ interface StockMovementRepository : JpaRepository<StockMovement, Int> {
 interface ProcurementRepository : JpaRepository<Procurement, Int> {
     fun findAllByRequestId(requestId: Int): List<Procurement>
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Procurement p where p.id = :id")
+    fun findForUpdateById(@Param("id") id: Int): Procurement?
+
     @Query(
         """
         select p from Procurement p

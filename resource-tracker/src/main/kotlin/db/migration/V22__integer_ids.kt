@@ -9,7 +9,7 @@ import java.sql.ResultSet
  * Converts the remaining UUID-backed keys to integers. MySQL commits DDL statement by
  * statement, so each section checks the live schema and can resume after a failed attempt.
  */
-class V21__integer_ids : BaseJavaMigration() {
+class V22__integer_ids : BaseJavaMigration() {
     override fun migrate(context: Context) {
         val connection = context.connection
         migrateProjects(connection)
