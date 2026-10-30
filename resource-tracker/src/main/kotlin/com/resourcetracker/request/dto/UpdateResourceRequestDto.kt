@@ -6,13 +6,17 @@ import io.swagger.v3.oas.annotations.media.Schema
 
 enum class RequesterUpdateStatus { PENDING, CANCELLED }
 
+@Schema(description = "Team-lead edit: use PENDING to clarify/edit or CANCELLED to cancel. Line items are optional when editing.")
 data class UpdateResourceRequestDto(
+    @field:Schema(allowableValues = ["PENDING", "CANCELLED"], example = "PENDING")
     val status: RequesterUpdateStatus? = null,
     @field:Size(max = 1000) val comment: String? = null,
     @field:Valid val lineItems: List<RequestLineItemDto>? = null,
 )
 
+@Schema(description = "Manager decision. QUERY requires a comment; APPROVE/WAITLIST run stock checks; REJECT requires a comment. WAITLIST is for internal lines only.")
 data class RequestDecisionDto(
+    @field:Schema(allowableValues = ["QUERY", "APPROVE", "REJECT", "WAITLIST"], example = "APPROVE")
     val decision: Decision,
     @field:Size(max = 1000) val comment: String? = null,
     @field:Schema(description = "Map of request line item ID to approved quantity. Keys must be existing line item IDs; values must be between 1 and the requested quantity. Omit or leave empty to approve full requested quantities.", example = "{\"1\": 4}")

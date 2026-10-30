@@ -24,7 +24,6 @@ data class DepartmentResponse(
     val name: String,
     val description: String?,
     val status: String,
-    val active: Boolean = status == "ACTIVE",
     val manager: UserReference? = null,
 )
 

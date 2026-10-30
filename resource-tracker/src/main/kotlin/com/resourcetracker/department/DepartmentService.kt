@@ -146,7 +146,6 @@ class DepartmentService(
             name = name,
             description = description,
             status = status,
-            active = status == "ACTIVE",
             manager = manager,
         )
     }

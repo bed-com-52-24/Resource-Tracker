@@ -47,7 +47,6 @@ data class TeamResponse(
     val manager: UserReference?,
     val projects: List<ProjectSummary>,
     val isActive: Boolean,
-    val active: Boolean = isActive,
 )
 
 data class AddTeamMembersRequest(

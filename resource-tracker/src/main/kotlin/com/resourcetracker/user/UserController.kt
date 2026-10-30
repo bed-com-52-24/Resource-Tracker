@@ -42,8 +42,7 @@ class UserController(private val users: UserService) {
         summary = "Create a user",
         description = "Creates an account without a password and emails a single-use setup link. " +
                 "The department and every supplied team must exist and be active. " +
-                "Team IDs are required for MEMBER and TEAM_LEAD users, and optional for ADMIN and DEPARTMENT_MANAGER users. " +
-                "MANAGING_DIRECTOR is reserved and cannot be assigned through this endpoint."
+                "Team IDs are required for MEMBER and TEAM_LEAD users, and optional for ADMIN, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR users."
     )
     @ApiResponses(
         value = [
