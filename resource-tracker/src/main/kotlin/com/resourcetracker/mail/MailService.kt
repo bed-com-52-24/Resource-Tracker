@@ -23,8 +23,22 @@ class SmtpMailService(
         val message = SimpleMailMessage()
         message.setFrom(from)
         message.setTo(email)
-        message.subject = "Your Resource Tracker password code"
-        message.text = "Hello $username, your Resource Tracker password code is: $code"
+        message.subject = "Resource Tracker | Password setup or reset code"
+        message.text = """Hello $username,
+
+We received a request to set up or reset the password for your Resource Tracker account.
+
+Your verification code is:
+
+$code
+
+Enter this code in Resource Tracker App to continue. For your security, do not share this code with anyone. It can only be used once.
+
+If you did not request this, you can ignore this email. Your password will not be changed unless the code is used.
+
+Regards,
+Resource Tracker Support
+""".trimIndent()
         sender.send(message)
     }
 }

@@ -1,5 +1,6 @@
 package com.resourcetracker.user
 
+import com.resourcetracker.department.DepartmentReference
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -44,14 +45,18 @@ data class PasswordSetResponse(val passwordSet: Boolean)
 
 data class PasswordResetResponse(val message: String)
 
+data class UserReference(
+    val id: Int,
+    val name: String,
+)
+
 data class UserResponse(
     val id: Int,
     val username: String,
     val email: String,
     val fullName: String,
     val role: Role,
-    val departmentId: Int,
-    val departmentName: String,
+    val department: DepartmentReference,
     val teamIds: List<Int>,
     val teamNames: List<String>,
     val active: Boolean,

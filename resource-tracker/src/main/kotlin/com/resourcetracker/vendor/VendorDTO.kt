@@ -23,6 +23,11 @@ data class UpdateVendorRequest(
     val active: Boolean? = null,
 )
 
+data class VendorReference(
+    val id: Int,
+    val name: String,
+)
+
 data class VendorResponse(
     val id: Int,
     val name: String,

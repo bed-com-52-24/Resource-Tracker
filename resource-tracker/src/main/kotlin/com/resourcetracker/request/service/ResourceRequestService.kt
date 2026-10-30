@@ -3,11 +3,13 @@ package com.resourcetracker.request.service
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
+import com.resourcetracker.project.ProjectReference
 import com.resourcetracker.project.ProjectRepository
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.resource.Resource
+import com.resourcetracker.resource.ResourceReference
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
 import com.resourcetracker.team.TeamRepository
@@ -75,8 +77,9 @@ class ResourceRequestService(
             vendor.id
         } else null
 
+        val teamManager = team.manager?.takeIf { it.active && it.role == Role.DEPARTMENT_MANAGER }
         val managers = users.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, team.department.id)
-        val managerId = managers.singleOrNull()?.id
+        val managerId = teamManager?.id ?: managers.singleOrNull()?.id
         val needsReassignment = managerId == null
         val first = normalized.first()
         val total = normalized.fold(BigDecimal.ZERO) { sum, line -> sum + line.unitPrice.multiply(BigDecimal.valueOf(line.dto.quantity.toLong())) }
@@ -275,9 +278,9 @@ class ResourceRequestService(
         val target = RequestTransitions.target(request.status, action, RequestActor.TEAM_LEAD)
             ?: conflict("Cannot ${action.name.lowercase()} a request in ${request.status}")
         val comment = dto.comment?.trim()?.takeIf(String::isNotEmpty)
-        if (action == RequestAction.CLARIFY && comment == null) badRequest("A response comment is required")
+        if (action == RequestAction.CLARIFY && request.status == RequestStatus.QUERIED && comment == null) badRequest("A response comment is required")
         if (action == RequestAction.CLARIFY && dto.lineItems != null) {
-            if (request.status != RequestStatus.QUERIED) conflict("Line items may only be edited while queried")
+            if (request.status != RequestStatus.QUERIED && request.status != RequestStatus.PENDING) conflict("Line items may only be edited while queried or pending")
             val normalized = normalizeLines(dto.lineItems, request.vendorId)
             val total = normalized.fold(BigDecimal.ZERO) { sum, line -> sum + line.unitPrice.multiply(BigDecimal.valueOf(line.dto.quantity.toLong())) }
             val first = normalized.first()
@@ -289,7 +292,7 @@ class ResourceRequestService(
             request.totalAmount = total
             lineItemRepository.deleteAllByRequestId(requestId)
             lineItemRepository.saveAll(normalized.map { line -> ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, unitOfMeasure = line.unitOfMeasure) })
-            request.editedAfterQuery = true
+            if (request.status == RequestStatus.QUERIED) request.editedAfterQuery = true
         }
         if (action == RequestAction.CANCEL) {
             if ((request.status == RequestStatus.APPROVED || request.status == RequestStatus.WAITLISTED) &&
@@ -309,7 +312,8 @@ class ResourceRequestService(
         request.status = target
         if (target == RequestStatus.PENDING) request.queriedAt = null
         val saved = requestRepository.saveAndFlush(request)
-        historyRepository.save(RequestHistory(requestId = requestId, eventType = if (target == RequestStatus.PENDING) "CLARIFIED" else "CANCELLED", fromStatus = from.name, toStatus = target.name, actorId = caller.id, comment = comment))
+        val eventType = if (target == RequestStatus.CANCELLED) "CANCELLED" else if (from == RequestStatus.QUERIED) "CLARIFIED" else "UPDATED"
+        historyRepository.save(RequestHistory(requestId = requestId, eventType = eventType, fromStatus = from.name, toStatus = target.name, actorId = caller.id, comment = comment))
         request.assignedManagerId?.let { managerId ->
             notifications.notify(listOf(managerId), if (target == RequestStatus.PENDING) NotificationType.RESUBMITTED else NotificationType.CANCELLED, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))
         }
@@ -413,13 +417,15 @@ class ResourceRequestService(
             assignedManagerId = assignedManagerId, needsReassignment = needsReassignment, requiredDate = requiredDate,
             justification = justification, totalAmount = totalAmount, status = status, editedAfterQuery = editedAfterQuery,
             createdAt = createdAt ?: LocalDateTime.MIN, updatedAt = updatedAt ?: LocalDateTime.MIN,
+            project = projects.findById(projectId).map { project -> ProjectReference(project.id, project.name, project.code) }.orElse(null),
             lineItems = lines.map { line ->
-                val resource = if (includeStock) line.resourceId?.let { resources.findById(it).orElse(null) } else null
-                val internalResource = resource?.takeIf { it.type == ResourceType.INTERNAL }
+                val resource = line.resourceId?.let { resources.findById(it).orElse(null) }
+                val internalResource = resource?.takeIf { it.type == ResourceType.INTERNAL }?.takeIf { includeStock }
                 RequestLineItemResponseDto(
                     requireNotNull(line.lineItemId), line.description, line.manufacturer, line.unitPrice,
                     line.quantity, line.category, line.batchNumber, line.resourceId, line.fulfillmentPreference,
                     line.unitOfMeasure, line.approvedQuantity,
+                    resource = resource?.let { ResourceReference(it.id, it.name, it.code) },
                     physicalQuantity = internalResource?.quantity,
                     reservedQuantity = internalResource?.let { availability.reservedQuantity(it.id) },
                     unavailableQuantity = internalResource?.unavailableQuantity,

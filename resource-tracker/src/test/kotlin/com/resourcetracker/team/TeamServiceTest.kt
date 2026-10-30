@@ -97,7 +97,7 @@ class TeamServiceTest {
         val response = service.create(request())
 
         assertEquals("Alpha", response.name)
-        assertEquals(7, response.managerId)
+        assertEquals(7, response.manager?.id)
         assertEquals(true, response.isActive)
         val auditRecord = argumentCaptor<AuditRecord>()
         verify(audit).record(auditRecord.capture())
@@ -142,10 +142,10 @@ class TeamServiceTest {
         val member = user(role = Role.MEMBER)
         member.teams.add(team)
         `when`(teams.findById(2)).thenReturn(Optional.of(team))
-        `when`(users.findAllById(setOf(7))).thenReturn(listOf(member))
+        `when`(users.findByUsername("mgr")).thenReturn(member)
         asAdmin()
 
-        assertThrows<BusinessRuleException> { service.addMembers(2, setOf(7)) }
+        assertThrows<BusinessRuleException> { service.addMembers(2, setOf("mgr")) }
     }
 
     @Test
@@ -156,11 +156,11 @@ class TeamServiceTest {
         member.teams.add(source)
         `when`(teams.findById(2)).thenReturn(Optional.of(source))
         `when`(teams.findById(3)).thenReturn(Optional.of(target))
-        `when`(users.findById(7)).thenReturn(Optional.of(member))
+        `when`(users.findByUsername("mgr")).thenReturn(member)
         `when`(memberHistory.save(any(TeamMemberHistory::class.java))).thenAnswer { it.getArgument(0) }
         asAdmin()
 
-        service.transfer(2, 7, 3)
+        service.transfer(2, "mgr", 3)
 
         assertTrue(member.teams.contains(target))
         assertTrue(!member.teams.contains(source))
@@ -173,10 +173,10 @@ class TeamServiceTest {
         val member = user(role = Role.MEMBER)
         `when`(teams.findById(2)).thenReturn(Optional.of(source))
         `when`(teams.findById(3)).thenReturn(Optional.of(target))
-        `when`(users.findById(7)).thenReturn(Optional.of(member))
+        `when`(users.findByUsername("mgr")).thenReturn(member)
         asAdmin()
 
-        assertThrows<BusinessRuleException> { service.transfer(2, 7, 3) }
+        assertThrows<BusinessRuleException> { service.transfer(2, "mgr", 3) }
     }
 
     @Test
@@ -185,10 +185,10 @@ class TeamServiceTest {
         val member = user(role = Role.MEMBER)
         member.teams.add(team)
         `when`(teams.findById(2)).thenReturn(Optional.of(team))
-        `when`(users.findById(7)).thenReturn(Optional.of(member))
+        `when`(users.findByUsername("mgr")).thenReturn(member)
         asAdmin()
 
-        assertThrows<BusinessRuleException> { service.removeMember(2, 7) }
+        assertThrows<BusinessRuleException> { service.removeMember(2, "mgr") }
     }
 
     private fun asAdmin() {

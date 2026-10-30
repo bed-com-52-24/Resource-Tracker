@@ -1,5 +1,6 @@
 package com.resourcetracker.department
 
+import com.resourcetracker.user.UserReference
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema
@@ -13,11 +14,18 @@ data class DepartmentRequest(
     val description: String? = null
 )
 
+data class DepartmentReference(
+    val id: Int,
+    val name: String,
+)
+
 data class DepartmentResponse(
     val id: Int,
     val name: String,
     val description: String?,
-    val status: String
+    val status: String,
+    val active: Boolean = status == "ACTIVE",
+    val manager: UserReference? = null,
 )
 
 data class UpdateDepartmentRequest(

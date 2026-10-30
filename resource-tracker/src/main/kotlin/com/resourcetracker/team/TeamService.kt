@@ -132,11 +132,10 @@ class TeamService(
     }
 
     @Transactional
-    fun addMembers(teamId: Int, userIds: Set<Int>): List<User> {
+    fun addMembers(teamId: Int, usernames: Set<String>): List<User> {
         val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
         if (!team.isActive) throw BusinessRuleException("Team is inactive")
-        val members = users.findAllById(userIds)
-        if (members.size != userIds.size) throw ResourceNotFoundException("One or more users not found")
+        val members = usernames.map { username -> users.findByUsername(username) ?: throw ResourceNotFoundException("User not found: $username") }
 
         val actor = currentActor()
         members.forEach { user ->
@@ -149,12 +148,12 @@ class TeamService(
     }
 
     @Transactional
-    fun transfer(teamId: Int, userId: Int, toTeamId: Int): User {
+    fun transfer(teamId: Int, username: String, toTeamId: Int): User {
         if (teamId == toTeamId) throw BusinessRuleException("Transfer target must be different from the source team")
         val source = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
         val target = teams.findByIdOrNull(toTeamId) ?: throw ResourceNotFoundException("Team not found")
         if (!source.isActive || !target.isActive) throw BusinessRuleException("Teams must be active")
-        val user = users.findByIdOrNull(userId) ?: throw ResourceNotFoundException("User not found")
+        val user = users.findByUsername(username) ?: throw ResourceNotFoundException("User not found")
         if (!user.active) throw BusinessRuleException("User is inactive")
         if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the source team")
         if (user.teams.any { it.id == toTeamId }) throw BusinessRuleException("User is already a member of the target team")
@@ -167,10 +166,10 @@ class TeamService(
     }
 
     @Transactional
-    fun removeMember(teamId: Int, userId: Int): User {
+    fun removeMember(teamId: Int, username: String): User {
         val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
         if (!team.isActive) throw BusinessRuleException("Team is inactive")
-        val user = users.findByIdOrNull(userId) ?: throw ResourceNotFoundException("User not found")
+        val user = users.findByUsername(username) ?: throw ResourceNotFoundException("User not found")
         if (!user.active) throw BusinessRuleException("User is inactive")
         if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the team")
         if (team.manager?.id == user.id) throw BusinessRuleException("Reassign the team manager before removing them")

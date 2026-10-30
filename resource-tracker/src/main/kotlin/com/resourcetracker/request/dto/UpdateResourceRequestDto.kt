@@ -15,6 +15,7 @@ data class UpdateResourceRequestDto(
 data class RequestDecisionDto(
     val decision: Decision,
     @field:Size(max = 1000) val comment: String? = null,
+    @field:Schema(description = "Map of request line item ID to approved quantity. Keys must be existing line item IDs; values must be between 1 and the requested quantity. Omit or leave empty to approve full requested quantities.", example = "{\"1\": 4}")
     val approvedQuantities: Map<Int, Int> = emptyMap(),
 )
 

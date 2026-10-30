@@ -1,5 +1,7 @@
 package com.resourcetracker.request.dto
 
+import com.resourcetracker.project.ProjectReference
+import com.resourcetracker.resource.ResourceReference
 import com.resourcetracker.request.entity.RequestCategory
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.entity.WaitlistStatus
@@ -26,6 +28,7 @@ data class RequestLineItemResponseDto(
     val availableQuantity: Int? = null,
     @Schema(description = "Present only when the line item is waitlisted")
     val waitlist: WaitlistProgressResponse? = null,
+    val resource: ResourceReference? = null,
 )
 
 data class WaitlistProgressResponse(
@@ -57,4 +60,5 @@ data class ResourceRequestResponseDto(
     val lineItems: List<RequestLineItemResponseDto>,
     val warnings: List<String> = emptyList(),
     val fulfillmentStatus: String = "NOT_STARTED",
+    val project: ProjectReference? = null,
 )

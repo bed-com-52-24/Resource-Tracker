@@ -2,6 +2,7 @@ package com.resourcetracker.vendor
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
@@ -62,11 +63,11 @@ class VendorController(private val vendorService: VendorService) {
         @RequestParam(defaultValue = "asc") direction: String,
         @Parameter(description = "Filter by vendor status", example = "ACTIVE")
         @RequestParam(required = false) status: String?,
-    ) = vendorService.search(
+    ): PagedResponse<VendorResponse> = PagedResponse.from(vendorService.search(
         status,
         search,
         ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name"),
-    )
+    ))
 
     @GetMapping("/{id}")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)

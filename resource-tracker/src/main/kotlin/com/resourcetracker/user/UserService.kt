@@ -203,8 +203,7 @@ class UserService(
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName ?: username,
         role = role,
-        departmentId = department.id,
-        departmentName = department.name,
+        department = com.resourcetracker.department.DepartmentReference(department.id, department.name),
         teamIds = teams.map { it.id }.sorted(),
         teamNames = teams.map { it.name }.sorted(),
         active = active,

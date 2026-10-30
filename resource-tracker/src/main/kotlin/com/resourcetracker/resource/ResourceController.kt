@@ -1,11 +1,18 @@
 package com.resourcetracker.resource
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.request.service.AvailabilityService
+import com.resourcetracker.request.service.CreateReservationRequest
+import com.resourcetracker.request.service.CreateReturnRequest
+import com.resourcetracker.request.service.ReservationService
 import com.resourcetracker.request.service.StockCorrectionRequest
+import com.resourcetracker.request.service.StockIssueRequest
 import com.resourcetracker.request.service.StockOperationsService
+import com.resourcetracker.request.service.VerifyReturnRequest
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
@@ -20,7 +27,9 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import org.springframework.data.domain.Page
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder
@@ -77,7 +86,7 @@ class ResourceController(
         @Parameter(description = "Only return resources with available quantity greater than zero", example = "false") @RequestParam(defaultValue = "false") availableOnly: Boolean,
         @Parameter(description = "Filter by owning department ID") @RequestParam(required = false) departmentId: Int?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): Page<ResourceResponse> = resources.list(
+    ): PagedResponse<ResourceResponse> = PagedResponse.from(resources.list(
         active = active,
         type = type,
         category = category,
@@ -87,7 +96,7 @@ class ResourceController(
         keyword = search,
         pageable = ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name"),
         scopeDepartmentId = departmentScope(caller),
-    )
+    ))
 
     @PostMapping
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
@@ -166,6 +175,25 @@ class ResourceController(
             reason = movement.reason,
         )
     }
+
+    @PostMapping("/issues/{issueId}/returns")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Request a return for an issued resource")
+    fun returnStock(
+        @PathVariable @Min(1) issueId: Int,
+        @Valid @RequestBody request: CreateReturnRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.requestReturn(issueId, caller.id, request)
+
+    @PutMapping("/returns/{returnId}")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Verify a resource return")
+    fun verifyReturn(
+        @PathVariable @Min(1) returnId: Int,
+        @Valid @RequestBody request: VerifyReturnRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
     private fun departmentScope(caller: AuthenticatedUser): Int? =
         if (caller.role == Role.MANAGING_DIRECTOR) null
