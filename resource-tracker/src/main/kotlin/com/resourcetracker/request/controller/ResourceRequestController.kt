@@ -245,8 +245,8 @@ class ResourceRequestController(
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @Parameter(description = "Sort field: createdAt, requestNumber, status, requiredDate, or totalAmount", example = "createdAt")
         @RequestParam(defaultValue = "createdAt") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "desc")
-        @RequestParam(defaultValue = "desc") direction: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "asc")
+        @RequestParam(defaultValue = "asc") direction: String,
         @RequestParam(required = false) status: RequestStatus?,
         @RequestParam(required = false) @Min(1) teamId: Int?,
         @RequestParam(required = false) @Min(1) projectId: Int?,

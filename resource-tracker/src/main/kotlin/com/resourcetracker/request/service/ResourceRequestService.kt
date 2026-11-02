@@ -132,7 +132,7 @@ class ResourceRequestService(
             historyRepository.save(RequestHistory(requestId = id, eventType = "ASSIGNED", toStatus = RequestStatus.PENDING.name, actorId = caller.id, comment = reason))
             notifications.notify(users.findActiveByRole(Role.ADMIN).map { it.id }, NotificationType.REASSIGNMENT_REQUIRED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber, "message" to reason))
         }
-        return saved.toResponse(lineEntities, lowStock.map { "${it.description}: requested ${it.dto.quantity}, physical stock ${it.resource?.quantity ?: 0}" })
+        return saved.toResponse(lineEntities)
     }
 
     @Transactional(readOnly = true)
@@ -227,11 +227,12 @@ class ResourceRequestService(
             conflict("Only requests with internal resource lines can be waitlisted")
         }
         if (dto.decision == Decision.APPROVE || dto.decision == Decision.WAITLIST) {
+            val approvedByLine = dto.approvedQuantities.associate { it.lineItemId to it.quantity }
             val ids = lines.mapNotNull { it.lineItemId }.toSet()
-            if (dto.approvedQuantities.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")
+            if (approvedByLine.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")
             lines.forEach { line ->
                 val lineId = requireNotNull(line.lineItemId)
-                val approved = dto.approvedQuantities[lineId] ?: line.quantity
+                val approved = approvedByLine[lineId] ?: line.quantity
                 if (approved !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
                 val resource = line.resourceId?.let { resources.findForUpdateById(it) ?: conflict("Resource for line item $lineId no longer exists") }
                 if (resource != null && !resource.active) conflict("Resource for line item $lineId is inactive")
@@ -410,69 +411,25 @@ class ResourceRequestService(
 
     private fun user(id: Int): User = users.findById(id).orElseThrow { ResourceNotFoundException("User not found") }
 
-    private fun ResourceRequest.toResponse(lines: List<ResourceRequestLineItem>, warnings: List<String> = emptyList(), includeStock: Boolean = false) =
+    private fun ResourceRequest.toResponse(lines: List<ResourceRequestLineItem>, includeStock: Boolean = false) =
         ResourceRequestResponseDto(
-            requestId = requireNotNull(requestId), requestNumber = requestNumber, departmentId = departmentId,
-            projectId = projectId, teamId = teamId, vendorId = vendorId, requesterId = requesterId,
-            assignedManagerId = assignedManagerId, needsReassignment = needsReassignment, requiredDate = requiredDate,
-            justification = justification, totalAmount = totalAmount, status = status, editedAfterQuery = editedAfterQuery,
-            createdAt = createdAt ?: LocalDateTime.MIN, updatedAt = updatedAt ?: LocalDateTime.MIN,
-            project = projects.findById(projectId).map { project -> ProjectReference(project.id, project.name, project.code) }.orElse(null),
+            requestId = requireNotNull(requestId),
+            requestNumber = requestNumber,
+            requesterId = requesterId,
+            assignedManagerId = assignedManagerId,
+            totalAmount = totalAmount,
+            status = status,
+            createdAt = createdAt ?: LocalDateTime.MIN,
             lineItems = lines.map { line ->
                 val resource = line.resourceId?.let { resources.findById(it).orElse(null) }
                 val internalResource = resource?.takeIf { it.type == ResourceType.INTERNAL }?.takeIf { includeStock }
                 RequestLineItemResponseDto(
-                    requireNotNull(line.lineItemId), line.description, line.manufacturer, line.unitPrice,
-                    line.quantity, line.category, line.batchNumber, line.resourceId, line.fulfillmentPreference,
-                    line.unitOfMeasure, line.approvedQuantity,
-                    resource = resource?.let { ResourceReference(it.id, it.name, it.code) },
-                    physicalQuantity = internalResource?.quantity,
-                    reservedQuantity = internalResource?.let { availability.reservedQuantity(it.id) },
-                    unavailableQuantity = internalResource?.unavailableQuantity,
+                    lineItemId = requireNotNull(line.lineItemId),
+                    quantity = line.quantity,
                     availableQuantity = internalResource?.let(availability::availableQuantity),
-                    waitlist = waitlistEntries.findByLineItemId(requireNotNull(line.lineItemId))?.let(::waitlistProgress),
                 )
             },
-            warnings = warnings,
-            fulfillmentStatus = fulfillmentStatus(requireNotNull(requestId), lines, status),
         )
-
-    private fun waitlistProgress(entry: WaitlistEntry): WaitlistProgressResponse {
-        val needsStock = (entry.status == WaitlistStatus.WAITING || entry.status == WaitlistStatus.FULFILLABLE) &&
-            entry.reservedQuantity < entry.quantity
-        val position = if (needsStock && entry.createdAt != null) {
-            waitlistEntries.countAhead(
-                entry.resourceId,
-                listOf(WaitlistStatus.WAITING, WaitlistStatus.FULFILLABLE),
-                entry.createdAt!!,
-                entry.id,
-            ).toInt() + 1
-        } else null
-        return WaitlistProgressResponse(
-            entry.id,
-            entry.status,
-            entry.quantity,
-            entry.reservedQuantity,
-            entry.issuedQuantity,
-            position,
-        )
-    }
-
-    private fun fulfillmentStatus(requestId: Int, lines: List<ResourceRequestLineItem>, status: RequestStatus): String {
-        val activeReservations = reservationRepository.findAllByRequestIdAndStatus(requestId, ReservationStatus.ACTIVE)
-        val issues = issueRepository.findAllByRequestId(requestId)
-        val issued = issues.sumOf { it.quantity }
-        val returned = issues.sumOf { it.returnedQuantity }
-        if (issued > 0 && returned >= issued) return "RETURNED"
-        if (returned > 0) return "PARTIALLY_RETURNED"
-        if (issued > 0) {
-            val approvedTotal = lines.sumOf { it.approvedQuantity ?: it.quantity }
-            return if (issued >= approvedTotal) "ISSUED" else "PARTIALLY_ISSUED"
-        }
-        if (activeReservations.isNotEmpty()) return "RESERVED"
-        if (status == RequestStatus.WAITLISTED) return "WAITLISTED"
-        return "NOT_STARTED"
-    }
 
     private fun uniqueKey(): String = ByteArray(32).also(random::nextBytes).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 

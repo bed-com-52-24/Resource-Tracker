@@ -29,7 +29,10 @@ import java.time.LocalDate
 @RequestMapping("/api/v1/audit")
 @Tag(name = "Audit", description = "Read-only retrieval of request audit history")
 @SecurityRequirement(name = "bearerAuth")
-class AuditController(private val audit: AuditRetrievalService) {
+class AuditController(
+    private val audit: AuditRetrievalService,
+    private val auditEntries: com.resourcetracker.audit.AuditEntryQueryService,
+) {
     @GetMapping("/actors/{actorId}")
     @RequiresRoles(Role.MANAGING_DIRECTOR, Role.ADMIN)
     @Operation(
@@ -99,6 +102,32 @@ class AuditController(private val audit: AuditRetrievalService) {
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = audit.byActions(actions, caller.role, from, to, pageable(page, size))
+
+    @GetMapping("/entries")
+    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @Operation(
+        summary = "List general audit entries",
+        description = "Admin and Managing Director only. Filter by actor, action, item, and an inclusive ISO-8601 timestamp range.",
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Matching audit entries"),
+            ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "403", description = "Admin or Managing Director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ],
+    )
+    fun entries(
+        @RequestParam(required = false) @Min(1) actorId: Int?,
+        @RequestParam(required = false) action: com.resourcetracker.audit.AuditAction?,
+        @RequestParam(required = false) itemType: String?,
+        @RequestParam(required = false) itemId: String?,
+        @Parameter(description = "Inclusive ISO-8601 timestamp, for example 2026-10-29T00:00:00Z")
+        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) from: java.time.Instant?,
+        @Parameter(description = "Inclusive ISO-8601 timestamp, for example 2026-10-29T23:59:59Z")
+        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) to: java.time.Instant?,
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+    ) = auditEntries.list(actorId, action, itemType, itemId, from, to, page, size)
 
     private fun pageable(page: Int, size: Int) = ListQuery.pageable(
         page,

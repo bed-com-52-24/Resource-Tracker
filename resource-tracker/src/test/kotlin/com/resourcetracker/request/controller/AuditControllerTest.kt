@@ -23,6 +23,7 @@ import java.time.LocalDate
 
 class AuditControllerTest {
     private val audit = org.mockito.kotlin.mock<AuditRetrievalService>()
+    private val auditEntries = org.mockito.kotlin.mock<com.resourcetracker.audit.AuditEntryQueryService>()
     private val caller = AuthenticatedUser(
         id = 8,
         username = "admin",
@@ -30,8 +31,7 @@ class AuditControllerTest {
         jti = "test-token",
         tokenExpiresAt = java.time.Instant.parse("2026-10-27T00:00:00Z"),
     )
-    private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(AuditController(audit))
-        .setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
+    private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(AuditController(audit, auditEntries))        .setCustomArgumentResolvers(AuthenticationPrincipalArgumentResolver())
         .build()
 
     @Test
