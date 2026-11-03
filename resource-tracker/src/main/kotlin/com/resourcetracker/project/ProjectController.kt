@@ -4,8 +4,6 @@ import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
-import com.resourcetracker.audit.Auditable
-import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -35,7 +33,6 @@ class ProjectController(private val service: ProjectService) {
 
     @PostMapping
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Auditable(action = AuditAction.PROJECT_CREATED, itemType = "Project", itemIdExpression = "#body.code")
     @Operation(summary = "Create a project", description = "Create a new project.")
     @ApiResponses(
         value = [
@@ -71,7 +68,6 @@ class ProjectController(private val service: ProjectService) {
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Auditable(action = AuditAction.PROJECT_UPDATED, itemType = "Project", itemIdExpression = "#id")
     @Operation(
         summary = "Update a project",
         description = "Updates an existing project. All fields are optional; null or omitted fields preserve their current values. " +

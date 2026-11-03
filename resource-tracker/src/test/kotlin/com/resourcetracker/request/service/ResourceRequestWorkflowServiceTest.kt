@@ -1,6 +1,6 @@
 package com.resourcetracker.request.service
 
-import com.resourcetracker.approval.ExternalApprovalHandler
+import com.resourcetracker.request.service.ExternalApprovalHandler
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.department.Department
 import com.resourcetracker.notification.NotificationService
@@ -55,6 +55,7 @@ class ResourceRequestWorkflowServiceTest {
     private val issueRows = org.mockito.kotlin.mock<StockIssueRepository>()
     private val waitlistEntries = org.mockito.kotlin.mock<WaitlistEntryRepository>()
     private val procurements = org.mockito.kotlin.mock<ProcurementService>()
+    private val waitlistService = org.mockito.kotlin.mock<WaitlistService>()
     private val externalApprovalHandler = org.mockito.kotlin.mock<ExternalApprovalHandler>()
     private val clock = Clock.systemUTC()
 
@@ -72,8 +73,8 @@ class ResourceRequestWorkflowServiceTest {
 
     private fun service() = ResourceRequestService(
         requests, lines, history, numbers, teams, projects, vendors, resources, users,
-        notifications, reservations, availability, reservationRows, issueRows, procurements,
-        externalApprovalHandler, clock,
+        notifications, reservations, availability, reservationRows, issueRows, waitlistEntries,
+        procurements, waitlistService, externalApprovalHandler, clock,
     )
 
     private fun setup(managerList: List<User>) {
@@ -190,6 +191,9 @@ class ResourceRequestWorkflowServiceTest {
             requestNumber = "REQ-2026-000001",
             itemDescription = "Projector",
             manufacturer = "N/A",
+            departmentId = department.id,
+            projectId = project.id,
+            teamId = team.id,
             requiredDate = LocalDate.now(clock).plusDays(3),
             assignedManagerId = manager.id,
             requesterId = caller.id,
@@ -216,6 +220,11 @@ class ResourceRequestWorkflowServiceTest {
         whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
         whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
         whenever(resources.findForUpdateById(resource.id)).thenReturn(resource)
+        whenever(resources.findById(resource.id)).thenReturn(Optional.of(resource))
+        whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
+        whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
         whenever(availability.availableQuantity(resource, lockReservations = true)).thenReturn(2)
 
         service().decide(

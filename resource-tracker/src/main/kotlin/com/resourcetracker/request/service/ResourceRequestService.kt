@@ -52,6 +52,7 @@ class ResourceRequestService(
     private val issueRepository: StockIssueRepository,
     private val waitlistEntries: WaitlistEntryRepository,
     private val procurementService: ProcurementService,
+    private val waitlistService: WaitlistService,
     private val externalApprovalHandler: ExternalApprovalHandler,
     private val clock: Clock,
 ) {

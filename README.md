@@ -28,7 +28,7 @@ The access token is valid for 30 minutes. The login response no longer includes 
 
 ## Email delivery
 
-Password setup and reset links are sent through SMTP in every profile. Configure these variables in `resource-tracker/.env` (or the backend environment):
+Password setup and reset codes use SMTP outside the `dev` profile. Configure these variables in `resource-tracker/.env` (or the backend environment):
 
 ```dotenv
 MAIL_HOST=smtp.example.com
@@ -39,7 +39,8 @@ APP_MAIL_FROM=no-reply@example.com
 APP_FRONTEND_BASE_URL=https://your-frontend.example.com
 ```
 
-Use the SMTP host, port, username, and password supplied by your email provider. The app uses STARTTLS on port 587. Password links are never written to application logs.
+Use the SMTP host, port, username, and password supplied by your email provider. The app uses STARTTLS on port 587. Outside the `dev` profile, password codes are never written to application logs.
+When running with the default `dev` profile, password setup/reset codes are printed to the backend terminal instead of being emailed. This is for local development only; use a non-`dev` profile to deliver email through SMTP.
 
 ## Run the API with Docker Compose
 
