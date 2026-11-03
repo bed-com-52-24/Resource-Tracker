@@ -25,7 +25,8 @@ class JdbcBudgetPort(private val jdbc: JdbcTemplate) : BudgetPort {
 
     override fun lineCost(lineId: Int): BigDecimal =
         jdbc.queryForObject(
-            "SELECT unit_price * COALESCE(approved_quantity, quantity) FROM resource_request_line_items WHERE line_item_id = ?",
+            "SELECT unit_price * COALESCE(approved_quantity, quantity) " +
+                "FROM resource_request_line_items WHERE line_item_id = ?",
             BigDecimal::class.java,
             lineId,
         ) ?: BigDecimal.ZERO

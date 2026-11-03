@@ -1,15 +1,19 @@
 package com.resourcetracker.request.service
 
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.ProjectReference
+import com.resourcetracker.common.ResourceReference
+import com.resourcetracker.common.TeamReference
+import com.resourcetracker.common.UserReference
+import com.resourcetracker.common.VendorReference
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
-import com.resourcetracker.project.ProjectReference
 import com.resourcetracker.project.ProjectRepository
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.resource.Resource
-import com.resourcetracker.resource.ResourceReference
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
 import com.resourcetracker.team.TeamRepository
@@ -49,7 +53,7 @@ class ResourceRequestService(
     private val waitlistEntries: WaitlistEntryRepository,
     private val procurementService: ProcurementService,
     private val waitlistService: WaitlistService,
-    private val requestCompletion: RequestCompletionService,
+    private val externalApprovalHandler: ExternalApprovalHandler,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -69,7 +73,7 @@ class ResourceRequestService(
         val project = projects.findById(dto.projectId).orElseThrow { badRequest("Unknown project") }
         if (!project.active || team.projects.none { it.id == project.id }) badRequest("Project is not active or assigned to the team")
 
-        val normalized = normalizeLines(dto.lineItems, dto.vendorId, team.department.id)
+        val normalized = normalizeLines(dto.lineItems, dto.vendorId)
         val externalLines = normalized.any { it.preference == FulfillmentPreference.EXTERNAL }
         val vendorId = if (externalLines) {
             val vendorId = dto.vendorId ?: badRequest("vendorId is required for external lines")
@@ -78,9 +82,8 @@ class ResourceRequestService(
             vendor.id
         } else null
 
-        val teamManager = team.manager?.takeIf { it.active && it.role == Role.DEPARTMENT_MANAGER }
         val managers = users.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, team.department.id)
-        val managerId = teamManager?.id ?: managers.singleOrNull()?.id
+        val managerId = managers.singleOrNull()?.id
         val needsReassignment = managerId == null
         val first = normalized.first()
         val total = normalized.fold(BigDecimal.ZERO) { sum, line -> sum + line.unitPrice.multiply(BigDecimal.valueOf(line.dto.quantity.toLong())) }
@@ -133,7 +136,7 @@ class ResourceRequestService(
             historyRepository.save(RequestHistory(requestId = id, eventType = "ASSIGNED", toStatus = RequestStatus.PENDING.name, actorId = caller.id, comment = reason))
             notifications.notify(users.findActiveByRole(Role.ADMIN).map { it.id }, NotificationType.REASSIGNMENT_REQUIRED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber, "message" to reason))
         }
-        return saved.toResponse(lineEntities)
+        return saved.toResponse(lineEntities, lowStock.map { "${it.description}: requested ${it.dto.quantity}, physical stock ${it.resource?.quantity ?: 0}" })
     }
 
     @Transactional(readOnly = true)
@@ -213,20 +216,12 @@ class ResourceRequestService(
         if ((dto.decision == Decision.QUERY || dto.decision == Decision.REJECT) && comment == null) badRequest("A comment is required")
         val lines = lineItemRepository.findAllByRequestId(requestId)
             .sortedBy { it.resourceId ?: Int.MAX_VALUE }
-        val team = teams.findById(request.teamId).orElse(null)
-        val project = projects.findById(request.projectId).orElse(null)
-        if (team != null && !team.isActive) conflict("Team is inactive")
-        if (project != null && (!project.active || team?.projects?.none { it.id == project.id } == true)) conflict("Project is not active or assigned to the team")
         if (dto.decision != Decision.QUERY) {
             val missing = buildList {
                 if (request.requiredDate == null) add("requiredDate")
                 if (lines.isEmpty()) add("lineItems")
                 if (request.needsReassignment || request.assignedManagerId == null) add("assignedManager")
                 if (lines.any { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name } && request.vendorId == null) add("vendorId")
-        if (lines.any { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name } && request.vendorId != null) {
-            val vendor = vendors.findById(request.vendorId!!)
-            if (vendor.isEmpty || !vendor.get().status.equals("ACTIVE", ignoreCase = true)) add("vendorId")
-        }
             }
             if (missing.isNotEmpty()) conflict("Cannot decide request; missing: ${missing.joinToString()}")
         }
@@ -236,17 +231,19 @@ class ResourceRequestService(
             conflict("Only requests with internal resource lines can be waitlisted")
         }
         if (dto.decision == Decision.APPROVE || dto.decision == Decision.WAITLIST) {
-            val approvedByLine = dto.approvedQuantities.associate { it.lineItemId to it.quantity }
             val ids = lines.mapNotNull { it.lineItemId }.toSet()
+            val approvedByLine = dto.approvedQuantities.associate { it.lineItemId to it }
             if (approvedByLine.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")
             lines.forEach { line ->
                 val lineId = requireNotNull(line.lineItemId)
-                val approved = approvedByLine[lineId] ?: line.quantity
+                val approvedDecision = approvedByLine[lineId]
+                val approved = approvedDecision?.quantity ?: line.quantity
                 if (approved !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
                 val resource = line.resourceId?.let { resources.findForUpdateById(it) ?: conflict("Resource for line item $lineId no longer exists") }
                 if (resource != null && !resource.active) conflict("Resource for line item $lineId is inactive")
-                // Partial fulfillment is allowed: any shortfall is backordered separately
-                // (expected date is a planning target only and does not affect stock).
+                if (dto.decision == Decision.APPROVE && resource?.type == ResourceType.INTERNAL &&
+                    approved > availability.availableQuantity(resource, lockReservations = true)
+                ) conflict("Insufficient stock for line item $lineId; available ${availability.availableQuantity(resource, lockReservations = true)}")
                 line.approvedQuantity = approved
                 if (approved < line.quantity) {
                     if (comment == null) badRequest("A comment is required when reducing an approved quantity")
@@ -254,6 +251,17 @@ class ResourceRequestService(
                 }
             }
             lineItemRepository.saveAll(lines)
+            lines.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }.forEach { line ->
+                externalApprovalHandler.handle(
+                    LineDecision(
+                        requestId = requestId,
+                        actorId = caller.id,
+                        line = line,
+                        approved = true,
+                        comment = comment,
+                    ),
+                )
+            }
         }
         request.status = target
         request.decidedBy = caller.id
@@ -270,18 +278,11 @@ class ResourceRequestService(
             else -> error("Unexpected decision target")
         }
         notifications.notify(listOf(request.requesterId), notification, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))
-        val expectedByLine = dto.approvedQuantities.associate { it.lineItemId to it.expectedFulfillmentDate }
         if (target == RequestStatus.APPROVED) {
             procurementService.authorize(request, lines, caller.id)
-            val backordered = reservations.reserveApprovedInternalLines(requestId, lines, caller.id)
-            if (backordered.isNotEmpty()) {
-                backordered.forEach { (lineId, _) ->
-                    if (expectedByLine[lineId] == null && request.requiredDate == null) badRequest("expectedFulfillmentDate is required for backordered quantity on line $lineId")
-                }
-                waitlistService.backorder(requestId, lines, backordered.toMap(), caller.id, from, comment, expectedByLine, request.requiredDate)
-            }
+            reservations.reserveApprovedInternalLines(requestId, lines, caller.id)
         }
-        if (target == RequestStatus.WAITLISTED) waitlistService.enqueue(requestId, lines, caller.id, from, comment, expectedByLine, request.requiredDate)
+        if (target == RequestStatus.WAITLISTED) waitlistService.enqueue(requestId, lines, caller.id, from, comment)
         return saved.toResponse(lines, includeStock = true)
     }
 
@@ -294,10 +295,10 @@ class ResourceRequestService(
         val target = RequestTransitions.target(request.status, action, RequestActor.TEAM_LEAD)
             ?: conflict("Cannot ${action.name.lowercase()} a request in ${request.status}")
         val comment = dto.comment?.trim()?.takeIf(String::isNotEmpty)
-        if (action == RequestAction.CLARIFY && request.status == RequestStatus.QUERIED && comment == null) badRequest("A response comment is required")
+        if (action == RequestAction.CLARIFY && comment == null) badRequest("A response comment is required")
         if (action == RequestAction.CLARIFY && dto.lineItems != null) {
-            if (request.status != RequestStatus.QUERIED && request.status != RequestStatus.PENDING) conflict("Line items may only be edited while queried or pending")
-            val normalized = normalizeLines(dto.lineItems, request.vendorId, request.departmentId)
+            if (request.status != RequestStatus.QUERIED) conflict("Line items may only be edited while queried")
+            val normalized = normalizeLines(dto.lineItems, request.vendorId)
             val total = normalized.fold(BigDecimal.ZERO) { sum, line -> sum + line.unitPrice.multiply(BigDecimal.valueOf(line.dto.quantity.toLong())) }
             val first = normalized.first()
             request.itemDescription = first.description
@@ -308,7 +309,7 @@ class ResourceRequestService(
             request.totalAmount = total
             lineItemRepository.deleteAllByRequestId(requestId)
             lineItemRepository.saveAll(normalized.map { line -> ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, unitOfMeasure = line.unitOfMeasure) })
-            if (request.status == RequestStatus.QUERIED) request.editedAfterQuery = true
+            request.editedAfterQuery = true
         }
         if (action == RequestAction.CANCEL) {
             if ((request.status == RequestStatus.APPROVED || request.status == RequestStatus.WAITLISTED) &&
@@ -328,8 +329,7 @@ class ResourceRequestService(
         request.status = target
         if (target == RequestStatus.PENDING) request.queriedAt = null
         val saved = requestRepository.saveAndFlush(request)
-        val eventType = if (target == RequestStatus.CANCELLED) "CANCELLED" else if (from == RequestStatus.QUERIED) "CLARIFIED" else "UPDATED"
-        historyRepository.save(RequestHistory(requestId = requestId, eventType = eventType, fromStatus = from.name, toStatus = target.name, actorId = caller.id, comment = comment))
+        historyRepository.save(RequestHistory(requestId = requestId, eventType = if (target == RequestStatus.PENDING) "CLARIFIED" else "CANCELLED", fromStatus = from.name, toStatus = target.name, actorId = caller.id, comment = comment))
         request.assignedManagerId?.let { managerId ->
             notifications.notify(listOf(managerId), if (target == RequestStatus.PENDING) NotificationType.RESUBMITTED else NotificationType.CANCELLED, mapOf("requestId" to requestId, "requestNumber" to request.requestNumber))
         }
@@ -361,10 +361,7 @@ class ResourceRequestService(
         if (dto.quantity !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
         val previous = line.approvedQuantity ?: line.quantity
         val issued = issueRepository.findAllByRequestIdAndLineItemId(requestId, lineItemId).sumOf { it.quantity }
-        val accepted = procurementService.acceptedQuantity(requestId, lineItemId)
-        if (dto.quantity < issued + accepted + line.waivedQuantity) {
-            conflict("Approved quantity cannot be lower than fulfilled and waived quantity")
-        }
+        if (dto.quantity < issued) conflict("Approved quantity cannot be lower than issued quantity")
         if (dto.quantity > previous && line.resourceId != null) {
             val resource = resources.findForUpdateById(line.resourceId!!) ?: throw ResourceNotFoundException("Resource not found")
             val increase = dto.quantity - previous
@@ -374,93 +371,8 @@ class ResourceRequestService(
         }
         line.approvedQuantity = dto.quantity
         lineItemRepository.save(line)
-        if (dto.quantity < previous) {
-            val freedResources = reservations.releaseExcessForLine(requestId, lineItemId, dto.quantity, caller.id, dto.reason)
-            waitlistService.reduceBackorderedQuantity(lineItemId, previous - dto.quantity)
-            freedResources.forEach(waitlistService::onStockReturned)
-        }
+        if (dto.quantity < previous) reservations.releaseExcessForLine(requestId, lineItemId, dto.quantity, caller.id, dto.reason)
         historyRepository.save(RequestHistory(requestId = requestId, eventType = "QUANTITY_ADJUSTED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineItemId, quantity = dto.quantity, comment = "Approved quantity changed from $previous to ${dto.quantity}. ${dto.reason}"))
-        return request.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
-    }
-
-    @Transactional
-    fun waiveLineBalance(requestId: Int, lineItemId: Int, caller: User, dto: WaiveLineBalanceRequest): ResourceRequestResponseDto {
-        val request = requestRepository.findForUpdateById(requestId) ?: throw ResourceNotFoundException("Request not found")
-        if (caller.role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != caller.id) forbidden()
-        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
-            conflict("Line balances can only be waived on approved or waitlisted requests")
-        }
-        val line = lineItemRepository.findById(lineItemId).orElseThrow { ResourceNotFoundException("Line item not found") }
-        if (line.requestId != requestId) throw ResourceNotFoundException("Line item not found")
-        val approved = line.approvedQuantity ?: line.quantity
-        val issued = issueRepository.findAllByRequestIdAndLineItemId(requestId, lineItemId).sumOf { it.quantity }
-        val accepted = procurementService.acceptedQuantity(requestId, lineItemId)
-        val waivedSoFar = line.waivedQuantity
-        val remaining = approved - issued - accepted - waivedSoFar
-        if (remaining <= 0) conflict("There is no outstanding balance left to waive on this line")
-        if (dto.quantity > remaining) badRequest("Waived quantity cannot exceed the outstanding balance of $remaining")
-        val backorder = waitlistEntries.findByLineItemId(lineItemId)
-        backorder?.let { resources.findForUpdateById(it.resourceId) ?: throw ResourceNotFoundException("Resource not found") }
-        waitlistService.reduceBackorderedQuantity(lineItemId, dto.quantity)
-        val freedResources = reservations.releaseExcessForLine(
-            requestId,
-            lineItemId,
-            approved - (waivedSoFar + dto.quantity),
-            caller.id,
-            dto.reason,
-        )
-        line.waivedQuantity = waivedSoFar + dto.quantity
-        lineItemRepository.save(line)
-        historyRepository.save(RequestHistory(requestId = requestId, eventType = "WAIVED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineItemId, quantity = dto.quantity, comment = dto.reason))
-        (freedResources + listOfNotNull(backorder?.resourceId)).distinct().forEach(waitlistService::onStockReturned)
-        requestCompletion.completeIfFulfilled(requestId, caller.id)
-        return request.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
-    }
-
-    @Transactional
-    fun updateExpectedFulfillmentDate(
-        requestId: Int,
-        lineItemId: Int,
-        caller: User,
-        dto: UpdateExpectedFulfillmentDateRequest,
-    ): ResourceRequestResponseDto {
-        val request = requestRepository.findForUpdateById(requestId)
-            ?: throw ResourceNotFoundException("Request not found")
-        if (caller.role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != caller.id) forbidden()
-        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
-            conflict("Expected fulfillment dates can only change on approved or waitlisted requests")
-        }
-        val line = lineItemRepository.findById(lineItemId).orElseThrow { ResourceNotFoundException("Line item not found") }
-        if (line.requestId != requestId) throw ResourceNotFoundException("Line item not found")
-        val entry = waitlistEntries.findByLineItemIdForUpdate(lineItemId)
-            ?: conflict("Line item has no outstanding backorder")
-        if (entry.status != WaitlistStatus.WAITING && entry.status != WaitlistStatus.FULFILLABLE) {
-            conflict("Expected fulfillment date can only change while the backorder is open")
-        }
-        val previousDate = entry.expectedFulfillmentDate
-        entry.expectedFulfillmentDate = dto.expectedFulfillmentDate
-        waitlistEntries.save(entry)
-        historyRepository.save(
-            RequestHistory(
-                requestId = requestId,
-                eventType = "EXPECTED_FULFILLMENT_DATE_UPDATED",
-                fromStatus = request.status.name,
-                toStatus = request.status.name,
-                actorId = caller.id,
-                lineItemId = lineItemId,
-                comment = "Expected fulfillment date changed from ${previousDate ?: "unset"} to ${dto.expectedFulfillmentDate}",
-            ),
-        )
-        notifications.notify(
-            listOf(request.requesterId, caller.id).distinct(),
-            NotificationType.BACKORDER_DATE_UPDATED,
-            mapOf(
-                "requestId" to requestId,
-                "requestNumber" to request.requestNumber,
-                "lineItemId" to lineItemId,
-                "expectedFulfillmentDate" to dto.expectedFulfillmentDate.toString(),
-            ),
-        )
         return request.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
     }
 
@@ -474,18 +386,12 @@ class ResourceRequestService(
         val unitOfMeasure: String?,
     )
 
-    private fun normalizeLines(items: List<RequestLineItemDto>, vendorId: Int?, allowedDepartmentId: Int? = null): List<NormalizedLine> {
+    private fun normalizeLines(items: List<RequestLineItemDto>, vendorId: Int?): List<NormalizedLine> {
         if (items.isEmpty()) badRequest("At least one line item is required")
-        if (items.size > 20) badRequest("A request may not contain more than 20 line items")
-        val resourceIds = items.mapNotNull { it.resourceId }
-        if (resourceIds.size != resourceIds.toSet().size) badRequest("Duplicate resource lines are not allowed")
         return items.mapIndexed { index, dto ->
             if (dto.quantity !in 1..100000) badRequest("Line ${index + 1}: quantity must be between 1 and 100000")
             val resource = dto.resourceId?.let { resources.findById(it).orElseThrow { badRequest("Line ${index + 1}: resource not found") } }
             if (resource != null && !resource.active) badRequest("Line ${index + 1}: resource is inactive")
-            if (resource != null && resource.department != null && allowedDepartmentId != null && resource.department?.id != allowedDepartmentId) {
-                badRequest("Line ${index + 1}: resource is not available to this team's department")
-            }
             val preference = when (resource?.type) {
                 ResourceType.INTERNAL -> FulfillmentPreference.INTERNAL
                 ResourceType.EXTERNAL -> FulfillmentPreference.EXTERNAL
@@ -520,37 +426,88 @@ class ResourceRequestService(
 
     private fun user(id: Int): User = users.findById(id).orElseThrow { ResourceNotFoundException("User not found") }
 
-    private fun ResourceRequest.toResponse(lines: List<ResourceRequestLineItem>, includeStock: Boolean = false) =
-        ResourceRequestResponseDto(
-            requestId = requireNotNull(requestId),
-            requestNumber = requestNumber,
-            requesterId = requesterId,
-            assignedManagerId = assignedManagerId,
-            totalAmount = totalAmount,
-            status = status,
-            createdAt = createdAt ?: LocalDateTime.MIN,
+    private fun ResourceRequest.toResponse(
+        lines: List<ResourceRequestLineItem>,
+        warnings: List<String> = emptyList(),
+        includeStock: Boolean = false,
+    ): ResourceRequestResponseDto {
+        val team = teams.findById(teamId).orElseThrow { ResourceNotFoundException("Team not found") }
+        val project = projects.findById(projectId).orElseThrow { ResourceNotFoundException("Project not found") }
+        val requester = user(requesterId)
+        val assignedManager = assignedManagerId?.let(::user)
+
+        return ResourceRequestResponseDto(
+            requestId = requireNotNull(requestId), requestNumber = requestNumber,
+            department = DepartmentReference(requireNotNull(team.department.id), team.department.name),
+            project = ProjectReference(project.id, project.name, project.code),
+            team = TeamReference(team.id, team.name),
+            vendor = vendorId?.let { id ->
+                vendors.findById(id).orElseThrow { ResourceNotFoundException("Vendor not found") }
+                    .let { VendorReference(it.id, it.name) }
+            },
+            requester = UserReference(requester.id, requester.fullName ?: requester.username),
+            assignedManager = assignedManager?.let { UserReference(it.id, it.fullName ?: it.username) },
+            needsReassignment = needsReassignment, requiredDate = requiredDate,
+            justification = justification, totalAmount = totalAmount, status = status, editedAfterQuery = editedAfterQuery,
+            createdAt = createdAt ?: LocalDateTime.MIN, updatedAt = updatedAt ?: LocalDateTime.MIN,
             lineItems = lines.map { line ->
-                val resource = line.resourceId?.let { resources.findById(it).orElse(null) }
-                val internalResource = resource?.takeIf { it.type == ResourceType.INTERNAL }?.takeIf { includeStock }
-                val lineId = requireNotNull(line.lineItemId)
-                val issued = issueRepository.findAllByRequestIdAndLineItemId(requireNotNull(requestId), lineId).sumOf { it.quantity }
-                val accepted = if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
-                    procurementService.acceptedQuantity(requireNotNull(requestId), lineId)
-                } else 0
-                val approved = line.approvedQuantity ?: line.quantity
+                val resource = line.resourceId?.let {
+                    resources.findById(it).orElseThrow { ResourceNotFoundException("Resource not found") }
+                }
+                val internalResource = resource?.takeIf { includeStock && it.type == ResourceType.INTERNAL }
                 RequestLineItemResponseDto(
-                    lineItemId = lineId,
-                    quantity = line.quantity,
-                    approvedQuantity = line.approvedQuantity,
-                    issuedQuantity = issued,
-                    acceptedQuantity = accepted,
-                    waivedQuantity = line.waivedQuantity,
-                    outstandingQuantity = (approved - issued - accepted - line.waivedQuantity).coerceAtLeast(0),
+                    requireNotNull(line.lineItemId), line.description, line.manufacturer, line.unitPrice,
+                    line.quantity, line.category, line.batchNumber,
+                    resource?.let { ResourceReference(it.id, it.code, it.name) }, line.fulfillmentPreference,
+                    line.unitOfMeasure, line.approvedQuantity,
+                    physicalQuantity = internalResource?.quantity,
+                    reservedQuantity = internalResource?.let { availability.reservedQuantity(it.id) },
+                    unavailableQuantity = internalResource?.unavailableQuantity,
                     availableQuantity = internalResource?.let(availability::availableQuantity),
-                    expectedFulfillmentDate = waitlistEntries.findByLineItemId(lineId)?.expectedFulfillmentDate,
+                    waitlist = waitlistEntries.findByLineItemId(requireNotNull(line.lineItemId))?.let(::waitlistProgress),
                 )
             },
+            warnings = warnings,
+            fulfillmentStatus = fulfillmentStatus(requireNotNull(requestId), lines, status),
         )
+    }
+
+    private fun waitlistProgress(entry: WaitlistEntry): WaitlistProgressResponse {
+        val needsStock = (entry.status == WaitlistStatus.WAITING || entry.status == WaitlistStatus.FULFILLABLE) &&
+            entry.reservedQuantity < entry.quantity
+        val position = if (needsStock && entry.createdAt != null) {
+            waitlistEntries.countAhead(
+                entry.resourceId,
+                listOf(WaitlistStatus.WAITING, WaitlistStatus.FULFILLABLE),
+                entry.createdAt!!,
+                entry.id,
+            ).toInt() + 1
+        } else null
+        return WaitlistProgressResponse(
+            entry.id,
+            entry.status,
+            entry.quantity,
+            entry.reservedQuantity,
+            entry.issuedQuantity,
+            position,
+        )
+    }
+
+    private fun fulfillmentStatus(requestId: Int, lines: List<ResourceRequestLineItem>, status: RequestStatus): String {
+        val activeReservations = reservationRepository.findAllByRequestIdAndStatus(requestId, ReservationStatus.ACTIVE)
+        val issues = issueRepository.findAllByRequestId(requestId)
+        val issued = issues.sumOf { it.quantity }
+        val returned = issues.sumOf { it.returnedQuantity }
+        if (issued > 0 && returned >= issued) return "RETURNED"
+        if (returned > 0) return "PARTIALLY_RETURNED"
+        if (issued > 0) {
+            val approvedTotal = lines.sumOf { it.approvedQuantity ?: it.quantity }
+            return if (issued >= approvedTotal) "ISSUED" else "PARTIALLY_ISSUED"
+        }
+        if (activeReservations.isNotEmpty()) return "RESERVED"
+        if (status == RequestStatus.WAITLISTED) return "WAITLISTED"
+        return "NOT_STARTED"
+    }
 
     private fun uniqueKey(): String = ByteArray(32).also(random::nextBytes).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 

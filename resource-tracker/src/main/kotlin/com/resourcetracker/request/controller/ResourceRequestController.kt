@@ -2,11 +2,10 @@ package com.resourcetracker.request.controller
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
-import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.request.dto.*
+import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.service.*
-import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
@@ -34,9 +33,8 @@ import java.time.LocalDate
 @SecurityRequirement(name = "bearerAuth")
 class ResourceRequestController(
     private val service: ResourceRequestService,
-    private val reservationService: ReservationService,
     private val stockOperations: StockOperationsService,
-    private val availabilityService: AvailabilityService,
+    private val procurementService: ProcurementService,
 ) {
 
     @PostMapping("/api/v1/requests")
@@ -65,7 +63,14 @@ class ResourceRequestController(
                                   "lineItems": [
                                     {
                                       "resourceId": 7,
-                                      "quantity": 4
+                                      "description": "",
+                                      "manufacturer": "N/A",
+                                      "unitPrice": 0,
+                                      "quantity": 4,
+                                      "category": "OTHER",
+                                      "batchNumber": null,
+                                      "unitOfMeasure": "unit",
+                                      "fulfillmentPreference": "INTERNAL"
                                     }
                                   ]
                                 }
@@ -125,118 +130,9 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.decide(id, serviceUser(caller), dto)
 
-
-    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/approved-quantity")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Adjust approved line quantity")
-    fun adjustApprovedQuantity(
-        @PathVariable @Min(1) id: Int,
-        @PathVariable @Min(1) lineItemId: Int,
-        @Valid @RequestBody dto: ApprovedQuantityUpdateRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.adjustApprovedQuantity(id, lineItemId, serviceUser(caller), dto)
-
-    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/expected-fulfillment-date")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Update the expected date for an outstanding backorder")
-    fun updateExpectedFulfillmentDate(
-        @PathVariable @Min(1) id: Int,
-        @PathVariable @Min(1) lineItemId: Int,
-        @Valid @RequestBody dto: UpdateExpectedFulfillmentDateRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.updateExpectedFulfillmentDate(id, lineItemId, serviceUser(caller), dto)
-
     @PutMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD)
-    @ResponseStatus(HttpStatus.OK)
-    @Operation(
-        summary = "Clarify or cancel an owned request",
-        description = "Use status CANCELLED (with an optional comment) to cancel an owned request. Use PENDING with an optional comment and optional replacement line items to edit a pending request or clarify a queried request.",
-        requestBody = OpenApiRequestBody(
-            required = true,
-            content = [
-                Content(
-                    mediaType = "application/json",
-                    schema = Schema(implementation = UpdateResourceRequestDto::class),
-                    examples = [
-                        ExampleObject(
-                            name = "EDIT_PENDING",
-                            summary = "Edit a pending request (line items optional)",
-                            value = """
-                                {
-                                  "status": "PENDING",
-                                  "comment": "Updating quantities before manager review",
-                                  "lineItems": [
-                                    {
-                                      "resourceId": 7,
-                                      "description": "Replacement laptop",
-                                      "manufacturer": "Example Manufacturer",
-                                      "unitPrice": 850000,
-                                      "quantity": 2,
-                                      "category": "OTHER",
-                                      "batchNumber": null,
-                                      "unitOfMeasure": "unit",
-                                      "fulfillmentPreference": "INTERNAL"
-                                    }
-                                  ]
-                                }
-                            """,
-                        ),
-                        ExampleObject(
-                            name = "EDIT_PENDING_COMMENT_ONLY",
-                            summary = "Add a note to a pending request without changing line items",
-                            value = """
-                                {
-                                  "status": "PENDING",
-                                  "comment": "Please note updated urgency"
-                                }
-                            """,
-                        ),
-                        ExampleObject(
-                            name = "CLARIFY",
-                            summary = "Clarify a queried request with revised line items",
-                            value = """
-                                {
-                                  "status": "PENDING",
-                                  "comment": "Clarified as requested: updated quantities and descriptions",
-                                  "lineItems": [
-                                    {
-                                      "resourceId": 7,
-                                      "description": "Replacement laptop",
-                                      "manufacturer": "Example Manufacturer",
-                                      "unitPrice": 850000,
-                                      "quantity": 3,
-                                      "category": "OTHER",
-                                      "batchNumber": null,
-                                      "unitOfMeasure": "unit",
-                                      "fulfillmentPreference": "INTERNAL"
-                                    }
-                                  ]
-                                }
-                            """,
-                        ),
-                        ExampleObject(
-                            name = "CANCEL",
-                            summary = "Cancel an owned request",
-                            value = """
-                                {
-                                  "status": "CANCELLED",
-                                  "comment": "No longer needed by the team"
-                                }
-                            """,
-                        ),
-                    ],
-                ),
-            ],
-        ),
-    )
-    @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Request clarified or cancelled"),
-        ApiResponse(responseCode = "400", description = "Missing required comment or invalid data", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Team Lead role or request ownership required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Request not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "409", description = "Request cannot be clarified or cancelled in its current status", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-    ])
+    @Operation(summary = "Clarify or cancel an owned request")
     fun edit(
         @PathVariable @Min(1) id: Int,
         @Valid @RequestBody dto: UpdateResourceRequestDto,
@@ -244,7 +140,7 @@ class ResourceRequestController(
     ) = service.updateRequest(id, serviceUser(caller), dto)
 
     @GetMapping("/api/v1/requests")
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "List requests visible to the current role")
     fun list(
         @Parameter(description = "Search request numbers", example = "REQ-2026")
@@ -255,8 +151,8 @@ class ResourceRequestController(
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @Parameter(description = "Sort field: createdAt, requestNumber, status, requiredDate, or totalAmount", example = "createdAt")
         @RequestParam(defaultValue = "createdAt") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "asc")
-        @RequestParam(defaultValue = "asc") direction: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "desc")
+        @RequestParam(defaultValue = "desc") direction: String,
         @RequestParam(required = false) status: RequestStatus?,
         @RequestParam(required = false) @Min(1) teamId: Int?,
         @RequestParam(required = false) @Min(1) projectId: Int?,
@@ -265,7 +161,7 @@ class ResourceRequestController(
         @RequestParam(required = false) from: LocalDate?,
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = PagedResponse.from(service.list(
+    ) = service.list(
         serviceUser(caller), status, teamId, projectId, assignedManagerId,
         needsReassignment, from, to, search,
         ListQuery.pageable(
@@ -273,10 +169,10 @@ class ResourceRequestController(
             setOf("createdAt", "requestNumber", "status", "requiredDate", "totalAmount"),
             "createdAt",
         ),
-    ))
+    )
 
     @GetMapping("/api/v1/requests/{id}")
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a visible request with its line items")
     fun get(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.get(id, serviceUser(caller))
@@ -301,44 +197,42 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.reassign(id, serviceUser(caller), dto.managerId)
 
-
-
-
-    @PostMapping("/api/v1/resources/requests/{requestId}/reservations")
+    @PutMapping("/api/v1/returns/{returnId}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Reserve approved internal stock")
-    fun reserveResourceRequest(
-        @PathVariable @Min(1) requestId: Int,
-        @Valid @RequestBody dto: CreateReservationRequest,
+    @Operation(summary = "Verify a resource return")
+    fun verifyReturn(
+        @PathVariable @Min(1) returnId: Int,
+        @Valid @RequestBody request: VerifyReturnRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = reservationService.reserve(requestId, caller.id, dto)
+    ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
-    @PostMapping("/api/v1/resources/requests/{requestId}/issues")
+    @GetMapping("/api/v1/procurements")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Issue approved stock for a request")
-    fun issueResourceRequest(
-        @PathVariable @Min(1) requestId: Int,
-        @Valid @RequestBody request: StockIssueRequest,
+    @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
+    fun procurements(
+        @Parameter(description = "Search associated request numbers", example = "REQ-2026")
+        @RequestParam(required = false) search: String?,
+        @Parameter(description = "Zero-based page number", example = "0")
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @Parameter(description = "Page size, from 1 to 100", example = "20")
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @Parameter(description = "Sort field: id, requestId, lineItemId, vendorId, estimatedCost, expectedDelivery, status, or receivedQuantity", example = "id")
+        @RequestParam(defaultValue = "id") sort: String,
+        @Parameter(description = "Sort direction: asc or desc", example = "desc")
+        @RequestParam(defaultValue = "desc") direction: String,
+        @Parameter(description = "Filter by procurement status", example = "ORDERED")
+        @RequestParam(required = false) status: ProcurementStatus?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.issue(requestId, caller.id, request)
+    ) = procurementService.list(caller.id, status, search, page, size, sort, direction)
 
-    @GetMapping("/api/v1/resources/requests/{requestId}/availability")
-    @Operation(summary = "Stock review for a request's internal items")
-    fun availabilityResourceRequest(
-        @PathVariable @Min(1) requestId: Int,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = availabilityService.review(requestId, caller.id)
-
-    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/waive-balance")
+    @PutMapping("/api/v1/procurements/{id}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Waive an outstanding line balance so a partially fulfilled request can complete")
-    fun waiveLineBalance(
+    @Operation(summary = "Update a procurement")
+    fun updateProcurement(
         @PathVariable @Min(1) id: Int,
-        @PathVariable @Min(1) lineItemId: Int,
-        @Valid @RequestBody dto: WaiveLineBalanceRequest,
+        @Valid @RequestBody request: UpdateProcurementRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.waiveLineBalance(id, lineItemId, serviceUser(caller), dto)
+    ) = procurementService.update(id, caller.id, request)
 
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }

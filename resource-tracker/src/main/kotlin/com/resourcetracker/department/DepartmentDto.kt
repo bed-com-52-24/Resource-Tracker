@@ -1,6 +1,6 @@
 package com.resourcetracker.department
 
-import com.resourcetracker.user.UserReference
+import com.resourcetracker.common.UserReference
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema

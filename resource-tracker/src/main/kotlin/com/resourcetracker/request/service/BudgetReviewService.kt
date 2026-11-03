@@ -35,7 +35,10 @@ class BudgetReviewService(
 
         val cost = lineRepository.findAllByRequestId(requestId)
             .filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
-            .fold(BigDecimal.ZERO) { sum, line -> sum + budget.lineCost(requireNotNull(line.lineItemId)) }
+            .fold(BigDecimal.ZERO) { sum, line ->
+                sum + (line.unitPrice.multiply(BigDecimal.valueOf((line.approvedQuantity ?: line.quantity).toLong())))
+            }
+
         val departmentId = budget.departmentOfRequest(requestId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found")
         val status = budget.status(departmentId)

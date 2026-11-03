@@ -4,9 +4,9 @@ import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.budget.BudgetRepository
+import com.resourcetracker.common.UserReference
 import com.resourcetracker.project.ProjectRepository
 import com.resourcetracker.user.Role
-import com.resourcetracker.user.UserReference
 import com.resourcetracker.user.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable

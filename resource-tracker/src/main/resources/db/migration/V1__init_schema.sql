@@ -1,5 +1,6 @@
--- Database created via connection string or infrastructure
--- USE resource_tracker;
+CREATE DATABASE IF NOT EXISTS resource_tracker;
+
+USE resource_tracker;
 
 CREATE TABLE IF NOT EXISTS departments (
     department_id INT AUTO_INCREMENT,
