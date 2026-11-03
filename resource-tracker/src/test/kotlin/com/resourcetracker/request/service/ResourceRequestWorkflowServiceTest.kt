@@ -55,6 +55,7 @@ class ResourceRequestWorkflowServiceTest {
     private val waitlistEntries = org.mockito.kotlin.mock<WaitlistEntryRepository>()
     private val procurements = org.mockito.kotlin.mock<ProcurementService>()
     private val waitlistService = org.mockito.kotlin.mock<WaitlistService>()
+    private val requestCompletion = org.mockito.kotlin.mock<RequestCompletionService>()
     private val clock = Clock.systemUTC()
 
     private val department = Department(id = 1, name = "Operations")
@@ -71,7 +72,7 @@ class ResourceRequestWorkflowServiceTest {
 
     private fun service() = ResourceRequestService(
         requests, lines, history, numbers, teams, projects, vendors, resources, users,
-        notifications, reservations, availability, reservationRows, issueRows, waitlistEntries, procurements, waitlistService, clock,
+        notifications, reservations, availability, reservationRows, issueRows, waitlistEntries, procurements, waitlistService, requestCompletion, clock,
     )
 
     private fun setup(managerList: List<User>) {

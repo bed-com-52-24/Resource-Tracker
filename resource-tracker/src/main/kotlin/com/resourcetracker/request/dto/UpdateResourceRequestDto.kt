@@ -4,6 +4,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema
+import java.time.LocalDate
 
 enum class RequesterUpdateStatus { PENDING, CANCELLED }
 
@@ -18,6 +19,7 @@ data class UpdateResourceRequestDto(
 data class ApprovedQuantityDecision(
     @field:Positive val lineItemId: Int,
     @field:Positive val quantity: Int,
+    @field:Schema(description = "Planning target date for any quantity that cannot be fulfilled immediately (backorder/waitlist). Does not affect stock reservation or issuance.", example = "2026-07-15") val expectedFulfillmentDate: LocalDate? = null,
 )
 
 @Schema(description = "Manager decision. QUERY requires a comment; APPROVE/WAITLIST run stock checks; REJECT requires a comment. WAITLIST is for internal lines only.")
@@ -37,4 +39,13 @@ data class ManagerReassignmentDto(val managerId: Int)
 data class ApprovedQuantityUpdateRequest(
     @field:jakarta.validation.constraints.Positive val quantity: Int,
     @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1000) val reason: String,
+)
+
+data class WaiveLineBalanceRequest(
+    @field:jakarta.validation.constraints.Positive val quantity: Int,
+    @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1000) val reason: String,
+)
+
+data class UpdateExpectedFulfillmentDateRequest(
+    val expectedFulfillmentDate: LocalDate,
 )

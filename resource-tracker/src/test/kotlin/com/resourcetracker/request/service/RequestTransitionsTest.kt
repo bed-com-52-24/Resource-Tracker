@@ -16,6 +16,7 @@ class RequestTransitionsTest {
             Triple(RequestStatus.PENDING, RequestAction.APPROVE, RequestActor.ASSIGNED_MANAGER) to RequestStatus.APPROVED,
             Triple(RequestStatus.PENDING, RequestAction.WAITLIST, RequestActor.ASSIGNED_MANAGER) to RequestStatus.WAITLISTED,
             Triple(RequestStatus.PENDING, RequestAction.REJECT, RequestActor.ASSIGNED_MANAGER) to RequestStatus.REJECTED,
+            Triple(RequestStatus.PENDING, RequestAction.CLARIFY, RequestActor.TEAM_LEAD) to RequestStatus.PENDING,
             Triple(RequestStatus.QUERIED, RequestAction.CLARIFY, RequestActor.TEAM_LEAD) to RequestStatus.PENDING,
             Triple(RequestStatus.QUERIED, RequestAction.REJECT, RequestActor.ASSIGNED_MANAGER) to RequestStatus.REJECTED,
             Triple(RequestStatus.PENDING, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,

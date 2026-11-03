@@ -136,6 +136,16 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.adjustApprovedQuantity(id, lineItemId, serviceUser(caller), dto)
 
+    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/expected-fulfillment-date")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Update the expected date for an outstanding backorder")
+    fun updateExpectedFulfillmentDate(
+        @PathVariable @Min(1) id: Int,
+        @PathVariable @Min(1) lineItemId: Int,
+        @Valid @RequestBody dto: UpdateExpectedFulfillmentDateRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.updateExpectedFulfillmentDate(id, lineItemId, serviceUser(caller), dto)
+
     @PutMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD)
     @ResponseStatus(HttpStatus.OK)
@@ -319,6 +329,16 @@ class ResourceRequestController(
         @PathVariable @Min(1) requestId: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = availabilityService.review(requestId, caller.id)
+
+    @PutMapping("/api/v1/requests/{id}/lines/{lineItemId}/waive-balance")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Waive an outstanding line balance so a partially fulfilled request can complete")
+    fun waiveLineBalance(
+        @PathVariable @Min(1) id: Int,
+        @PathVariable @Min(1) lineItemId: Int,
+        @Valid @RequestBody dto: WaiveLineBalanceRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.waiveLineBalance(id, lineItemId, serviceUser(caller), dto)
 
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }

@@ -38,6 +38,13 @@ class ProcurementService(
     private val clock: Clock,
     private val requestCompletion: RequestCompletionService,
 ) {
+    @Transactional(readOnly = true)
+    fun acceptedQuantity(requestId: Int, lineItemId: Int): Int =
+        procurements.findAllByRequestId(requestId)
+            .asSequence()
+            .filter { it.lineItemId == lineItemId && it.status == ProcurementStatus.ACCEPTED }
+            .sumOf { it.receivedQuantity ?: 0 }
+
     @Transactional
     fun authorize(request: ResourceRequest, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
         val externalLines = lineItems.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
@@ -88,7 +95,7 @@ class ProcurementService(
         val valid = when (procurement.status) {
             ProcurementStatus.AUTHORISED -> dto.status == ProcurementStatus.ORDERED
             ProcurementStatus.ORDERED -> dto.status == ProcurementStatus.RECEIVED
-            ProcurementStatus.RECEIVED -> dto.status == ProcurementStatus.ACCEPTED
+            ProcurementStatus.RECEIVED -> dto.status == ProcurementStatus.RECEIVED || dto.status == ProcurementStatus.ACCEPTED
             ProcurementStatus.ACCEPTED, ProcurementStatus.CANCELLED -> false
         }
         if (!valid) throw ResponseStatusException(HttpStatus.CONFLICT, "Invalid procurement transition ${procurement.status} -> ${dto.status}")
@@ -100,6 +107,11 @@ class ProcurementService(
                 ?: procurement.receivedQuantity
                 ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity is required")
             if (quantity !in 1..(line.approvedQuantity ?: line.quantity)) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity exceeds authorized quantity")
+            val previous = procurement.receivedQuantity ?: 0
+            if (quantity < previous) throw ResponseStatusException(HttpStatus.CONFLICT, "receivedQuantity cannot decrease; current $previous")
+            if (dto.status == ProcurementStatus.ACCEPTED && quantity != (line.approvedQuantity ?: line.quantity)) {
+                // validated below
+            }
             procurement.receivedQuantity = quantity
             procurement.receivedBy = actor.id
             procurement.receivedAt = LocalDateTime.now(clock)

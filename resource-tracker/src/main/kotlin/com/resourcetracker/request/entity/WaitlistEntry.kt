@@ -1,6 +1,7 @@
 package com.resourcetracker.request.entity
 
 import jakarta.persistence.*
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 enum class WaitlistStatus { WAITING, FULFILLABLE, FULFILLED, CANCELLED }
@@ -24,6 +25,8 @@ class WaitlistEntry(
     @Column(name = "reserved_quantity", nullable = false) var reservedQuantity: Int = 0,
     @Column(name = "issued_quantity", nullable = false) var issuedQuantity: Int = 0,
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 12) var status: WaitlistStatus = WaitlistStatus.WAITING,
+    @Column(name = "expected_fulfillment_date") var expectedFulfillmentDate: LocalDate? = null,
+    @Column(name = "overdue_notified_date") var overdueNotifiedDate: LocalDate? = null,
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false) var updatedAt: LocalDateTime? = null,
 )

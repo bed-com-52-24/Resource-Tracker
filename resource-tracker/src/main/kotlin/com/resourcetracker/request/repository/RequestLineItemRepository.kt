@@ -2,6 +2,7 @@ package com.resourcetracker.request.repository
 
 import com.resourcetracker.request.entity.ResourceRequestLineItem
 import com.resourcetracker.request.entity.RequestStatus
+import com.resourcetracker.request.entity.WaitlistStatus
 import com.resourcetracker.resource.ResourceType
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -78,6 +79,22 @@ interface RequestLineItemRepository :
         @Param("departmentId") departmentId: Int?,
         pageable: Pageable,
     ): Page<WaitlistLineProjection>
+
+    @Query(
+        """
+        select entry.resourceId as resourceId,
+               sum(entry.quantity - entry.reservedQuantity) as quantity
+        from WaitlistEntry entry
+        where entry.resourceId in :resourceIds
+          and entry.status in :statuses
+          and entry.quantity > entry.reservedQuantity
+        group by entry.resourceId
+        """,
+    )
+    fun sumWaitingQuantityByResourceIds(
+        @Param("resourceIds") resourceIds: Collection<Int>,
+        @Param("statuses") statuses: Collection<WaitlistStatus>,
+    ): List<RequestLineWaitlistDemand>
 }
 
 interface WaitlistLineProjection {
@@ -89,4 +106,9 @@ interface WaitlistLineProjection {
     val requestStatus: RequestStatus
     val remainingQuantity: Long
     val requiredDate: java.time.LocalDate?
+}
+
+interface RequestLineWaitlistDemand {
+    val resourceId: Int
+    val quantity: Long
 }

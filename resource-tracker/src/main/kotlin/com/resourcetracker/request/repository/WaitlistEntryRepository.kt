@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 interface WaitlistEntryRepository : JpaRepository<WaitlistEntry, Int> {
@@ -27,6 +28,22 @@ interface WaitlistEntryRepository : JpaRepository<WaitlistEntry, Int> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select entry from WaitlistEntry entry where entry.lineItemId = :lineItemId")
     fun findByLineItemIdForUpdate(@Param("lineItemId") lineItemId: Int): WaitlistEntry?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        """
+        select entry from WaitlistEntry entry
+        where entry.status in :statuses
+          and entry.expectedFulfillmentDate is not null
+          and entry.expectedFulfillmentDate < :today
+          and (entry.overdueNotifiedDate is null or entry.overdueNotifiedDate < :today)
+        order by entry.expectedFulfillmentDate asc, entry.id asc
+        """,
+    )
+    fun findOverdueForNotificationForUpdate(
+        @Param("statuses") statuses: Collection<WaitlistStatus>,
+        @Param("today") today: LocalDate,
+    ): List<WaitlistEntry>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(

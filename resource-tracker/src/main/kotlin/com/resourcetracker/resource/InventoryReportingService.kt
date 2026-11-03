@@ -2,6 +2,7 @@ package com.resourcetracker.resource
 
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.request.entity.RequestStatus
+import com.resourcetracker.request.entity.WaitlistStatus
 import com.resourcetracker.request.repository.ExpectedReturnProjection
 import com.resourcetracker.request.repository.RequestLineItemRepository
 import com.resourcetracker.request.repository.StockIssueRepository
@@ -116,6 +117,54 @@ class InventoryReportingService(
                 reservedQuantity = availability.reservedQuantity(resource.id),
                 unavailableQuantity = resource.unavailableQuantity,
                 availableQuantity = availability.availableQuantity(resource),
+            )
+        }
+    }
+
+    @Transactional(readOnly = true)
+    fun stockBalanceReport(
+        caller: AuthenticatedUser,
+        departmentId: Int?,
+        pageable: Pageable,
+    ): Page<ResourceStockBalanceReport> {
+        val departmentScope = departmentScope(caller, departmentId)
+        val page = resources.findAll(
+            ResourceSpecifications.filter(
+                active = null,
+                type = ResourceType.INTERNAL,
+                category = null,
+                status = null,
+                departmentId = departmentScope,
+                keyword = null,
+            ),
+            pageable,
+        )
+        val resourceIds = page.content.map { it.id }
+        val reserved = availability.reservedQuantities(resourceIds)
+        val issued = if (resourceIds.isEmpty()) emptyMap() else {
+            issues.summarizeResources(resourceIds, LocalDate.now(clock)).associateBy { it.resourceId }
+        }
+        val waitlisted = if (resourceIds.isEmpty()) emptyMap() else {
+            lines.sumWaitingQuantityByResourceIds(
+                resourceIds,
+                setOf(WaitlistStatus.WAITING, WaitlistStatus.FULFILLABLE),
+            ).associate { it.resourceId to it.quantity }
+        }
+
+        return page.map { resource ->
+            val onHand = resource.quantity ?: 0
+            val reservedQuantity = reserved[resource.id] ?: 0
+            ResourceStockBalanceReport(
+                resourceId = resource.id,
+                code = resource.code,
+                name = resource.name,
+                departmentId = resource.department?.id,
+                onHandQuantity = onHand,
+                reservedQuantity = reservedQuantity,
+                issuedQuantity = issued[resource.id]?.outstandingQuantity ?: 0L,
+                unavailableQuantity = resource.unavailableQuantity,
+                waitlistedQuantity = waitlisted[resource.id] ?: 0L,
+                availableQuantity = availability.availableQuantity(resource, knownReservedQuantity = reservedQuantity),
             )
         }
     }

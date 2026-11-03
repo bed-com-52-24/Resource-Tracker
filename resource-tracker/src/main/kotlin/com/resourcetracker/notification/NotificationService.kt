@@ -84,6 +84,8 @@ class NotificationService(
             NotificationType.APPROVED -> "Request ${requestId ?: "unknown"} was approved."
             NotificationType.WAITLISTED -> "Request ${requestId ?: "unknown"} was added to the waitlist."
             NotificationType.WAITLIST_FULFILLABLE -> "Waitlisted items for request ${requestId ?: "unknown"} are ready for fulfilment."
+            NotificationType.BACKORDER_OVERDUE -> "The expected fulfillment date has passed for line ${payload["lineItemId"] ?: "unknown"} on request ${requestId ?: "unknown"}."
+            NotificationType.BACKORDER_DATE_UPDATED -> "The expected fulfillment date was updated for line ${payload["lineItemId"] ?: "unknown"} on request ${requestId ?: "unknown"}."
             NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."

@@ -45,12 +45,13 @@ class RequestCompletionService(
         val fulfilled = requestLines.all { line ->
             val lineId = requireNotNull(line.lineItemId)
             val approvedQuantity = (line.approvedQuantity ?: line.quantity).toLong()
+            val waivedQuantity = line.waivedQuantity.toLong()
             if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
                 procurementsByLine[lineId].orEmpty()
                     .filter { it.status == ProcurementStatus.ACCEPTED }
-                    .sumOf { (it.receivedQuantity ?: 0).toLong() } >= approvedQuantity
+                    .sumOf { (it.receivedQuantity ?: 0).toLong() } + waivedQuantity >= approvedQuantity
             } else {
-                (issuesByLine[lineId] ?: 0L) >= approvedQuantity
+                (issuesByLine[lineId] ?: 0L) + waivedQuantity >= approvedQuantity
             }
         }
         if (!fulfilled) return false
