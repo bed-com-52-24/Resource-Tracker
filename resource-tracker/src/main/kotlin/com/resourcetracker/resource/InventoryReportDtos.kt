@@ -36,6 +36,19 @@ data class ResourceAvailabilityReport(
     val availableQuantity: Int,
 )
 
+data class ResourceStockBalanceReport(
+    val resourceId: Int,
+    val code: String,
+    val name: String,
+    val departmentId: Int?,
+    val onHandQuantity: Int,
+    val reservedQuantity: Int,
+    val issuedQuantity: Long,
+    val unavailableQuantity: Int,
+    val waitlistedQuantity: Long,
+    val availableQuantity: Int,
+)
+
 data class ResourceWaitlistReport(
     val requestId: Int,
     val requestNumber: String,

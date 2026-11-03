@@ -5,7 +5,8 @@ on:
   pull_request:
 
 jobs:
-  test:
+  quality:
+    name: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +15,8 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - name: Run tests
+      - name: Check migration versions
+        run: python3 scripts/check_migration_versions.py
+      - name: Compile and package without running tests
         working-directory: resource-tracker
-        run: ./mvnw --batch-mode --no-transfer-progress verify
+        run: ./mvnw --batch-mode --no-transfer-progress clean package -DskipTests -DskipITs

@@ -6,6 +6,7 @@ import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.resource.ResourceRepository
+import com.resourcetracker.request.repository.ResourceRequestRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -23,8 +24,9 @@ class ProjectServiceTest {
     private val projects = mock(ProjectRepository::class.java)
     private val departments = mock(DepartmentRepository::class.java)
     private val resources = mock(ResourceRepository::class.java)
+    private val resourceRequests = mock(ResourceRequestRepository::class.java)
     private val audit = mock(AuditService::class.java)
-    private val service = ProjectService(projects, departments, resources, audit)
+    private val service = ProjectService(projects, departments, resources, resourceRequests, audit)
 
     private val deptId = 1
     private val dept = Department(id = deptId, name = "Engineering")

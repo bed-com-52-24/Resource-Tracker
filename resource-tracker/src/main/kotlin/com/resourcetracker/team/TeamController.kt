@@ -68,7 +68,7 @@ class TeamController(private val service: TeamService) {
     @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Add members to a team", description = "Admin only. Adds existing active users to the given team.")
     fun addMembers(@PathVariable id: Int, @Valid @RequestBody body: AddTeamMembersRequest): List<TeamMemberResponse> =
-        service.addMembers(id, body.userIds).map { user ->
+        service.addMembers(id, body.usernames).map { user ->
             TeamMemberResponse(
                 id = user.id,
                 username = user.username,
@@ -83,7 +83,7 @@ class TeamController(private val service: TeamService) {
     @PutMapping("/{id}/members/{userId}")
     @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Transfer a team member", description = "Admin only. Moves a member from one team to another and records a history row.")
-    fun transfer(@PathVariable id: Int, @PathVariable userId: Int, @Valid @RequestBody body: TransferTeamMemberRequest): TeamMemberResponse {
+    fun transfer(@PathVariable id: Int, @PathVariable userId: String, @Valid @RequestBody body: TransferTeamMemberRequest): TeamMemberResponse {
         val user = service.transfer(id, userId, body.toTeamId)
         return TeamMemberResponse(
             id = user.id,
@@ -99,7 +99,7 @@ class TeamController(private val service: TeamService) {
     @DeleteMapping("/{id}/members/{userId}")
     @RequiresRoles(Role.ADMIN)
     @Operation(summary = "Remove a member from a team", description = "Admin only. Removes a user from the team and records the removal event.")
-    fun removeMember(@PathVariable id: Int, @PathVariable userId: Int): TeamMemberResponse {
+    fun removeMember(@PathVariable id: Int, @PathVariable userId: String): TeamMemberResponse {
         val user = service.removeMember(id, userId)
         return TeamMemberResponse(
             id = user.id,

@@ -49,7 +49,7 @@ data class TeamResponse(
 )
 
 data class AddTeamMembersRequest(
-    val userIds: Set<Int>
+    val usernames: Set<String>
 )
 
 data class TransferTeamMemberRequest(

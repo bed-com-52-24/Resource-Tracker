@@ -263,7 +263,7 @@ if [[ "$ENVIRONMENT" == "development" ]]; then
     fi
 
     # Spring Boot runs Flyway with the application classpath, including the
-    # Kotlin-based V21 integer ID migration.
+    # Kotlin-based V22 integer ID migration.
     echo
     echo "Starting Spring Boot application and running Flyway migrations"
     echo

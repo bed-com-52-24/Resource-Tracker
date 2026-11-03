@@ -56,8 +56,8 @@ Run formatting and static analysis from the repository root:
 ./scripts/lint.sh
 ```
 
-The script uses pinned ktlint and detekt versions. Existing findings are recorded in baselines; new findings fail CI. After intentionally reviewing and accepting existing findings, regenerate the baselines with `./scripts/lint.sh --update-baseline`. Maven creates an HTML and XML JaCoCo report under `resource-tracker/target/site/jacoco` and enforces at least 70% line coverage across service classes.
+The script uses pinned ktlint and detekt versions. The current ktlint run reports many existing formatting findings despite the checked-in baseline, so lint is not currently a required pull request check. Review and repair the baseline before re-enabling it. Maven's full `verify` run creates JaCoCo reports and enforces at least 70% line coverage across service classes.
 
 ## Pull requests
 
-Open pull requests against `main`. CI runs ktlint, detekt, unit and MySQL integration tests, the coverage gate, and a Docker image build. The `quality` check must pass, and `main` requires one approving review before merge.
+Open pull requests against `main`. The required `quality` check validates migration versions and compiles/packages the application and test sources without executing tests. The full unit and MySQL integration suite runs on pushes to `main` and can also be started manually from GitHub Actions. `main` requires one approving review before merge.

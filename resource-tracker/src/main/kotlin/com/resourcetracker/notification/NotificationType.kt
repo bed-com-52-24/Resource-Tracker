@@ -6,6 +6,8 @@ enum class NotificationType {
     APPROVED,
     WAITLISTED,
     WAITLIST_FULFILLABLE,
+    BACKORDER_OVERDUE,
+    BACKORDER_DATE_UPDATED,
     REJECTED,
     PARTIALLY_APPROVED,
     RESUBMITTED,
@@ -14,4 +16,5 @@ enum class NotificationType {
     REASSIGNMENT_REQUIRED,
     REASSIGNED,
     CANCELLED,
+    COMPLETED,
 }

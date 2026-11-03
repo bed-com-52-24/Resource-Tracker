@@ -3,18 +3,24 @@ package com.resourcetracker.department
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
+import com.resourcetracker.budget.BudgetRepository
+import com.resourcetracker.common.UserReference
+import com.resourcetracker.project.ProjectRepository
+import com.resourcetracker.user.Role
+import com.resourcetracker.user.UserRepository
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
-import com.resourcetracker.project.ProjectRepository
 
 @Service
 class DepartmentService(
     private val departmentRepository: DepartmentRepository,
     private val projectRepository: ProjectRepository,
+    private val userRepository: UserRepository,
+    private val budgetRepository: BudgetRepository,
     private val audit: AuditService,
 ) {
 
@@ -124,6 +130,12 @@ class DepartmentService(
                 "Cannot deactivate '${department.name}': it is still used by active projects"
             )
         }
+        if (budgetRepository.existsByDepartmentIdAndActiveTrue(department.id!!)) {
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Cannot deactivate '${department.name}': active budgets still exist for this department"
+            )
+        }
     }
 
     private fun findOrThrow(id: Int): Department =
@@ -131,8 +143,18 @@ class DepartmentService(
             ResponseStatusException(HttpStatus.NOT_FOUND, "Department not found")
         }
 
-    private fun Department.toResponse() =
-        DepartmentResponse(id, name, description, status)
+    private fun Department.toResponse(): DepartmentResponse {
+        val managerUser = userRepository.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, id)
+            .firstOrNull()
+        val manager = managerUser?.let { UserReference(id = it.id, name = it.fullName ?: it.username) }
+        return DepartmentResponse(
+            id = id,
+            name = name,
+            description = description,
+            status = status,
+            manager = manager,
+        )
+    }
 
     private fun snapshot(department: Department) = mapOf(
         "name" to department.name,

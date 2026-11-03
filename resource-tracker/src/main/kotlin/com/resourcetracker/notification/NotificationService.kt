@@ -3,6 +3,7 @@ package com.resourcetracker.notification
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
@@ -83,6 +84,8 @@ class NotificationService(
             NotificationType.APPROVED -> "Request ${requestId ?: "unknown"} was approved."
             NotificationType.WAITLISTED -> "Request ${requestId ?: "unknown"} was added to the waitlist."
             NotificationType.WAITLIST_FULFILLABLE -> "Waitlisted items for request ${requestId ?: "unknown"} are ready for fulfilment."
+            NotificationType.BACKORDER_OVERDUE -> "The expected fulfillment date has passed for line ${payload["lineItemId"] ?: "unknown"} on request ${requestId ?: "unknown"}."
+            NotificationType.BACKORDER_DATE_UPDATED -> "The expected fulfillment date was updated for line ${payload["lineItemId"] ?: "unknown"} on request ${requestId ?: "unknown"}."
             NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
@@ -92,7 +95,31 @@ class NotificationService(
                 ?: "Request ${requestId ?: "unknown"} needs manager reassignment."
             NotificationType.REASSIGNED -> "Request ${requestId ?: "unknown"} has a new assigned manager."
             NotificationType.CANCELLED -> "Request ${requestId ?: "unknown"} was cancelled."
+            NotificationType.COMPLETED -> "Request ${requestId ?: "unknown"} has been fulfilled."
         }
+    }
+
+    fun streamForUser(userId: Int): SseEmitter {
+        val emitter = SseEmitter(0L)
+        Thread {
+            try {
+                var lastUnread = unreadCount(userId)
+                emitter.send(SseEmitter.event().name("unread-count").data(lastUnread))
+                while (true) {
+                    Thread.sleep(5000)
+                    val current = unreadCount(userId)
+                    if (current != lastUnread) {
+                        emitter.send(SseEmitter.event().name("unread-count").data(current))
+                        lastUnread = current
+                    }
+                }
+            } catch (_: Exception) {
+                emitter.complete()
+            }
+        }.start()
+        emitter.onCompletion { /* allow thread to exit via IOException */ }
+        emitter.onTimeout { emitter.complete() }
+        return emitter
     }
 
     private fun Notification.toResponse() = NotificationResponse(

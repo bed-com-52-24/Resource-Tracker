@@ -1,6 +1,7 @@
 package com.resourcetracker.resource
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
@@ -52,9 +53,9 @@ class InventoryReportController(private val reports: InventoryReportingService) 
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): Page<ResourceUtilisationReport> = reports.utilisation(
+    ): PagedResponse<ResourceUtilisationReport> = PagedResponse.from(reports.utilisation(
         caller, departmentId, category, status, pageable(page, size),
-    )
+    ))
 
     @GetMapping("/reports/availability")
     @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
@@ -72,8 +73,23 @@ class InventoryReportController(private val reports: InventoryReportingService) 
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): Page<ResourceAvailabilityReport> = reports.availabilityReport(
+    ): PagedResponse<ResourceAvailabilityReport> = PagedResponse.from(reports.availabilityReport(
         caller, departmentId, category, status, pageable(page, size),
+    ))
+
+    @GetMapping("/reports/stock-balance")
+    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+    @Operation(
+        summary = "Reconcile internal resource stock balances",
+        description = "Reports on-hand, reserved, currently issued, unavailable, unreserved waitlisted, and available quantities. Reserved stock is included in on-hand; issued stock is reported separately.",
+    )
+    fun stockBalance(
+        @RequestParam(required = false) @Min(1) departmentId: Int?,
+        @RequestParam(defaultValue = "0") @Min(0) page: Int,
+        @RequestParam(defaultValue = "20") @Min(1) size: Int,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): PagedResponse<ResourceStockBalanceReport> = PagedResponse.from(
+        reports.stockBalanceReport(caller, departmentId, pageable(page, size)),
     )
 
     @GetMapping("/reports/waitlist")
@@ -93,7 +109,7 @@ class InventoryReportController(private val reports: InventoryReportingService) 
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): Page<ResourceWaitlistReport> = reports.waitlist(caller, departmentId, pageable(page, size))
+    ): PagedResponse<ResourceWaitlistReport> = PagedResponse.from(reports.waitlist(caller, departmentId, pageable(page, size)))
 
     @PostMapping("/{id}/reconciliations")
     @RequiresRoles(Role.ADMIN)

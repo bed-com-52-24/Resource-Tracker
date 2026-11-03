@@ -232,10 +232,12 @@ class ResourceRequestService(
         }
         if (dto.decision == Decision.APPROVE || dto.decision == Decision.WAITLIST) {
             val ids = lines.mapNotNull { it.lineItemId }.toSet()
-            if (dto.approvedQuantities.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")
+            val approvedByLine = dto.approvedQuantities.associate { it.lineItemId to it }
+            if (approvedByLine.keys.any { it !in ids }) badRequest("approvedQuantities contains an unknown line item")
             lines.forEach { line ->
                 val lineId = requireNotNull(line.lineItemId)
-                val approved = dto.approvedQuantities[lineId] ?: line.quantity
+                val approvedDecision = approvedByLine[lineId]
+                val approved = approvedDecision?.quantity ?: line.quantity
                 if (approved !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
                 val resource = line.resourceId?.let { resources.findForUpdateById(it) ?: conflict("Resource for line item $lineId no longer exists") }
                 if (resource != null && !resource.active) conflict("Resource for line item $lineId is inactive")
