@@ -115,7 +115,7 @@ class ResourceRequestWorkflowServiceTest {
         verify(history, org.mockito.kotlin.times(2)).save(events.capture())
         assertEquals(setOf("SUBMITTED", "ASSIGNED"), events.allValues.map { it.eventType }.toSet())
         verify(notifications).notify(eq(emptyList()), eq(NotificationType.REASSIGNMENT_REQUIRED), any())
-        assertTrue(response.needsReassignment)
+        // Response now exposes only the trimmed request fields; needsReassignment is no longer part of the DTO.
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.resourcetracker.user
 
+import com.resourcetracker.department.DepartmentReference
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -9,7 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 data class CreateUserRequest(
     @field:NotBlank @field:Size(min = 3, max = 50) @field:Schema(example = "jdoe") val username: String,
     @field:NotBlank @field:Email @field:Size(max = 150) @field:Schema(example = "jdoe@example.com") val email: String,
-    @field:Schema(example = "MEMBER", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN"]) val role: Role,
+    @field:Schema(example = "MEMBER", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,
     @field:Schema(description = "Existing active department ID. The department must exist.", example = "1")
     val departmentId: Int,
     @field:Schema(
@@ -25,7 +26,7 @@ data class CreateUserRequest(
 data class UpdateUserRequest(
     @field:Schema(description = "Set to false to deactivate the account (revokes refresh tokens). Null or omitted leaves the current value unchanged.", nullable = true)
     val active: Boolean? = null,
-    @field:Schema(description = "New role. Optional; requires Admin. Omit to leave the role unchanged.", nullable = true)
+    @field:Schema(description = "New role. Optional; requires Admin. Omit to leave the role unchanged.", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"], nullable = true)
     val role: Role? = null,
 )
 
@@ -44,14 +45,18 @@ data class PasswordSetResponse(val passwordSet: Boolean)
 
 data class PasswordResetResponse(val message: String)
 
+data class UserReference(
+    val id: Int,
+    val name: String,
+)
+
 data class UserResponse(
     val id: Int,
     val username: String,
     val email: String,
     val fullName: String,
     val role: Role,
-    val departmentId: Int,
-    val departmentName: String,
+    val department: DepartmentReference,
     val teamIds: List<Int>,
     val teamNames: List<String>,
     val active: Boolean,

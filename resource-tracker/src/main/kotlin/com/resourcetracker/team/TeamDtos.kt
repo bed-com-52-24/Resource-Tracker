@@ -1,5 +1,7 @@
 package com.resourcetracker.team
 
+import com.resourcetracker.department.DepartmentReference
+import com.resourcetracker.user.UserReference
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -41,16 +43,14 @@ data class UpdateTeamRequest(
 data class TeamResponse(
     val id: Int,
     val name: String,
-    val departmentId: Int,
-    val departmentName: String,
-    val managerId: Int?,
-    val managerName: String?,
+    val department: DepartmentReference,
+    val manager: UserReference?,
     val projects: List<ProjectSummary>,
-    val isActive: Boolean
+    val isActive: Boolean,
 )
 
 data class AddTeamMembersRequest(
-    val userIds: Set<Int>
+    val usernames: Set<String>
 )
 
 data class TransferTeamMemberRequest(
@@ -70,10 +70,8 @@ data class TeamMemberResponse(
 fun Team.toResponse() = TeamResponse(
     id = id,
     name = name,
-    departmentId = department.id,
-    departmentName = department.name,
-    managerId = manager?.id,
-    managerName = manager?.let { it.fullName ?: it.username },
+    department = DepartmentReference(department.id, department.name),
+    manager = manager?.let { UserReference(it.id, it.fullName ?: it.username) },
     projects = projects.map { ProjectSummary(it.id, it.name, it.code) }.sortedBy { it.name },
     isActive = isActive
 )

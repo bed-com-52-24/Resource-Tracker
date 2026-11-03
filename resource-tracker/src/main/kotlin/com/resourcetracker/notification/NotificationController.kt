@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.http.MediaType
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 
 @RestController
 @Validated
@@ -72,15 +74,12 @@ class NotificationController(
         @Valid @RequestBody request: NotificationUpdateRequest,
     ) = service.updateReadState(caller.id, request)
 
-    @GetMapping("/unread-count")
-    @Operation(summary = "Get unread notification count", description = "Returns the number of unread notifications for the current user.")
-    @ApiResponses(
-        value = [
-            ApiResponse(responseCode = "200", description = "Unread count returned", content = [Content(schema = Schema(implementation = NotificationCountResponse::class))]),
-            ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
-        ],
-    )
-    fun unreadCount(@AuthenticationPrincipal caller: AuthenticatedUser) = NotificationCountResponse(service.unreadCount(caller.id))
+    // The general GET endpoint already supports status=READ or status=UNREAD filtering.
+
+    @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
+    @Operation(summary = "Stream unread notification counts", description = "Server-sent events stream for real-time notification visibility.")
+    fun stream(@AuthenticationPrincipal caller: AuthenticatedUser): SseEmitter =
+        service.streamForUser(caller.id)
 
     companion object {
         private val SORT_FIELDS = setOf("createdAt", "type", "status", "id")

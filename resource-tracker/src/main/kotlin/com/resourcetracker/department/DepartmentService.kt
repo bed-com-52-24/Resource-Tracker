@@ -10,11 +10,17 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import com.resourcetracker.project.ProjectRepository
+import com.resourcetracker.user.Role
+import com.resourcetracker.user.UserReference
+
+
+import com.resourcetracker.user.UserRepository
 
 @Service
 class DepartmentService(
     private val departmentRepository: DepartmentRepository,
     private val projectRepository: ProjectRepository,
+    private val userRepository: UserRepository,
     private val audit: AuditService,
 ) {
 
@@ -131,8 +137,18 @@ class DepartmentService(
             ResponseStatusException(HttpStatus.NOT_FOUND, "Department not found")
         }
 
-    private fun Department.toResponse() =
-        DepartmentResponse(id, name, description, status)
+    private fun Department.toResponse(): DepartmentResponse {
+        val managerUser = userRepository.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, id)
+            .firstOrNull()
+        val manager = managerUser?.let { UserReference(id = it.id, name = it.fullName ?: it.username) }
+        return DepartmentResponse(
+            id = id,
+            name = name,
+            description = description,
+            status = status,
+            manager = manager,
+        )
+    }
 
     private fun snapshot(department: Department) = mapOf(
         "name" to department.name,

@@ -30,7 +30,7 @@ class UserService(
     private val passwordTokenService: PasswordTokenService,
 ) {
     companion object {
-        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
+        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
 
         private val SORTABLE = setOf("username", "email", "fullName", "role", "department", "active")
         private const val MAX_PAGE_SIZE = 100
@@ -203,8 +203,7 @@ class UserService(
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName ?: username,
         role = role,
-        departmentId = department.id,
-        departmentName = department.name,
+        department = com.resourcetracker.department.DepartmentReference(department.id, department.name),
         teamIds = teams.map { it.id }.sorted(),
         teamNames = teams.map { it.name }.sorted(),
         active = active,

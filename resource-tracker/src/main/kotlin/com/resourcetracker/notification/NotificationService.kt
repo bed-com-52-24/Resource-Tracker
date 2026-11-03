@@ -3,6 +3,7 @@ package com.resourcetracker.notification
 import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
@@ -94,6 +95,29 @@ class NotificationService(
             NotificationType.CANCELLED -> "Request ${requestId ?: "unknown"} was cancelled."
             NotificationType.COMPLETED -> "Request ${requestId ?: "unknown"} has been fulfilled."
         }
+    }
+
+    fun streamForUser(userId: Int): SseEmitter {
+        val emitter = SseEmitter(0L)
+        Thread {
+            try {
+                var lastUnread = unreadCount(userId)
+                emitter.send(SseEmitter.event().name("unread-count").data(lastUnread))
+                while (true) {
+                    Thread.sleep(5000)
+                    val current = unreadCount(userId)
+                    if (current != lastUnread) {
+                        emitter.send(SseEmitter.event().name("unread-count").data(current))
+                        lastUnread = current
+                    }
+                }
+            } catch (_: Exception) {
+                emitter.complete()
+            }
+        }.start()
+        emitter.onCompletion { /* allow thread to exit via IOException */ }
+        emitter.onTimeout { emitter.complete() }
+        return emitter
     }
 
     private fun Notification.toResponse() = NotificationResponse(
