@@ -1,6 +1,7 @@
 package com.resourcetracker.team
 
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.common.TeamReference
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
@@ -25,8 +26,8 @@ import org.springframework.web.bind.annotation.*
 class TeamController(private val service: TeamService) {
 
     @GetMapping("/{id}/members")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "List team members", description = "Admin only. Returns a paginated list of team members with optional filters.")
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "List team members", description = "Team leads and members can view team members. Returns a paginated list with optional filters.")
     fun members(
         @PathVariable id: Int,
         @Parameter(description = "Search username, email, or full name", example = "jane")
@@ -41,8 +42,8 @@ class TeamController(private val service: TeamService) {
         @RequestParam(defaultValue = "asc") direction: String,
         @RequestParam(required = false) role: Role?,
         @RequestParam(required = false) active: Boolean?,
-    ): Page<TeamMemberResponse> =
-        service.members(
+    ): PagedResponse<TeamMemberResponse> =
+        PagedResponse.from(service.members(
             id,
             role,
             active,
@@ -62,10 +63,10 @@ class TeamController(private val service: TeamService) {
                 active = user.active,
                 teams = user.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
             )
-        }
+        })
 
     @PostMapping("/{id}/members")
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Add members to a team", description = "Admin only. Adds existing active users to the given team.")
     fun addMembers(@PathVariable id: Int, @Valid @RequestBody body: AddTeamMembersRequest): List<TeamMemberResponse> =
         service.addMembers(id, body.usernames).map { user ->
@@ -81,8 +82,8 @@ class TeamController(private val service: TeamService) {
         }
 
     @PutMapping("/{id}/members/{userId}")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Transfer a team member", description = "Admin only. Moves a member from one team to another and records a history row.")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Transfer a team member", description = "Department manager only. Moves a member from one team to another and records a history row.")
     fun transfer(@PathVariable id: Int, @PathVariable userId: String, @Valid @RequestBody body: TransferTeamMemberRequest): TeamMemberResponse {
         val user = service.transfer(id, userId, body.toTeamId)
         return TeamMemberResponse(
@@ -97,8 +98,8 @@ class TeamController(private val service: TeamService) {
     }
 
     @DeleteMapping("/{id}/members/{userId}")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Remove a member from a team", description = "Admin only. Removes a user from the team and records the removal event.")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Remove a member from a team", description = "Department manager only. Removes a user from the team and records the removal event.")
     fun removeMember(@PathVariable id: Int, @PathVariable userId: String): TeamMemberResponse {
         val user = service.removeMember(id, userId)
         return TeamMemberResponse(
@@ -113,7 +114,7 @@ class TeamController(private val service: TeamService) {
     }
 
     @GetMapping("/{id}/members/history")
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "List team member history", description = "Admin only. Returns the audit trail for a team.")
     fun history(@PathVariable id: Int): List<TeamMemberHistory> = service.history(id)
 
@@ -136,12 +137,12 @@ class TeamController(private val service: TeamService) {
         service.update(id, body)
 
     @GetMapping("/{id}")
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a team", description = "Any authenticated user.")
     fun get(@PathVariable id: Int): TeamResponse = service.get(id)
 
     @GetMapping
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(
         summary = "List teams",
         description = "Any authenticated user. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
@@ -165,15 +166,15 @@ class TeamController(private val service: TeamService) {
         @RequestParam(required = false) projectId: Int?,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive teams.", example = "true")
         @RequestParam(required = false) isActive: Boolean?,
-    ): Page<TeamResponse> =
-        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
+    ): PagedResponse<TeamResponse> =
+        PagedResponse.from(ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
             val order = pageable.sort.first()
             service.list(
                 departmentId, managerId, projectId, isActive, search,
                 pageable.pageNumber, pageable.pageSize,
                 listOf("${order.property}:${order.direction.name.lowercase()}"),
             )
-        }
+        })
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "isActive", "createdAt")

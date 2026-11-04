@@ -142,6 +142,15 @@ class WaitlistService(
     }
 
     /** Reduce a backordered (not yet reserved) quantity when part of it is waived/no longer required. */
+    @Transactional
+    fun updateExpectedFulfillmentDate(requestId: Int, lineItemId: Int, date: LocalDate, actorId: Int) {
+        val entry = waitlist.findByLineItemIdForUpdate(lineItemId)
+            ?: notFound("Waitlist entry not found")
+        if (entry.requestId != requestId) notFound("Waitlist entry not found")
+        entry.expectedFulfillmentDate = date
+        waitlist.save(entry)
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     fun reduceBackorderedQuantity(lineItemId: Int, quantity: Int) {
         if (quantity <= 0) return

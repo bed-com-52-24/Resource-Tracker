@@ -2,6 +2,7 @@ package com.resourcetracker.request.controller
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.request.entity.RequestStatus
@@ -63,14 +64,7 @@ class ResourceRequestController(
                                   "lineItems": [
                                     {
                                       "resourceId": 7,
-                                      "description": "",
-                                      "manufacturer": "N/A",
-                                      "unitPrice": 0,
-                                      "quantity": 4,
-                                      "category": "OTHER",
-                                      "batchNumber": null,
-                                      "unitOfMeasure": "unit",
-                                      "fulfillmentPreference": "INTERNAL"
+                                      "quantity": 4
                                     }
                                   ]
                                 }
@@ -161,7 +155,7 @@ class ResourceRequestController(
         @RequestParam(required = false) from: LocalDate?,
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.list(
+    ) = PagedResponse.from(service.list(
         serviceUser(caller), status, teamId, projectId, assignedManagerId,
         needsReassignment, from, to, search,
         ListQuery.pageable(
@@ -169,7 +163,7 @@ class ResourceRequestController(
             setOf("createdAt", "requestNumber", "status", "requiredDate", "totalAmount"),
             "createdAt",
         ),
-    )
+    ))
 
     @GetMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
@@ -187,6 +181,34 @@ class ResourceRequestController(
     ])
     fun history(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.history(id, serviceUser(caller))
+
+    @PutMapping("/api/v1/requests/{id}/line-items/{lineItemId}/approved-quantity")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Adjust an approved quantity")
+    fun adjustApprovedQuantity(
+        @PathVariable @Min(1) id: Int,
+        @PathVariable @Min(1) lineItemId: Int,
+        @Valid @RequestBody dto: ApprovedQuantityUpdateRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.adjustApprovedQuantity(id, lineItemId, serviceUser(caller), dto)
+
+    @PutMapping("/api/v1/requests/{id}/line-items/{lineItemId}/waive-balance")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    fun waiveLineBalance(
+        @PathVariable @Min(1) id: Int,
+        @PathVariable @Min(1) lineItemId: Int,
+        @Valid @RequestBody dto: WaiveLineBalanceRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.waiveLineBalance(id, lineItemId, serviceUser(caller), dto)
+
+    @PutMapping("/api/v1/requests/{id}/line-items/{lineItemId}/expected-fulfillment")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    fun updateExpectedFulfillmentDate(
+        @PathVariable @Min(1) id: Int,
+        @PathVariable @Min(1) lineItemId: Int,
+        @Valid @RequestBody dto: UpdateExpectedFulfillmentDateRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = service.updateExpectedFulfillmentDate(id, lineItemId, serviceUser(caller), dto)
 
     @PutMapping("/api/v1/requests/{id}/manager")
     @RequiresRoles(Role.ADMIN)
