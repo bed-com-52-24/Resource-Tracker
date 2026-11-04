@@ -9,8 +9,8 @@ import java.time.LocalDate
 import java.util.Optional
 
 interface BudgetRepository : JpaRepository<Budget, Long> {
+    fun findAllByDepartment_Id(departmentId: Int): List<Budget>
     fun existsByDepartmentIdAndActiveTrue(departmentId: Int): Boolean
-
     @Query(
         "select b from Budget b where b.department.id = :departmentId and b.active = true and b.periodStart <= :date and b.periodEnd >= :date",
     )

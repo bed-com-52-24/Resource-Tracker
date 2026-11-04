@@ -16,8 +16,8 @@ enum class BudgetCommitmentStatus { ACTIVE, RELEASED }
         UniqueConstraint(name = "uk_budget_department_period", columnNames = ["department_id", "period_type", "period_start", "period_end"]),
     ],
     indexes = [
-        Index(name = "idx_budget_department", columnNames = ["department_id"]),
-        Index(name = "idx_budget_period", columnNames = ["period_start", "period_end"]),
+        Index(name = "idx_budget_department", columnList = "department_id"),
+        Index(name = "idx_budget_period", columnList = "period_start, period_end"),
     ],
 )
 class Budget(
@@ -63,7 +63,7 @@ class Budget(
 @Entity
 @Table(
     name = "budget_commitment",
-    indexes = [Index(name = "idx_budget_commitment_budget", columnNames = ["budget_id"])],
+    indexes = [Index(name = "idx_budget_commitment_budget", columnList = "budget_id")],
 )
 class BudgetCommitment(
     @Id

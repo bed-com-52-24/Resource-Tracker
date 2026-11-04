@@ -55,6 +55,7 @@ class ResourceRequestService(
     private val waitlistService: WaitlistService,
     private val externalApprovalHandler: ExternalApprovalHandler,
     private val clock: Clock,
+    private val budget: BudgetPort? = null,
 ) {
     @Transactional(readOnly = true)
     fun loadUser(id: Int): User = user(id)
@@ -321,6 +322,16 @@ class ResourceRequestService(
             val waitlistedResourceIds = waitlistService.cancelForRequest(requestId)
             val releasedResourceIds = reservations.releaseAllFor(requestId, caller.id, comment)
             (waitlistedResourceIds + releasedResourceIds).distinct().sorted().forEach(waitlistService::onStockReturned)
+            if (request.status == RequestStatus.APPROVED || request.status == RequestStatus.WAITLISTED) {
+                val externalCost = lineItemRepository.findAllByRequestId(requestId)
+                    .filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
+                    .fold(BigDecimal.ZERO) { sum, line ->
+                        sum + line.unitPrice.multiply(BigDecimal.valueOf((line.approvedQuantity ?: line.quantity).toLong()))
+                    }
+                if (externalCost > BigDecimal.ZERO) {
+                    budget?.release(request.departmentId, request.requiredDate ?: LocalDate.now(clock), externalCost)
+                }
+            }
             request.cancelledBy = caller.id
             request.cancelledAt = LocalDateTime.now(clock)
             request.cancelReason = comment

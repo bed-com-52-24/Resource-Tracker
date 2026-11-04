@@ -6,6 +6,7 @@ import com.resourcetracker.auth.RefreshTokenRepository
 import com.resourcetracker.auth.PasswordTokenPurpose
 import com.resourcetracker.auth.PasswordTokenRepository
 import com.resourcetracker.auth.PasswordTokenService
+import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.common.DuplicateResourceException
@@ -20,7 +21,6 @@ import org.springframework.data.domain.Pageable
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-
 @Service
 class UserService(
     private val users: UserRepository,
@@ -32,7 +32,7 @@ class UserService(
     private val passwordTokenService: PasswordTokenService,
 ) {
     companion object {
-        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
+        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
 
         private val SORTABLE = setOf("username", "email", "fullName", "role", "department", "active")
         private const val MAX_PAGE_SIZE = 100
@@ -55,15 +55,25 @@ class UserService(
         if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
             throw BusinessRuleException("${request.role} users must be assigned to at least one team")
         }
+        if (request.role != Role.MANAGING_DIRECTOR && request.departmentId == null) {
+            throw BusinessRuleException("${request.role} users require a department")
+        }
+        if (request.role == Role.MANAGING_DIRECTOR && request.teamIds?.isNotEmpty() == true) {
+            throw BusinessRuleException("Managing directors are not assigned to teams")
+        }
 
         val userTeams = activeTeams(request.teamIds ?: emptySet())
+        val department = if (request.role == Role.MANAGING_DIRECTOR)
+            managingDirectorDepartment()
+        else
+            activeDepartment(requireNotNull(request.departmentId))
         val user = User(
             username = username,
             email = email,
             fullName = null,
             passwordHash = null,
             role = request.role,
-            department = activeDepartment(request.departmentId),
+            department = department,
             teams = userTeams,
         )
         requireMemberHasTeam(user)
@@ -227,6 +237,10 @@ class UserService(
     private fun activeDepartment(id: Int) =
         departments.findById(id).orElseThrow { ResourceNotFoundException("Department $id not found") }
             .also { if (it.status != "ACTIVE") throw BusinessRuleException("Department $id is inactive") }
+
+    private fun managingDirectorDepartment(): Department =
+        departments.findByNameIgnoreCase("All Departments")
+            ?: departments.save(Department(name = "All Departments", description = "Cross-department oversight", status = "ACTIVE"))
 
     private fun activeTeams(ids: Set<Int>) =
         ids.map { teams.findById(it).orElseThrow { ResourceNotFoundException("Team $it not found") } }

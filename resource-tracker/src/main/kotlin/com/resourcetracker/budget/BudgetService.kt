@@ -5,7 +5,8 @@ import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.department.Department
 import com.resourcetracker.request.entity.ResourceRequest
-import jakarta.transaction.Transactional
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.Optional
@@ -24,6 +25,7 @@ data class UpdateBudgetRequest(
     val active: Boolean? = null,
 )
 
+@Service
 class BudgetService(
     private val budgetRepository: BudgetRepository,
     private val commitmentRepository: BudgetCommitmentRepository,

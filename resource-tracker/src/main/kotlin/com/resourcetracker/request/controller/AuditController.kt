@@ -34,7 +34,7 @@ class AuditController(
     private val auditEntries: com.resourcetracker.audit.AuditEntryQueryService,
 ) {
     @GetMapping("/actors/{actorId}")
-    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.ADMIN)
+    @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "Retrieve audit history by actor",
         description = "Managing Director and Admin only. Defaults to the last 30 days; date ranges may not exceed one year.",
@@ -81,7 +81,7 @@ class AuditController(
     ) = audit.byItem(itemType, itemId, caller.role)
 
     @GetMapping("/actions")
-    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.ADMIN)
+    @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "Retrieve audit history by action and date range",
         description = "Managing Director and Admin only. Filter by one or more event types and inclusive from/to dates. The range may not exceed one year.",
@@ -104,7 +104,7 @@ class AuditController(
     ) = audit.byActions(actions, caller.role, from, to, pageable(page, size))
 
     @GetMapping("/entries")
-    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "List general audit entries",
         description = "Admin and Managing Director only. Filter by actor, action, item, and an inclusive ISO-8601 timestamp range.",
