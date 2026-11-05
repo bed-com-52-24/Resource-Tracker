@@ -41,6 +41,7 @@ interface ActiveReservationTotal {
 }
 
 interface StockIssueRepository : JpaRepository<StockIssue, Int> {
+    fun findAllByResourceId(resourceId: Int): List<StockIssue>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from StockIssue i where i.id = :id")
     fun findForUpdateById(@Param("id") id: Int): StockIssue?

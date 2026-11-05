@@ -310,6 +310,59 @@ class ResourceRequestService(
     }
 
     @Transactional
+    fun updateRequest(requestId: Int, caller: User, dto: UpdateRequestDto): ResourceRequestResponseDto {
+        return when (caller.role) {
+            Role.TEAM_LEAD -> {
+                if (dto.commentApproval != null || dto.approvedQuantities.isNotEmpty()) forbidden("Team leads cannot edit manager decision fields")
+                val status = when (dto.status) {
+                    null, RequestStatus.PENDING -> RequesterUpdateStatus.PENDING
+                    RequestStatus.CANCELLED -> RequesterUpdateStatus.CANCELLED
+                    else -> badRequest("Team leads may only set status to PENDING or CANCELLED")
+                }
+                updateRequest(requestId, caller, UpdateResourceRequestDto(status, dto.comment, dto.lineItems))
+            }
+            Role.DEPARTMENT_MANAGER -> {
+                if (dto.comment != null || dto.lineItems != null) forbidden("Department managers cannot edit team lead request fields")
+                val current = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
+                if (current.status in setOf(RequestStatus.APPROVED, RequestStatus.WAITLISTED) && dto.status == current.status) {
+                    val hasQuantityChanges = dto.approvedQuantities.any { it.quantity > 0 }
+                    val reason = dto.commentApproval?.trim()?.takeIf(String::isNotEmpty)
+                    if (hasQuantityChanges && reason == null) badRequest("A commentApproval reason is required when adjusting quantities")
+                    var result = current.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
+                    dto.approvedQuantities.forEach { quantity ->
+                        if (current.status == RequestStatus.APPROVED) {
+                            result = adjustApprovedQuantity(requestId, quantity.lineItemId, caller,
+                                ApprovedQuantityUpdateRequest(quantity.quantity, requireNotNull(reason)))
+                        } else {
+                            result = waiveLineBalance(requestId, quantity.lineItemId, caller,
+                                WaiveLineBalanceRequest(quantity.quantity, requireNotNull(reason)))
+                        }
+                        quantity.expectedFulfillmentDate?.let { date ->
+                            result = updateExpectedFulfillmentDate(requestId, quantity.lineItemId, caller,
+                                UpdateExpectedFulfillmentDateRequest(date))
+                        }
+                    }
+                    if (dto.approvedQuantities.isEmpty()) {
+                        badRequest("Provide an approved quantity, waived quantity, or expected fulfillment date")
+                    }
+                    result
+                } else {
+                val decision = when (dto.status) {
+                    RequestStatus.QUERIED -> Decision.QUERY
+                    RequestStatus.APPROVED -> Decision.APPROVE
+                    RequestStatus.REJECTED -> Decision.REJECT
+                    RequestStatus.WAITLISTED -> Decision.WAITLIST
+                    null -> badRequest("A manager decision status is required")
+                    else -> badRequest("Invalid manager decision status")
+                }
+                decide(requestId, caller, RequestDecisionDto(decision, dto.commentApproval, dto.approvedQuantities))
+                }
+            }
+            else -> forbidden()
+        }
+    }
+
+    @Transactional
     fun updateRequest(requestId: Int, caller: User, dto: UpdateResourceRequestDto): ResourceRequestResponseDto {
         val request = requestRepository.findForUpdateById(requestId)?.takeIf { it.requesterId == caller.id }
             ?: throw ResourceNotFoundException("Request not found")
@@ -322,6 +375,9 @@ class ResourceRequestService(
         if (action == RequestAction.CLARIFY && dto.lineItems != null) {
             if (request.status != RequestStatus.QUERIED) conflict("Line items may only be edited while queried")
             val normalized = normalizeLines(dto.lineItems, request.vendorId)
+            if (normalized.any { it.preference == FulfillmentPreference.EXTERNAL }) {
+                conflict("External request lines cannot be edited during clarification")
+            }
             val total = normalized.fold(BigDecimal.ZERO) { sum, line -> sum + line.unitPrice.multiply(BigDecimal.valueOf(line.dto.quantity.toLong())) }
             val first = normalized.first()
             request.itemDescription = first.description
