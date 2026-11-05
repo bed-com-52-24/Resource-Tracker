@@ -151,27 +151,40 @@ class WaitlistService(
         waitlist.save(entry)
     }
 
+    /** Reduce waived demand and release any matching reservation made from this waitlist entry. */
     @Transactional(propagation = Propagation.MANDATORY)
-    fun reduceBackorderedQuantity(lineItemId: Int, quantity: Int) {
-        if (quantity <= 0) return
-        val entry = waitlist.findByLineItemIdForUpdate(lineItemId) ?: return
-        if (entry.status == WaitlistStatus.FULFILLED || entry.status == WaitlistStatus.CANCELLED) return
+    fun reduceBackorderedQuantity(lineItemId: Int, quantity: Int, actorId: Int, reason: String): Int? {
+        if (quantity <= 0) return null
+        val snapshot = waitlist.findByLineItemId(lineItemId) ?: return null
+        if (snapshot.status == WaitlistStatus.FULFILLED || snapshot.status == WaitlistStatus.CANCELLED || snapshot.status == WaitlistStatus.WAIVED) return null
+        resources.findForUpdateById(snapshot.resourceId) ?: notFound("Resource not found")
+        val entry = waitlist.findByLineItemIdForUpdate(lineItemId) ?: return null
+        if (entry.status == WaitlistStatus.FULFILLED || entry.status == WaitlistStatus.CANCELLED || entry.status == WaitlistStatus.WAIVED) return null
         val outstanding = (entry.quantity - entry.issuedQuantity).coerceAtLeast(0)
         val reduction = minOf(quantity, outstanding)
-        if (reduction == 0) return
+        if (reduction == 0) return null
         val unreserved = (entry.quantity - entry.reservedQuantity).coerceAtLeast(0)
-        val fromReserved = (reduction - unreserved).coerceAtLeast(0)
+        val fromReserved = minOf(
+            (reduction - unreserved).coerceAtLeast(0),
+            (entry.reservedQuantity - entry.issuedQuantity).coerceAtLeast(0),
+        )
+        val released = reservationService.releaseForWaitlistEntry(entry.id, fromReserved, actorId, reason)
+        val actualReduction = minOf(reduction, unreserved + released)
+        if (actualReduction <= 0) return null
         val releasableReserved = (entry.reservedQuantity - entry.issuedQuantity).coerceAtLeast(0)
-        entry.quantity -= reduction
-        entry.reservedQuantity -= minOf(fromReserved, releasableReserved)
+        val fromStatus = entry.status
+        entry.quantity -= actualReduction
+        entry.reservedQuantity -= minOf(released, releasableReserved)
         if (entry.issuedQuantity >= entry.quantity) {
-            entry.status = WaitlistStatus.FULFILLED
+            entry.status = if (entry.quantity == 0) WaitlistStatus.WAIVED else WaitlistStatus.FULFILLED
         } else if (entry.reservedQuantity <= entry.issuedQuantity) {
             entry.status = WaitlistStatus.WAITING
         } else {
             entry.status = WaitlistStatus.FULFILLABLE
         }
         waitlist.save(entry)
+        history.save(RequestHistory(requestId = entry.requestId, eventType = "BACKORDER_REDUCED", fromStatus = fromStatus.name, toStatus = entry.status.name, actorId = actorId, lineItemId = lineItemId, quantity = actualReduction, comment = reason))
+        return entry.resourceId.takeIf { released > 0 }
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

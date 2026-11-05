@@ -404,7 +404,11 @@ class ResourceRequestService(
         }
         line.approvedQuantity = dto.quantity
         lineItemRepository.save(line)
-        if (dto.quantity < previous) reservations.releaseExcessForLine(requestId, lineItemId, dto.quantity, caller.id, dto.reason)
+        if (dto.quantity < previous) {
+            reservations.releaseExcessForLine(requestId, lineItemId, dto.quantity, line.waivedQuantity, caller.id, dto.reason)
+                .sorted()
+                .forEach(waitlistService::onStockReturned)
+        }
         historyRepository.save(RequestHistory(requestId = requestId, eventType = "QUANTITY_ADJUSTED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineItemId, quantity = dto.quantity, comment = "Approved quantity changed from $previous to ${dto.quantity}. ${dto.reason}"))
         return request.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
     }
@@ -425,6 +429,17 @@ class ResourceRequestService(
         if (dto.quantity > outstanding) badRequest("Waived quantity exceeds the outstanding balance of $outstanding")
         line.waivedQuantity += dto.quantity
         lineItemRepository.save(line)
+        val backorderResource = if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name) {
+            waitlistService.reduceBackorderedQuantity(lineItemId, dto.quantity, caller.id, dto.reason.trim())
+        } else {
+            null
+        }
+        val releasedResources = if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name) {
+            reservations.releaseExcessForLine(requestId, lineItemId, approved, line.waivedQuantity, caller.id, dto.reason.trim())
+        } else {
+            emptySet()
+        }
+        (releasedResources + listOfNotNull(backorderResource)).distinct().sorted().forEach(waitlistService::onStockReturned)
         historyRepository.save(RequestHistory(requestId = requestId, eventType = "BALANCE_WAIVED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineItemId, quantity = dto.quantity, comment = dto.reason))
         requestCompletionService?.completeIfFulfilled(requestId, caller.id)
         return request.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)

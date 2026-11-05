@@ -2,9 +2,12 @@ package com.resourcetracker.request.controller
 
 import com.resourcetracker.request.service.BudgetReviewService
 import com.resourcetracker.security.AuthenticatedUser
+import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/v1/requests")
 @Tag(name = "Resource Requests", description = "Submit and manage resource requests")
+@SecurityRequirement(name = "bearerAuth")
 class BudgetReviewController(
     private val reviewService: BudgetReviewService,
 ) {
@@ -29,6 +33,7 @@ class BudgetReviewController(
         ApiResponse(responseCode = "409", description = "Department has no budget set up"),
     )
     @GetMapping("/{id}/budget")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
     fun budget(
         @PathVariable id: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,

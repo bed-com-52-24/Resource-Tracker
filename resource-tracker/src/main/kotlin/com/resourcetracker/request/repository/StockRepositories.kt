@@ -25,6 +25,9 @@ interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     fun findAllByRequestIdAndLineItemIdAndStatus(requestId: Int, lineItemId: Int, status: ReservationStatus): List<StockReservation>
     fun findAllByLineItemIdAndStatus(lineItemId: Int, status: ReservationStatus): List<StockReservation>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from StockReservation r where r.waitlistEntryId = :entryId and r.status = :status order by r.id asc")
+    fun findByWaitlistEntryIdAndStatusForUpdate(@Param("entryId") entryId: Int, @Param("status") status: ReservationStatus): List<StockReservation>
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from StockReservation r where r.resourceId = :resourceId and r.status = :status")
     fun findByResourceIdAndStatusForUpdate(@Param("resourceId") resourceId: Int, @Param("status") status: ReservationStatus): List<StockReservation>
     @Lock(LockModeType.PESSIMISTIC_WRITE)

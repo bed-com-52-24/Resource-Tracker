@@ -90,6 +90,7 @@ class StockOperationsService(
         if (dto.quantity > approved - issuedSoFar) conflict("Issue exceeds approved quantity remaining")
         val activeReservations = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, dto.lineItemId, ReservationStatus.ACTIVE)
         val reserved = activeReservations.sumOf { it.quantity }
+        var waitlistReservedToIssue = 0
         if (reserved > 0) {
             if (dto.quantity > reserved) conflict("Issue exceeds reserved quantity")
             var toConsume = dto.quantity
@@ -97,6 +98,7 @@ class StockOperationsService(
                 if (toConsume > 0) {
                     val consumed = minOf(toConsume, reservation.quantity)
                     toConsume -= consumed
+                    if (reservation.waitlistEntryId != null) waitlistReservedToIssue += consumed
                     if (consumed == reservation.quantity) {
                         reservation.status = ReservationStatus.CONSUMED
                         reservation.closedAt = LocalDateTime.now(clock)
@@ -115,7 +117,7 @@ class StockOperationsService(
         val durationDays = line.approvedDurationDays ?: conflict("The assigned manager must approve a return duration before stock can be issued")
         val expectedReturnDate = LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))).plusDays(durationDays.toLong())
         val issue = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id, expectedReturnDate = expectedReturnDate))
-        waitlistService.recordIssued(dto.lineItemId, dto.quantity, actor.id)
+        if (waitlistReservedToIssue > 0) waitlistService.recordIssued(dto.lineItemId, waitlistReservedToIssue, actor.id)
         movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
         history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
         requestCompletion.completeIfFulfilled(requestId, actor.id)
