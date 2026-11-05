@@ -78,15 +78,24 @@ class ReservationService(
     }
 
     @Transactional
-    fun reserveApprovedInternalLines(requestId: Int, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
+    fun reserveApprovedInternalLines(requestId: Int, lineItems: List<ResourceRequestLineItem>, actorId: Int): List<Pair<Int, Int>> {
+        val backorders = mutableListOf<Pair<Int, Int>>()
         lineItems
             .filter { it.fulfillmentPreference == FulfillmentPreference.INTERNAL.name && it.resourceId != null }
             .sortedBy { it.resourceId }
             .forEach { line ->
                 val lineId = requireNotNull(line.lineItemId)
                 val approvedQuantity = line.approvedQuantity ?: line.quantity
-                reserve(requestId, actorId, CreateReservationRequest(lineId, approvedQuantity))
+                val resource = resources.findForUpdateById(line.resourceId!!) ?: notFound("Resource not found")
+                val available = availability.availableQuantity(resource, lockReservations = true)
+                val reserveQuantity = minOf(approvedQuantity, available)
+                if (reserveQuantity > 0) {
+                    reserve(requestId, actorId, CreateReservationRequest(lineId, reserveQuantity))
+                }
+                val shortfall = approvedQuantity - reserveQuantity
+                if (shortfall > 0) backorders.add(lineId to shortfall)
             }
+        return backorders
     }
 
     @Transactional
@@ -126,14 +135,22 @@ class ReservationService(
     }
 
     @Transactional
-    fun releaseExcessForLine(requestId: Int, lineItemId: Int, approvedQuantity: Int, actorId: Int, reason: String) {
+    fun releaseExcessForLine(requestId: Int, lineItemId: Int, approvedQuantity: Int, waivedQuantity: Int, actorId: Int, reason: String): Set<Int> {
+        val resourceIds = reservations.findAllByRequestIdAndLineItemIdAndStatus(
+            requestId,
+            lineItemId,
+            ReservationStatus.ACTIVE,
+        ).map { it.resourceId }.distinct().sorted()
+        resourceIds.forEach { resources.findForUpdateById(it) ?: notFound("Resource not found") }
         val active = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, lineItemId, ReservationStatus.ACTIVE)
         val issued = issues.findByRequestIdAndLineItemIdForUpdate(requestId, lineItemId).sumOf { it.quantity }
-        var excess = (active.sumOf { it.quantity } - (approvedQuantity - issued)).coerceAtLeast(0)
-        active.asReversed().forEach { reservation ->
+        var excess = (active.sumOf { it.quantity } - (approvedQuantity - issued - waivedQuantity)).coerceAtLeast(0)
+        val releasedResourceIds = mutableSetOf<Int>()
+        active.sortedBy { it.waitlistEntryId == null }.asReversed().forEach { reservation ->
             if (excess > 0) {
                 val released = minOf(excess, reservation.quantity)
                 excess -= released
+                releasedResourceIds += reservation.resourceId
                 if (released == reservation.quantity) {
                     reservation.status = ReservationStatus.RELEASED
                     reservation.closedAt = LocalDateTime.now(clock)
@@ -143,6 +160,31 @@ class ReservationService(
                 history.save(RequestHistory(requestId = requestId, eventType = "RELEASED", actorId = actorId, lineItemId = lineItemId, quantity = released, comment = reason))
             }
         }
+        return releasedResourceIds
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun releaseForWaitlistEntry(entryId: Int, quantity: Int, actorId: Int, reason: String): Int {
+        if (quantity <= 0) return 0
+        var remaining = quantity
+        var releasedTotal = 0
+        reservations.findByWaitlistEntryIdAndStatusForUpdate(entryId, ReservationStatus.ACTIVE).forEach { reservation ->
+            if (remaining > 0) {
+                val released = minOf(remaining, reservation.quantity)
+                remaining -= released
+                releasedTotal += released
+                if (released == reservation.quantity) {
+                    reservation.status = ReservationStatus.RELEASED
+                    reservation.closedAt = LocalDateTime.now(clock)
+                    reservation.closeReason = reason
+                } else {
+                    reservation.quantity -= released
+                }
+                reservations.save(reservation)
+                history.save(RequestHistory(requestId = reservation.requestId, eventType = "RELEASED", actorId = actorId, lineItemId = reservation.lineItemId, quantity = released, comment = reason))
+            }
+        }
+        return releasedTotal
     }
 
     private fun forbidden(): Nothing = throw ResponseStatusException(HttpStatus.FORBIDDEN, "Only the assigned manager may reserve stock")

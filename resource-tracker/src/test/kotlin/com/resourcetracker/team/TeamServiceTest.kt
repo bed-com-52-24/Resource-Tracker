@@ -97,7 +97,10 @@ class TeamServiceTest {
         val response = service.create(request())
 
         assertEquals("Alpha", response.name)
+        assertEquals("Engineering", response.department.name)
         assertEquals(7, response.manager?.id)
+        assertEquals("Manager One", response.manager?.name)
+        assertTrue(response.projects.isEmpty())
         assertEquals(true, response.isActive)
         val auditRecord = argumentCaptor<AuditRecord>()
         verify(audit).record(auditRecord.capture())

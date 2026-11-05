@@ -42,6 +42,27 @@ class StockIssue(
     @Column(name = "returned_quantity", nullable = false) var returnedQuantity: Int = 0,
     @Column(name = "issued_by", nullable = false) var issuedBy: Int,
     @Column(name = "issued_at", nullable = false, insertable = false, updatable = false) var issuedAt: LocalDateTime? = null,
+    @Column(name = "expected_return_date") var expectedReturnDate: LocalDate? = null,
+    @Column(name = "reminder_7_days_sent", nullable = false) var reminder7DaysSent: Boolean = false,
+    @Column(name = "reminder_2_days_sent", nullable = false) var reminder2DaysSent: Boolean = false,
+    @Column(name = "reminder_due_day_sent", nullable = false) var reminderDueDaySent: Boolean = false,
+)
+
+enum class ReturnExtensionStatus { PENDING, APPROVED, REJECTED }
+
+@Entity
+@Table(name = "stock_return_extensions")
+class StockReturnExtension(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "extension_id") var id: Int = 0,
+    @Column(name = "issue_id", nullable = false) var issueId: Int,
+    @Column(name = "requested_by", nullable = false) var requestedBy: Int,
+    @Column(name = "requested_return_date", nullable = false) var requestedReturnDate: LocalDate,
+    @Column(nullable = false, length = 1000) var reason: String,
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 10) var status: ReturnExtensionStatus = ReturnExtensionStatus.PENDING,
+    @Column(name = "decided_by") var decidedBy: Int? = null,
+    @Column(name = "decided_at") var decidedAt: LocalDateTime? = null,
+    @Column(name = "decision_comment", length = 1000) var decisionComment: String? = null,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
 )
 
 @Entity

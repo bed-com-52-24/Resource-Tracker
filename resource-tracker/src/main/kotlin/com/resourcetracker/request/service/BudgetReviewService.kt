@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.math.BigDecimal
-
+import java.time.LocalDate
 data class BudgetReview(
     val departmentId: Int,
     val budget: BigDecimal,
@@ -35,10 +35,14 @@ class BudgetReviewService(
 
         val cost = lineRepository.findAllByRequestId(requestId)
             .filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
-            .fold(BigDecimal.ZERO) { sum, line -> sum + budget.lineCost(requireNotNull(line.lineItemId)) }
+            .fold(BigDecimal.ZERO) { sum, line ->
+                sum + (line.unitPrice.multiply(BigDecimal.valueOf((line.approvedQuantity ?: line.quantity).toLong())))
+            }
+
         val departmentId = budget.departmentOfRequest(requestId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found")
-        val status = budget.status(departmentId)
+        val date = request.requiredDate ?: LocalDate.now()
+        val status = budget.status(departmentId, date)
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Department $departmentId has no budget set up")
 
         return BudgetReview(departmentId, status.budget, status.committed, status.remaining, cost, cost > status.remaining)

@@ -1,6 +1,6 @@
 package com.resourcetracker.project
 
-import com.resourcetracker.department.DepartmentReference
+import com.resourcetracker.common.DepartmentReference
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -54,12 +54,6 @@ data class UpdateProjectRequest(
     val active: Boolean? = null,
 )
 
-data class ProjectReference(
-    val id: Int,
-    val name: String,
-    val code: String,
-)
-
 data class ProjectResponse(
     val id: Int,
     val name: String,
@@ -74,7 +68,7 @@ fun Project.toResponse() = ProjectResponse(
     id = id,
     name = name,
     code = code,
-    department = DepartmentReference(department.id!!, department.name),
+    department = DepartmentReference(requireNotNull(department.id), department.name),
     startDate = startDate,
     endDate = endDate,
     active = active

@@ -7,12 +7,10 @@ import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.request.service.AvailabilityService
 import com.resourcetracker.request.service.CreateReservationRequest
-import com.resourcetracker.request.service.CreateReturnRequest
 import com.resourcetracker.request.service.ReservationService
 import com.resourcetracker.request.service.StockCorrectionRequest
 import com.resourcetracker.request.service.StockIssueRequest
 import com.resourcetracker.request.service.StockOperationsService
-import com.resourcetracker.request.service.VerifyReturnRequest
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
@@ -151,6 +149,21 @@ class ResourceController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ): ResourceResponse = resources.get(id, departmentScope(caller))
 
+    @GetMapping("/{id}/movement-history")
+    @Operation(
+        summary = "Get a resource's issue and return movement history",
+        description = "Returns chronological stock movements for a resource, including the team and request for issues, submitted/verified returns, return condition and dates, and current issued/returned/outstanding quantities. For each issue, fulfillmentStatus indicates whether the line is partially issued, issued, partially returned, or returned. Team leads and department managers may view resources in their department; managing directors may view all resources.",
+    )
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Movement history returned"),
+        ApiResponse(responseCode = "403", description = "The caller cannot view movement history for this resource"),
+        ApiResponse(responseCode = "404", description = "Resource not found"),
+    ])
+    fun movementHistory(
+        @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.resourceMovementHistory(id, caller.id)
+
     @PostMapping("/{id}/corrections")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @Operation(summary = "Correct resource stock", description = "Sets the resource quantity to the supplied value and records the reason.")
@@ -175,25 +188,6 @@ class ResourceController(
             reason = movement.reason,
         )
     }
-
-    @PostMapping("/issues/{issueId}/returns")
-    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Request a return for an issued resource")
-    fun returnStock(
-        @PathVariable @Min(1) issueId: Int,
-        @Valid @RequestBody request: CreateReturnRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.requestReturn(issueId, caller.id, request)
-
-    @PutMapping("/returns/{returnId}")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Verify a resource return")
-    fun verifyReturn(
-        @PathVariable @Min(1) returnId: Int,
-        @Valid @RequestBody request: VerifyReturnRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
     private fun departmentScope(caller: AuthenticatedUser): Int? =
         if (caller.role == Role.MANAGING_DIRECTOR) null

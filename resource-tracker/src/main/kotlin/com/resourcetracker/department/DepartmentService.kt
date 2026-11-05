@@ -3,24 +3,24 @@ package com.resourcetracker.department
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
+import com.resourcetracker.budget.BudgetRepository
+import com.resourcetracker.common.UserReference
+import com.resourcetracker.project.ProjectRepository
+import com.resourcetracker.user.Role
+import com.resourcetracker.user.UserRepository
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
-import com.resourcetracker.project.ProjectRepository
-import com.resourcetracker.user.Role
-import com.resourcetracker.user.UserReference
-
-
-import com.resourcetracker.user.UserRepository
 
 @Service
 class DepartmentService(
     private val departmentRepository: DepartmentRepository,
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
+    private val budgetRepository: BudgetRepository,
     private val audit: AuditService,
 ) {
 
@@ -128,6 +128,12 @@ class DepartmentService(
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
                 "Cannot deactivate '${department.name}': it is still used by active projects"
+            )
+        }
+        if (budgetRepository.existsByDepartmentIdAndActiveTrue(department.id!!)) {
+            throw ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Cannot deactivate '${department.name}': active budgets still exist for this department"
             )
         }
     }

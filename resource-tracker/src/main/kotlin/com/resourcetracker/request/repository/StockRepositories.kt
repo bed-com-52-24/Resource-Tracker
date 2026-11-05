@@ -25,6 +25,9 @@ interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     fun findAllByRequestIdAndLineItemIdAndStatus(requestId: Int, lineItemId: Int, status: ReservationStatus): List<StockReservation>
     fun findAllByLineItemIdAndStatus(lineItemId: Int, status: ReservationStatus): List<StockReservation>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from StockReservation r where r.waitlistEntryId = :entryId and r.status = :status order by r.id asc")
+    fun findByWaitlistEntryIdAndStatusForUpdate(@Param("entryId") entryId: Int, @Param("status") status: ReservationStatus): List<StockReservation>
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from StockReservation r where r.resourceId = :resourceId and r.status = :status")
     fun findByResourceIdAndStatusForUpdate(@Param("resourceId") resourceId: Int, @Param("status") status: ReservationStatus): List<StockReservation>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -38,6 +41,7 @@ interface ActiveReservationTotal {
 }
 
 interface StockIssueRepository : JpaRepository<StockIssue, Int> {
+    fun findAllByResourceId(resourceId: Int): List<StockIssue>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from StockIssue i where i.id = :id")
     fun findForUpdateById(@Param("id") id: Int): StockIssue?
@@ -46,6 +50,15 @@ interface StockIssueRepository : JpaRepository<StockIssue, Int> {
     @Query("select i from StockIssue i where i.requestId = :requestId and i.lineItemId = :lineItemId")
     fun findByRequestIdAndLineItemIdForUpdate(@Param("requestId") requestId: Int, @Param("lineItemId") lineItemId: Int): List<StockIssue>
     fun findAllByRequestId(requestId: Int): List<StockIssue>
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from StockIssue i where i.expectedReturnDate = :date and i.returnedQuantity < i.quantity and i.reminder7DaysSent = false")
+    fun findForSevenDayReminder(@Param("date") date: LocalDate): List<StockIssue>
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from StockIssue i where i.expectedReturnDate = :date and i.returnedQuantity < i.quantity and i.reminder2DaysSent = false")
+    fun findForTwoDayReminder(@Param("date") date: LocalDate): List<StockIssue>
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from StockIssue i where i.expectedReturnDate = :date and i.returnedQuantity < i.quantity and i.reminderDueDaySent = false")
+    fun findForDueDayReminder(@Param("date") date: LocalDate): List<StockIssue>
     @Query("select coalesce(sum(i.quantity - i.returnedQuantity), 0) from StockIssue i where i.lineItemId = :lineItemId")
     fun sumOutstandingByLineItemId(@Param("lineItemId") lineItemId: Int): Long
 
@@ -54,7 +67,7 @@ interface StockIssueRepository : JpaRepository<StockIssue, Int> {
         select i.resourceId as resourceId,
                sum(i.quantity) as totalIssuedQuantity,
                sum(i.quantity - i.returnedQuantity) as outstandingQuantity,
-               sum(case when request.requiredDate < :asOfDate
+               sum(case when i.expectedReturnDate < :asOfDate
                         then i.quantity - i.returnedQuantity else 0 end) as overdueQuantity
         from StockIssue i
         join ResourceRequest request on request.requestId = i.requestId
@@ -70,20 +83,28 @@ interface StockIssueRepository : JpaRepository<StockIssue, Int> {
     @Query(
         """
         select i.resourceId as resourceId,
-               request.requiredDate as expectedDate,
+               i.expectedReturnDate as expectedDate,
                sum(i.quantity - i.returnedQuantity) as quantity
         from StockIssue i
-        join ResourceRequest request on request.requestId = i.requestId
         where i.resourceId in :resourceIds
           and i.returnedQuantity < i.quantity
-          and request.requiredDate >= :asOfDate
-        group by i.resourceId, request.requiredDate
+          and i.expectedReturnDate >= :asOfDate
+        group by i.resourceId, i.expectedReturnDate
         """,
     )
     fun findExpectedReturns(
         @Param("resourceIds") resourceIds: Collection<Int>,
         @Param("asOfDate") asOfDate: LocalDate,
     ): List<ExpectedReturnProjection>
+}
+
+interface StockReturnExtensionRepository : JpaRepository<StockReturnExtension, Int> {
+    fun existsByIssueIdAndStatus(issueId: Int, status: ReturnExtensionStatus): Boolean
+    fun findAllByIssueIdOrderByCreatedAtDesc(issueId: Int): List<StockReturnExtension>
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from StockReturnExtension e where e.id = :id")
+    fun findForUpdateById(@Param("id") id: Int): StockReturnExtension?
 }
 
 interface ResourceIssueSummary {

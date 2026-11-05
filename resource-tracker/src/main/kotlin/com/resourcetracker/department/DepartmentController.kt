@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.*
 class DepartmentController(private val departmentService: DepartmentService) {
 
     @PostMapping
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a department", description = "Create a new active department.")
     @ApiResponses(value = [
@@ -82,7 +82,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     fun get(@PathVariable id: Int) = departmentService.getById(id)
 
     @PutMapping("/{id}")
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
     @Operation(summary = "Update a department", description = "All fields are optional; null or omitted fields preserve their current values. Updates name and description. If `active` is false, the department is deactivated; " +
         "if true, it is reactivated. Omit `active` to leave the status unchanged."
     )

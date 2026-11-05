@@ -1,5 +1,10 @@
 package com.resourcetracker.common
 
+import com.fasterxml.jackson.core.JsonParseException
+import com.fasterxml.jackson.databind.JsonMappingException
+import com.fasterxml.jackson.databind.exc.InvalidFormatException
+import com.fasterxml.jackson.databind.exc.MismatchedInputException
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.resourcetracker.user.Role
 import jakarta.servlet.http.HttpServletRequest
@@ -10,7 +15,13 @@ import org.springframework.http.HttpStatusCode
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.dao.OptimisticLockingFailureException
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.web.bind.MethodArgumentNotValidException
+import org.springframework.web.bind.MissingServletRequestParameterException
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.web.HttpRequestMethodNotSupportedException
+import org.springframework.web.HttpMediaTypeNotSupportedException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.server.ResponseStatusException
@@ -159,9 +170,11 @@ class GlobalExceptionHandler {
         ex: MethodArgumentNotValidException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        val details = ex.bindingResult.fieldErrors.map {
-            "${it.field}: ${it.defaultMessage ?: "Invalid value"}"
-        }
+        val details = ex.bindingResult.allErrors.map { error ->
+            val field = (error as? org.springframework.validation.FieldError)?.field
+                ?: error.objectName
+            "$field: ${error.defaultMessage ?: "Invalid value"}"
+        }.distinct().sorted()
 
         return respond(
             status = HttpStatus.BAD_REQUEST,
@@ -181,7 +194,10 @@ class GlobalExceptionHandler {
             status = HttpStatus.BAD_REQUEST,
             code = "VALIDATION_FAILED",
             message = "Request validation failed",
-            details = ex.constraintViolations.map { it.message }.sorted(),
+            details = ex.constraintViolations.map {
+                val field = it.propertyPath.lastOrNull()?.name
+                if (field.isNullOrBlank()) it.message else "$field: ${it.message}"
+            }.distinct().sorted(),
             request = request
         )
 
@@ -190,12 +206,14 @@ class GlobalExceptionHandler {
         ex: HttpMessageNotReadableException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        log.debug("Malformed request body")
+        val details = bodyFailureDetails(ex)
+        log.debug("Unreadable request body: {}", details.joinToString("; "))
 
         return respond(
             status = HttpStatus.BAD_REQUEST,
             code = "MALFORMED_REQUEST",
-            message = "Malformed request body",
+            message = "Request body is invalid",
+            details = details,
             request = request
         )
     }
@@ -216,7 +234,8 @@ class GlobalExceptionHandler {
         return respond(
             status = HttpStatus.INTERNAL_SERVER_ERROR,
             code = "INTERNAL_SERVER_ERROR",
-            message = "An unexpected error occurred",
+            message = "The server could not complete this request because of an unexpected application error. Retry shortly; if it continues, contact support with the reference ID.",
+            details = listOf("Reference ID: $correlationId"),
             request = request,
             correlationId = correlationId
         )
@@ -245,6 +264,87 @@ class GlobalExceptionHandler {
             message = "This record changed while you were acting. Reload and try again.",
             request = request
         )
+
+    @ExceptionHandler(DataIntegrityViolationException::class)
+    fun dataIntegrity(
+        ex: DataIntegrityViolationException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> {
+        log.info("Data integrity rule rejected request at {}", request.requestURI)
+        return respond(
+            status = HttpStatus.CONFLICT,
+            code = "DATA_INTEGRITY_VIOLATION",
+            message = "This change conflicts with existing data or violates a data rule. Check the referenced records and required values, then try again.",
+            request = request,
+        )
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException::class)
+    fun missingParameter(
+        ex: MissingServletRequestParameterException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> = respond(
+        status = HttpStatus.BAD_REQUEST,
+        code = "MISSING_PARAMETER",
+        message = "Required parameter '${ex.parameterName}' is missing.",
+        details = listOf("Provide '${ex.parameterName}' as a ${ex.parameterType} value."),
+        request = request,
+    )
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun parameterTypeMismatch(
+        ex: MethodArgumentTypeMismatchException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> {
+        val type = ex.requiredType
+        val expected = when {
+            type == null -> "the required format"
+            type.isEnum -> type.enumConstants.joinToString { (it as Enum<*>).name }
+            else -> friendlyType(type)
+        }
+        return respond(
+            status = HttpStatus.BAD_REQUEST,
+            code = "INVALID_PARAMETER",
+            message = "Parameter '${ex.name}' has an invalid value.",
+            details = listOf("Expected $expected."),
+            request = request,
+        )
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun methodNotSupported(
+        ex: HttpRequestMethodNotSupportedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> = respond(
+        status = HttpStatus.METHOD_NOT_ALLOWED,
+        code = "METHOD_NOT_ALLOWED",
+        message = "${ex.method ?: "This HTTP method"} is not supported for this endpoint.",
+        details = ex.supportedHttpMethods?.map { "Use ${it.name()} instead." }.orEmpty(),
+        request = request,
+    )
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
+    fun mediaTypeNotSupported(
+        ex: HttpMediaTypeNotSupportedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> = respond(
+        status = HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+        code = "UNSUPPORTED_MEDIA_TYPE",
+        message = "The request body uses an unsupported content type.",
+        details = listOf("Use Content-Type: application/json."),
+        request = request,
+    )
+
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun routeNotFound(
+        ex: NoResourceFoundException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> = respond(
+        status = HttpStatus.NOT_FOUND,
+        code = "ENDPOINT_NOT_FOUND",
+        message = "No endpoint was found for this path.",
+        request = request,
+    )
 
     @ExceptionHandler(IllegalArgumentException::class)
     fun illegalArgument(
@@ -280,6 +380,76 @@ class GlobalExceptionHandler {
         return ResponseEntity.status(status)
             .header("X-Correlation-ID", correlationId)
             .body(body)
+    }
+
+    private fun bodyFailureDetails(ex: HttpMessageNotReadableException): List<String> {
+        val causes = generateSequence(ex as Throwable?) { it.cause }.toList()
+        val missing = causes.firstOrNull { it.javaClass.simpleName == "MissingKotlinParameterException" }
+        if (missing != null) {
+            val parameterName = runCatching {
+                val parameter = missing.javaClass.getMethod("getParameter").invoke(missing)
+                parameter?.javaClass?.getMethod("getName")?.invoke(parameter)?.toString()
+            }.getOrNull()
+            val field = (missing as? JsonMappingException)?.path
+                ?.lastOrNull()?.fieldName
+                ?: parameterName
+                ?: (missing as? JsonMappingException)?.pathReference
+            return listOf(if (field.isNullOrBlank()) "A required field is missing." else "$field: required field is missing.")
+        }
+
+        val unknown = causes.filterIsInstance<UnrecognizedPropertyException>().firstOrNull()
+        if (unknown != null) {
+            val known = unknown.knownPropertyIds.orEmpty().map { it.toString() }.sorted()
+            val field = requestField(unknown)
+            return listOfNotNull(
+                "${field?.let { "$it: "}.orEmpty()}unknown field '${unknown.propertyName}'.",
+                known.takeIf { it.isNotEmpty() }?.let { "Accepted fields: ${it.joinToString(", ")}." },
+            )
+        }
+
+        val invalid = causes.filterIsInstance<InvalidFormatException>().firstOrNull()
+        if (invalid != null) {
+            val field = requestField(invalid)
+            val type = invalid.targetType
+            val expectation = if (type.isEnum) {
+                "Use one of: ${type.enumConstants.joinToString { (it as Enum<*>).name }}."
+            } else {
+                "Expected ${friendlyType(type)}."
+            }
+            return listOf("${field?.let { "$it: "}.orEmpty()}value has the wrong format. $expectation")
+        }
+
+        val parse = causes.filterIsInstance<JsonParseException>().firstOrNull()
+        if (parse != null) {
+            val location = parse.location
+            return listOf("JSON syntax error${location?.let { " at line ${it.lineNr}, column ${it.columnNr}" }.orEmpty()}. Check commas, quotes, braces, and brackets.")
+        }
+
+        val mismatch = causes.filterIsInstance<MismatchedInputException>().firstOrNull()
+        if (mismatch != null) {
+            val field = requestField(mismatch)
+            return listOf("${field?.let { "$it: "}.orEmpty()}value has the wrong type. Expected ${friendlyType(mismatch.targetType)}.")
+        }
+
+        if (ex.message.orEmpty().contains("request body is missing", ignoreCase = true)) {
+            return listOf("Request body is required.")
+        }
+        return listOf("Send a valid JSON body with all required fields and the expected value types.")
+    }
+
+    private fun requestField(exception: JsonMappingException): String? = exception.path
+        .mapNotNull { reference -> reference.fieldName ?: reference.index.takeIf { it >= 0 }?.toString() }
+        .joinToString(".")
+        .takeIf { it.isNotBlank() }
+
+    private fun friendlyType(type: Class<*>): String = when (type) {
+        String::class.java -> "text"
+        java.lang.Integer::class.java, Int::class.javaPrimitiveType -> "an integer"
+        java.lang.Long::class.java, Long::class.javaPrimitiveType -> "an integer"
+        java.lang.Boolean::class.java, Boolean::class.javaPrimitiveType -> "true or false"
+        java.math.BigDecimal::class.java -> "a number"
+        java.time.LocalDate::class.java -> "a date in YYYY-MM-DD format"
+        else -> type.simpleName.ifBlank { "the expected type" }
     }
 
     private fun correlationId(request: HttpServletRequest): String {

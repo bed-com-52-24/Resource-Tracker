@@ -36,12 +36,12 @@ class ProcurementService(
     private val users: UserRepository,
     private val notifications: NotificationService,
     private val clock: Clock,
-    private val requestCompletion: RequestCompletionService,
 ) {
     @Transactional
     fun authorize(request: ResourceRequest, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
         val externalLines = lineItems.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
         if (externalLines.isEmpty()) return
+
         val vendorId = request.vendorId ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
         externalLines.forEach { line ->
             val quantity = line.approvedQuantity ?: line.quantity
@@ -59,6 +59,11 @@ class ProcurementService(
     }
 
     @Transactional(readOnly = true)
+    fun acceptedQuantity(requestId: Int, lineItemId: Int): Int =
+        procurements.findAllByRequestId(requestId)
+            .filter { it.lineItemId == lineItemId && it.status == ProcurementStatus.ACCEPTED }
+            .sumOf { it.receivedQuantity ?: 0 }
+
     fun list(
         actorId: Int,
         status: ProcurementStatus?,
@@ -82,8 +87,8 @@ class ProcurementService(
     @Transactional
     fun update(id: Int, actorId: Int, dto: UpdateProcurementRequest): ProcurementResponse {
         val actor = users.findById(actorId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "User not found") }
-        val procurement = procurements.findForUpdateById(id) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Procurement not found")
-        val request = requests.findForUpdateById(procurement.requestId) ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found")
+        val procurement = procurements.findById(id).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Procurement not found") }
+        val request = requests.findById(procurement.requestId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found") }
         if (actor.role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != actor.id) forbidden()
         val valid = when (procurement.status) {
             ProcurementStatus.AUTHORISED -> dto.status == ProcurementStatus.ORDERED
@@ -92,24 +97,15 @@ class ProcurementService(
             ProcurementStatus.ACCEPTED, ProcurementStatus.CANCELLED -> false
         }
         if (!valid) throw ResponseStatusException(HttpStatus.CONFLICT, "Invalid procurement transition ${procurement.status} -> ${dto.status}")
-        if (dto.status == ProcurementStatus.RECEIVED ||
-            (dto.status == ProcurementStatus.ACCEPTED && dto.receivedQuantity != null)
-        ) {
+        if (dto.status == ProcurementStatus.RECEIVED) {
             val line = lines.findById(procurement.lineItemId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Procurement line not found") }
-            val quantity = dto.receivedQuantity
-                ?: procurement.receivedQuantity
-                ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity is required")
+            val quantity = dto.receivedQuantity ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity is required")
             if (quantity !in 1..(line.approvedQuantity ?: line.quantity)) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "receivedQuantity exceeds authorized quantity")
             procurement.receivedQuantity = quantity
             procurement.receivedBy = actor.id
             procurement.receivedAt = LocalDateTime.now(clock)
         }
         if (dto.status == ProcurementStatus.ACCEPTED) {
-            val line = lines.findById(procurement.lineItemId).orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Procurement line not found") }
-            val approvedQuantity = line.approvedQuantity ?: line.quantity
-            if (procurement.receivedQuantity != approvedQuantity) {
-                throw ResponseStatusException(HttpStatus.CONFLICT, "Procurement cannot be accepted until the full approved quantity has been received")
-            }
             procurement.acceptedBy = actor.id
             procurement.acceptedAt = LocalDateTime.now(clock)
         }
@@ -118,9 +114,6 @@ class ProcurementService(
         val saved = procurements.save(procurement)
         history.save(RequestHistory(requestId = request.requestId!!, eventType = "PROCUREMENT_${dto.status.name}", fromStatus = from.name, toStatus = dto.status.name, actorId = actor.id, lineItemId = procurement.lineItemId, quantity = procurement.receivedQuantity))
         notifications.notify(listOf(request.requesterId), NotificationType.PROCUREMENT, mapOf("requestId" to request.requestId!!))
-        if (dto.status == ProcurementStatus.ACCEPTED) {
-            requestCompletion.completeIfFulfilled(request.requestId!!, actor.id)
-        }
         return saved.toResponse()
     }
 

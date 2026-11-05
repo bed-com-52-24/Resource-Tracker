@@ -12,7 +12,11 @@ import com.resourcetracker.request.repository.RequestHistoryRepository
 import com.resourcetracker.request.repository.ResourceRequestRepository
 import com.resourcetracker.request.repository.WaitlistEntryRepository
 import com.resourcetracker.resource.ResourceRepository
+import java.time.Clock
+import java.time.LocalDate
+import java.time.ZoneId
 import org.slf4j.LoggerFactory
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -25,6 +29,7 @@ class WaitlistService(
     private val reservationService: ReservationService,
     private val requests: ResourceRequestRepository,
     private val notifications: NotificationService,
+    private val clock: Clock,
 ) {
     @Transactional
     fun enqueue(
@@ -33,6 +38,8 @@ class WaitlistService(
         actorId: Int,
         from: RequestStatus,
         comment: String?,
+        expectedDates: Map<Int, LocalDate?> = emptyMap(),
+        defaultExpectedDate: LocalDate? = null,
     ) {
         val entries = lines.map { line ->
             val lineId = requireNotNull(line.lineItemId)
@@ -43,6 +50,7 @@ class WaitlistService(
                 lineItemId = lineId,
                 resourceId = resourceId,
                 quantity = approvedQuantity,
+                expectedFulfillmentDate = expectedDates[lineId] ?: defaultExpectedDate,
             ) to line
         }
         waitlist.saveAll(entries.map { it.first })
@@ -66,6 +74,54 @@ class WaitlistService(
     }
 
     /**
+     * Reserve already-available stock now, but backorder only the shortfall of approved internal lines.
+     * The expected date is a planning target and does not reserve or issue units.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun backorder(
+        requestId: Int,
+        lines: List<ResourceRequestLineItem>,
+        backorderedQuantities: Map<Int, Int>,
+        actorId: Int,
+        from: RequestStatus,
+        comment: String?,
+        expectedDates: Map<Int, LocalDate?> = emptyMap(),
+        defaultExpectedDate: LocalDate? = null,
+    ) {
+        val entries = lines.mapNotNull { line ->
+            val lineId = line.lineItemId ?: return@mapNotNull null
+            val shortfall = backorderedQuantities[lineId] ?: return@mapNotNull null
+            if (shortfall <= 0) return@mapNotNull null
+            val resourceId = line.resourceId ?: return@mapNotNull null
+            WaitlistEntry(
+                requestId = requestId,
+                lineItemId = lineId,
+                resourceId = resourceId,
+                quantity = shortfall,
+                expectedFulfillmentDate = expectedDates[lineId] ?: defaultExpectedDate,
+            ) to line
+        }
+        if (entries.isEmpty()) return
+        waitlist.saveAll(entries.map { it.first })
+        entries.forEach { (entry, line) ->
+            history.save(
+                RequestHistory(
+                    requestId = requestId,
+                    eventType = "BACKORDERED",
+                    fromStatus = from.name,
+                    toStatus = from.name,
+                    actorId = actorId,
+                    lineItemId = line.lineItemId,
+                    quantity = entry.quantity,
+                    comment = comment,
+                ),
+            )
+        }
+
+        entries.map { it.first.resourceId }.distinct().sorted().forEach(::onStockReturned)
+    }
+
+    /**
      * Cancel open entries before reservations are released. Resources are locked before entries,
      * matching the FIFO processor's lock order.
      */
@@ -85,7 +141,52 @@ class WaitlistService(
         return resourceIds
     }
 
-    /** Record issuance against the reserved quantity; the entry completes when all units are issued. */
+    /** Reduce a backordered (not yet reserved) quantity when part of it is waived/no longer required. */
+    @Transactional
+    fun updateExpectedFulfillmentDate(requestId: Int, lineItemId: Int, date: LocalDate, actorId: Int) {
+        val entry = waitlist.findByLineItemIdForUpdate(lineItemId)
+            ?: notFound("Waitlist entry not found")
+        if (entry.requestId != requestId) notFound("Waitlist entry not found")
+        entry.expectedFulfillmentDate = date
+        waitlist.save(entry)
+    }
+
+    /** Reduce waived demand and release any matching reservation made from this waitlist entry. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun reduceBackorderedQuantity(lineItemId: Int, quantity: Int, actorId: Int, reason: String): Int? {
+        if (quantity <= 0) return null
+        val snapshot = waitlist.findByLineItemId(lineItemId) ?: return null
+        if (snapshot.status == WaitlistStatus.FULFILLED || snapshot.status == WaitlistStatus.CANCELLED || snapshot.status == WaitlistStatus.WAIVED) return null
+        resources.findForUpdateById(snapshot.resourceId) ?: notFound("Resource not found")
+        val entry = waitlist.findByLineItemIdForUpdate(lineItemId) ?: return null
+        if (entry.status == WaitlistStatus.FULFILLED || entry.status == WaitlistStatus.CANCELLED || entry.status == WaitlistStatus.WAIVED) return null
+        val outstanding = (entry.quantity - entry.issuedQuantity).coerceAtLeast(0)
+        val reduction = minOf(quantity, outstanding)
+        if (reduction == 0) return null
+        val unreserved = (entry.quantity - entry.reservedQuantity).coerceAtLeast(0)
+        val fromReserved = minOf(
+            (reduction - unreserved).coerceAtLeast(0),
+            (entry.reservedQuantity - entry.issuedQuantity).coerceAtLeast(0),
+        )
+        val released = reservationService.releaseForWaitlistEntry(entry.id, fromReserved, actorId, reason)
+        val actualReduction = minOf(reduction, unreserved + released)
+        if (actualReduction <= 0) return null
+        val releasableReserved = (entry.reservedQuantity - entry.issuedQuantity).coerceAtLeast(0)
+        val fromStatus = entry.status
+        entry.quantity -= actualReduction
+        entry.reservedQuantity -= minOf(released, releasableReserved)
+        if (entry.issuedQuantity >= entry.quantity) {
+            entry.status = if (entry.quantity == 0) WaitlistStatus.WAIVED else WaitlistStatus.FULFILLED
+        } else if (entry.reservedQuantity <= entry.issuedQuantity) {
+            entry.status = WaitlistStatus.WAITING
+        } else {
+            entry.status = WaitlistStatus.FULFILLABLE
+        }
+        waitlist.save(entry)
+        history.save(RequestHistory(requestId = entry.requestId, eventType = "BACKORDER_REDUCED", fromStatus = fromStatus.name, toStatus = entry.status.name, actorId = actorId, lineItemId = lineItemId, quantity = actualReduction, comment = reason))
+        return entry.resourceId.takeIf { released > 0 }
+    }
+
     @Transactional(propagation = Propagation.MANDATORY)
     fun recordIssued(lineItemId: Int, quantity: Int, actorId: Int) {
         require(quantity > 0) { "Issued quantity must be positive" }
@@ -131,6 +232,28 @@ class WaitlistService(
             val granted = reservationService.reserveForWaitlist(entry, wanted)
             if (granted > 0) applyReservation(entry, granted)
             if (granted < wanted) break
+        }
+    }
+
+    @Scheduled(cron = "0 0 8 * * *", zone = "Africa/Blantyre")
+    @Transactional
+    fun notifyOverdueBackorders() {
+        val today = LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre")))
+        waitlist.findOverdueForNotificationForUpdate(openStatuses, today).forEach { entry ->
+            val request = requests.findById(entry.requestId)
+                .orElseThrow { notFound("Request not found") }
+            notifications.notify(
+                listOfNotNull(request.requesterId, request.assignedManagerId).distinct(),
+                NotificationType.BACKORDER_OVERDUE,
+                mapOf(
+                    "requestId" to entry.requestId,
+                    "requestNumber" to request.requestNumber,
+                    "lineItemId" to entry.lineItemId,
+                    "expectedFulfillmentDate" to entry.expectedFulfillmentDate.toString(),
+                ),
+            )
+            entry.overdueNotifiedDate = today
+            waitlist.save(entry)
         }
     }
 

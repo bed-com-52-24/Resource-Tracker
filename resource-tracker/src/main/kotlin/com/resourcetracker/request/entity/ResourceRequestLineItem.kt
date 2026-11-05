@@ -45,4 +45,13 @@ class ResourceRequestLineItem(
 
     @Column(name = "approved_quantity")
     var approvedQuantity: Int? = null,
+
+    @Column(name = "waived_quantity", nullable = false)
+    var waivedQuantity: Int = 0,
+
+    @Column(name = "requested_duration_days")
+    var requestedDurationDays: Int? = null,
+
+    @Column(name = "approved_duration_days")
+    var approvedDurationDays: Int? = null,
 )

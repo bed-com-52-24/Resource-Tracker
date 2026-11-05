@@ -4,11 +4,11 @@ import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.BadRequestException
+import com.resourcetracker.common.DepartmentReference
+import com.resourcetracker.common.VendorReference
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
-import com.resourcetracker.department.DepartmentReference
 import com.resourcetracker.department.DepartmentRepository
-import com.resourcetracker.vendor.VendorReference
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.request.service.StockAvailabilityService
 import com.resourcetracker.request.entity.MovementType
@@ -245,7 +245,7 @@ class ResourceService(
             location = location,
             reorderLevel = reorderLevel,
             status = status,
-            department = department?.let { DepartmentReference(it.id, it.name) },
+            department = department?.let { DepartmentReference(requireNotNull(it.id), it.name) },
             preferredVendor = preferredVendor?.let { VendorReference(it.id, it.name) },
             reservedQuantity = reserved,
             unavailableQuantity = if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
