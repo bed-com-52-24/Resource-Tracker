@@ -1,7 +1,6 @@
 package com.resourcetracker.team
 
 import com.resourcetracker.common.ListQuery
-import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.common.TeamReference
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
@@ -42,8 +41,8 @@ class TeamController(private val service: TeamService) {
         @RequestParam(defaultValue = "asc") direction: String,
         @RequestParam(required = false) role: Role?,
         @RequestParam(required = false) active: Boolean?,
-    ): PagedResponse<TeamMemberResponse> =
-        PagedResponse.from(service.members(
+    ): Page<TeamMemberResponse> =
+        service.members(
             id,
             role,
             active,
@@ -63,7 +62,7 @@ class TeamController(private val service: TeamService) {
                 active = user.active,
                 teams = user.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
             )
-        })
+        }
 
     @PostMapping("/{id}/members")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
@@ -148,7 +147,7 @@ class TeamController(private val service: TeamService) {
         description = "Any authenticated user. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
     )
     fun list(
-        @Parameter(description = "Search team names", example = "alpha")
+        @Parameter(description = "Search team names")
         @RequestParam(required = false) search: String?,
         @Parameter(description = "Zero-based page number", example = "0")
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -158,23 +157,23 @@ class TeamController(private val service: TeamService) {
         @RequestParam(defaultValue = "name") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "asc")
         @RequestParam(defaultValue = "asc") direction: String,
-        @Parameter(description = "Filter by department ID", example = "1")
+        @Parameter(description = "Filter by department ID")
         @RequestParam(required = false) departmentId: Int?,
-        @Parameter(description = "Filter by manager ID", example = "7")
+        @Parameter(description = "Filter by manager ID")
         @RequestParam(required = false) managerId: Int?,
         @Parameter(description = "Filter by project ID")
         @RequestParam(required = false) projectId: Int?,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive teams.", example = "true")
         @RequestParam(required = false) isActive: Boolean?,
-    ): PagedResponse<TeamResponse> =
-        PagedResponse.from(ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
+    ): Page<TeamResponse> =
+        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name").let { pageable ->
             val order = pageable.sort.first()
             service.list(
                 departmentId, managerId, projectId, isActive, search,
                 pageable.pageNumber, pageable.pageSize,
                 listOf("${order.property}:${order.direction.name.lowercase()}"),
             )
-        })
+        }
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "isActive", "createdAt")

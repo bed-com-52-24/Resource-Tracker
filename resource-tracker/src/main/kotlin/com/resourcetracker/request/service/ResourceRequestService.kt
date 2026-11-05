@@ -124,6 +124,7 @@ class ResourceRequestService(
                 resourceId = line.resource?.id,
                 fulfillmentPreference = line.preference.name,
                 unitOfMeasure = line.unitOfMeasure,
+                requestedDurationDays = line.dto.requestedDurationDays,
             )
         }
         lineItemRepository.saveAll(lineEntities)
@@ -243,6 +244,11 @@ class ResourceRequestService(
                 val approvedDecision = approvedByLine[lineId]
                 val approved = approvedDecision?.quantity ?: line.quantity
                 if (approved !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
+                if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name) {
+                    val duration = approvedDecision?.approvedDurationDays ?: line.requestedDurationDays
+                    if (duration == null || duration <= 0) badRequest("An approved return duration is required for internal line item $lineId")
+                    line.approvedDurationDays = duration
+                }
                 val resource = line.resourceId?.let { resources.findForUpdateById(it) ?: conflict("Resource for line item $lineId no longer exists") }
                 if (resource != null && !resource.active) conflict("Resource for line item $lineId is inactive")
                 line.approvedQuantity = approved
@@ -325,7 +331,7 @@ class ResourceRequestService(
             request.batchNumber = first.dto.batchNumber
             request.totalAmount = total
             lineItemRepository.deleteAllByRequestId(requestId)
-            lineItemRepository.saveAll(normalized.map { line -> ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, unitOfMeasure = line.unitOfMeasure) })
+            lineItemRepository.saveAll(normalized.map { line -> ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, unitOfMeasure = line.unitOfMeasure, requestedDurationDays = line.dto.requestedDurationDays) })
             request.editedAfterQuery = true
         }
         if (action == RequestAction.CANCEL) {
@@ -458,6 +464,9 @@ class ResourceRequestService(
                 ResourceType.EXTERNAL -> FulfillmentPreference.EXTERNAL
                 null -> dto.fulfillmentPreference
             }
+            if (preference == FulfillmentPreference.INTERNAL && (dto.requestedDurationDays == null || dto.requestedDurationDays <= 0)) {
+                badRequest("Line ${index + 1}: a positive requestedDurationDays is required for internal resources")
+            }
             val description = resource?.name ?: dto.description.trim()
             if (description.isBlank()) badRequest("Line ${index + 1}: resourceId or description is required")
             if (description.length > 255 || dto.manufacturer.length > 120 || (dto.unitOfMeasure?.length ?: 0) > 50) badRequest("Line ${index + 1}: text fields exceed their maximum length")
@@ -505,6 +514,9 @@ class ResourceRequestService(
                 RequestLineItemResponseDto(
                     lineItemId = requireNotNull(line.lineItemId),
                     quantity = line.quantity,
+                    type = ResourceType.valueOf(line.fulfillmentPreference),
+                    requestedDurationDays = line.requestedDurationDays,
+                    approvedDurationDays = line.approvedDurationDays,
                 )
             },
         )

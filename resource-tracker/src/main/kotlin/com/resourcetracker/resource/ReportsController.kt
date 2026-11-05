@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Page
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -81,7 +82,9 @@ class ReportsController(
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): PagedResponse<ResourceWaitlistReport> = PagedResponse.from(reports.waitlist(caller, departmentId, pageable(page, size)))
+    ): PagedResponse<ResourceWaitlistReport> = PagedResponse.from(
+        reports.waitlist(caller, departmentId, PageRequest.of(page, size)),
+    )
 
     @PostMapping("/resources/{id}/reconciliations")
     @RequiresRoles(Role.ADMIN)

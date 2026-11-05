@@ -20,6 +20,9 @@ data class ApprovedQuantityDecision(
     @field:Positive val lineItemId: Int,
     @field:Positive val quantity: Int,
     @field:Schema(description = "Planning target date for any quantity that cannot be fulfilled immediately (backorder/waitlist). Does not affect stock reservation or issuance.", example = "2026-07-15") val expectedFulfillmentDate: LocalDate? = null,
+    @field:Positive
+    @field:Schema(description = "Manager-approved duration in days from the actual stock issue date. Defaults to the requester's requested duration.", example = "21")
+    val approvedDurationDays: Int? = null,
 )
 
 @Schema(description = "Manager decision. QUERY requires a comment; APPROVE/WAITLIST run stock checks; REJECT requires a comment. WAITLIST is for internal lines only.")

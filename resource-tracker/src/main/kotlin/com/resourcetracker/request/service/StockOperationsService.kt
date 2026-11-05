@@ -2,6 +2,8 @@ package com.resourcetracker.request.service
 
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
+import com.resourcetracker.notification.NotificationService
+import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
 import com.resourcetracker.user.Role
@@ -11,13 +13,44 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 
 data class StockIssueRequest(val lineItemId: Int, val quantity: Int)
-data class StockIssueResponse(val id: Int, val requestId: Int, val lineItemId: Int, val resourceId: Int, val quantity: Int, val returnedQuantity: Int)
+data class StockIssueResponse(val id: Int, val requestId: Int, val lineItemId: Int, val resourceId: Int, val quantity: Int, val returnedQuantity: Int, val expectedReturnDate: LocalDate?)
 data class CreateReturnRequest(val quantity: Int, val note: String? = null)
 data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null)
 data class StockCorrectionRequest(val newQuantity: Int, val reason: String)
+data class RequestReturnExtension(
+    @field:NotNull val newExpectedReturnDate: LocalDate,
+    @field:NotBlank @field:Size(max = 1000) val reason: String,
+)
+enum class ReturnExtensionDecision { APPROVE, REJECT }
+data class DecideReturnExtension(
+    val decision: ReturnExtensionDecision,
+    @field:Size(max = 1000) val comment: String? = null,
+)
+data class ReturnExtensionResponse(
+    val id: Int,
+    val issueId: Int,
+    val requestedReturnDate: LocalDate,
+    val reason: String,
+    val status: ReturnExtensionStatus,
+    val decisionComment: String?,
+)
+data class StockIssueProgressResponse(
+    val issueId: Int,
+    val lineItemId: Int,
+    val resourceId: Int,
+    val quantity: Int,
+    val returnedQuantity: Int,
+    val expectedReturnDate: LocalDate?,
+    val extensions: List<ReturnExtensionResponse>,
+)
 
 @Service
 class StockOperationsService(
@@ -34,6 +67,8 @@ class StockOperationsService(
     private val users: UserRepository,
     private val clock: Clock,
     private val requestCompletion: RequestCompletionService,
+    private val extensions: StockReturnExtensionRepository,
+    private val notifications: NotificationService,
 ) {
     @Transactional
     fun issue(requestId: Int, actorId: Int, dto: StockIssueRequest): StockIssueResponse {
@@ -77,12 +112,96 @@ class StockOperationsService(
         resource.quantity = (resource.quantity ?: 0) - dto.quantity
         resource.recomputeStatus()
         resources.save(resource)
-        val issue = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id))
+        val durationDays = line.approvedDurationDays ?: conflict("The assigned manager must approve a return duration before stock can be issued")
+        val expectedReturnDate = LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))).plusDays(durationDays.toLong())
+        val issue = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id, expectedReturnDate = expectedReturnDate))
         waitlistService.recordIssued(dto.lineItemId, dto.quantity, actor.id)
         movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
         history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
         requestCompletion.completeIfFulfilled(requestId, actor.id)
-        return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity)
+        return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity, issue.expectedReturnDate)
+    }
+
+    @Transactional(readOnly = true)
+    fun listIssues(requestId: Int, actorId: Int): List<StockIssueProgressResponse> {
+        val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
+        val request = requests.findById(requestId).orElseThrow { notFound("Request not found") }
+        val visible = when (actor.role) {
+            Role.TEAM_LEAD -> actor.teams.any { it.id == request.teamId }
+            Role.DEPARTMENT_MANAGER -> request.assignedManagerId == actor.id
+            Role.ADMIN, Role.MANAGING_DIRECTOR -> true
+            else -> false
+        }
+        if (!visible) forbidden()
+        return issues.findAllByRequestId(requestId).map { issue ->
+            StockIssueProgressResponse(
+                issueId = issue.id,
+                lineItemId = issue.lineItemId,
+                resourceId = issue.resourceId,
+                quantity = issue.quantity,
+                returnedQuantity = issue.returnedQuantity,
+                expectedReturnDate = issue.expectedReturnDate,
+                extensions = extensions.findAllByIssueIdOrderByCreatedAtDesc(issue.id).map { it.toResponse() },
+            )
+        }
+    }
+
+    @Transactional
+    fun requestReturnExtension(issueId: Int, actorId: Int, dto: RequestReturnExtension): ReturnExtensionResponse {
+        val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
+        val issue = issues.findForUpdateById(issueId) ?: notFound("Issue not found")
+        val request = requests.findById(issue.requestId).orElseThrow { notFound("Request not found") }
+        if (actor.role != Role.TEAM_LEAD || actor.teams.none { it.id == issue.teamId }) forbidden()
+        val currentDueDate = issue.expectedReturnDate ?: conflict("This issue has no expected return date")
+        if (issue.returnedQuantity >= issue.quantity) conflict("The issue has already been fully returned")
+        if (!dto.newExpectedReturnDate.isAfter(LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))))) badRequest("The requested return date must be in the future")
+        if (!dto.newExpectedReturnDate.isAfter(currentDueDate)) badRequest("The requested return date must be later than the current due date")
+        if (extensions.existsByIssueIdAndStatus(issueId, ReturnExtensionStatus.PENDING)) conflict("A return-date extension is already pending")
+        val saved = extensions.save(
+            StockReturnExtension(
+                issueId = issueId,
+                requestedBy = actor.id,
+                requestedReturnDate = dto.newExpectedReturnDate,
+                reason = dto.reason.trim(),
+            ),
+        )
+        history.save(RequestHistory(requestId = issue.requestId, eventType = "RETURN_EXTENSION_REQUESTED", actorId = actor.id, lineItemId = issue.lineItemId, quantity = issue.quantity - issue.returnedQuantity, comment = "Requested ${dto.newExpectedReturnDate}. ${dto.reason.trim()}"))
+        notifications.notify(listOfNotNull(actor.id, request.requesterId, request.assignedManagerId).distinct(), NotificationType.RETURN_EXTENSION_REQUESTED, mapOf("requestId" to issue.requestId, "requestNumber" to request.requestNumber, "issueId" to issue.id, "requestedReturnDate" to saved.requestedReturnDate))
+        return saved.toResponse()
+    }
+
+    @Transactional
+    fun decideReturnExtension(extensionId: Int, actorId: Int, dto: DecideReturnExtension): ReturnExtensionResponse {
+        val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
+        val extension = extensions.findForUpdateById(extensionId) ?: notFound("Return extension not found")
+        val issue = issues.findForUpdateById(extension.issueId) ?: notFound("Issue not found")
+        val request = requests.findForUpdateById(issue.requestId) ?: notFound("Request not found")
+        requireAssignedManager(request, actor.id, actor.role)
+        if (extension.status != ReturnExtensionStatus.PENDING) conflict("Return extension has already been decided")
+        if (issue.returnedQuantity >= issue.quantity) conflict("The issue has already been fully returned")
+        val comment = dto.comment?.trim()?.takeIf(String::isNotEmpty)
+        if (dto.decision == ReturnExtensionDecision.REJECT && comment == null) badRequest("A reason is required when rejecting an extension")
+        val previousDate = issue.expectedReturnDate
+        if (dto.decision == ReturnExtensionDecision.APPROVE) {
+            if (!extension.requestedReturnDate.isAfter(LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))))) conflict("The requested return date has passed")
+            issue.expectedReturnDate = extension.requestedReturnDate
+            issue.reminder7DaysSent = false
+            issue.reminder2DaysSent = false
+            issue.reminderDueDaySent = false
+            issues.save(issue)
+            extension.status = ReturnExtensionStatus.APPROVED
+        } else {
+            extension.status = ReturnExtensionStatus.REJECTED
+        }
+        extension.decidedBy = actor.id
+        extension.decidedAt = LocalDateTime.now(clock)
+        extension.decisionComment = comment
+        val saved = extensions.save(extension)
+        val event = if (dto.decision == ReturnExtensionDecision.APPROVE) "RETURN_EXTENSION_APPROVED" else "RETURN_EXTENSION_REJECTED"
+        history.save(RequestHistory(requestId = issue.requestId, eventType = event, actorId = actor.id, lineItemId = issue.lineItemId, quantity = issue.quantity - issue.returnedQuantity, comment = "Due date ${previousDate ?: "unset"}; requested ${extension.requestedReturnDate}. ${comment.orEmpty()}"))
+        val notification = if (dto.decision == ReturnExtensionDecision.APPROVE) NotificationType.RETURN_EXTENSION_APPROVED else NotificationType.RETURN_EXTENSION_REJECTED
+        notifications.notify(listOfNotNull(extension.requestedBy, request.requesterId, request.assignedManagerId).distinct(), notification, mapOf("requestId" to issue.requestId, "requestNumber" to request.requestNumber, "issueId" to issue.id, "requestedReturnDate" to extension.requestedReturnDate))
+        return saved.toResponse()
     }
 
     @Transactional
@@ -168,6 +287,7 @@ class StockOperationsService(
     private fun requireAssignedManager(request: ResourceRequest, actorId: Int, role: Role) {
         if (role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != actorId) forbidden()
     }
+    private fun StockReturnExtension.toResponse() = ReturnExtensionResponse(id, issueId, requestedReturnDate, reason, status, decisionComment)
     private fun forbidden(): Nothing = throw ResponseStatusException(HttpStatus.FORBIDDEN, "Action is not permitted")
     private fun conflict(message: String): Nothing = throw ResponseStatusException(HttpStatus.CONFLICT, message)
     private fun badRequest(message: String): Nothing = throw ResponseStatusException(HttpStatus.BAD_REQUEST, message)

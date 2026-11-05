@@ -64,7 +64,8 @@ class ResourceRequestController(
                                   "lineItems": [
                                     {
                                       "resourceId": 7,
-                                      "quantity": 4
+                                      "quantity": 4,
+                                      "requestedDurationDays": 30
                                     }
                                   ]
                                 }
@@ -123,6 +124,31 @@ class ResourceRequestController(
         @Valid @RequestBody dto: RequestDecisionDto,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.decide(id, serviceUser(caller), dto)
+
+    @PostMapping("/api/v1/requests/{id}/issues")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Issue reserved stock for a request line")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "201", description = "Stock issued"),
+        ApiResponse(responseCode = "400", description = "Invalid issue quantity or non-internal line"),
+        ApiResponse(responseCode = "403", description = "Assigned department manager role required"),
+        ApiResponse(responseCode = "404", description = "Request or line item not found"),
+        ApiResponse(responseCode = "409", description = "Request is not issuable, stock is not reserved/available, or quantity exceeds the approved balance"),
+    ])
+    fun issueStock(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody dto: StockIssueRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.issue(id, caller.id, dto)
+
+    @GetMapping("/api/v1/requests/{id}/issues")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "List issued stock, due dates, and extension history for a request")
+    fun listIssuedStock(
+        @PathVariable @Min(1) id: Int,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.listIssues(id, caller.id)
 
     @PutMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD)
@@ -184,7 +210,17 @@ class ResourceRequestController(
 
     @PutMapping("/api/v1/requests/{id}/line-items/{lineItemId}/approved-quantity")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Adjust an approved quantity")
+    @Operation(
+        summary = "Adjust an approved quantity",
+        description = "Change the approved quantity for one line on an approved request. The quantity must be between 1 and the originally requested quantity, cannot be lower than the quantity already issued, and increases require sufficient available internal stock. The assigned department manager must provide a reason.",
+    )
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Approved quantity updated", content = [Content(schema = Schema(implementation = ResourceRequestResponseDto::class))]),
+        ApiResponse(responseCode = "400", description = "Quantity is invalid or the request body is malformed", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Assigned department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Request, line item, or resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "409", description = "Request is not approved, quantity is below issued quantity, or available stock is insufficient", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun adjustApprovedQuantity(
         @PathVariable @Min(1) id: Int,
         @PathVariable @Min(1) lineItemId: Int,
@@ -194,6 +230,17 @@ class ResourceRequestController(
 
     @PutMapping("/api/v1/requests/{id}/line-items/{lineItemId}/waive-balance")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(
+        summary = "Waive an outstanding line balance",
+        description = "Waive part or all of the outstanding quantity for a line on an approved or waitlisted request. The quantity must be positive and cannot exceed the remaining unfulfilled balance. Only the assigned department manager may perform this action; a reason is recorded in request history.",
+    )
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Line balance waived", content = [Content(schema = Schema(implementation = ResourceRequestResponseDto::class))]),
+        ApiResponse(responseCode = "400", description = "Quantity is invalid, the request body is malformed, or the quantity exceeds the outstanding balance", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Assigned department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Request or line item not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "409", description = "Request is not approved or waitlisted", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun waiveLineBalance(
         @PathVariable @Min(1) id: Int,
         @PathVariable @Min(1) lineItemId: Int,
@@ -228,33 +275,7 @@ class ResourceRequestController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = stockOperations.verifyReturn(returnId, caller.id, request)
 
-    @GetMapping("/api/v1/procurements")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
-    fun procurements(
-        @Parameter(description = "Search associated request numbers", example = "REQ-2026")
-        @RequestParam(required = false) search: String?,
-        @Parameter(description = "Zero-based page number", example = "0")
-        @RequestParam(defaultValue = "0") @Min(0) page: Int,
-        @Parameter(description = "Page size, from 1 to 100", example = "20")
-        @RequestParam(defaultValue = "20") @Min(1) size: Int,
-        @Parameter(description = "Sort field: id, requestId, lineItemId, vendorId, estimatedCost, expectedDelivery, status, or receivedQuantity", example = "id")
-        @RequestParam(defaultValue = "id") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "desc")
-        @RequestParam(defaultValue = "desc") direction: String,
-        @Parameter(description = "Filter by procurement status", example = "ORDERED")
-        @RequestParam(required = false) status: ProcurementStatus?,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = procurementService.list(caller.id, status, search, page, size, sort, direction)
-
-    @PutMapping("/api/v1/procurements/{id}")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Update a procurement")
-    fun updateProcurement(
-        @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody request: UpdateProcurementRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = procurementService.update(id, caller.id, request)
+    // Procurement management is exposed by ProcurementController (/api/v1/resources/procurements)
 
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }

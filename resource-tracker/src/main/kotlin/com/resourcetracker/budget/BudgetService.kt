@@ -3,6 +3,7 @@ package com.resourcetracker.budget
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
+import com.resourcetracker.common.ConflictException
 import com.resourcetracker.department.Department
 import com.resourcetracker.request.entity.ResourceRequest
 import org.springframework.stereotype.Service
@@ -36,7 +37,7 @@ class BudgetService(
         require(request.periodStart <= request.periodEnd) { "periodStart must not be after periodEnd" }
         require(request.amount >= BigDecimal.ZERO) { "amount must not be negative" }
         if (budgetRepository.existsActiveOverlap(request.departmentId, request.periodType, request.periodStart, request.periodEnd)) {
-            throw IllegalStateException("An active budget already exists for this department and period")
+            throw ConflictException("An active budget already exists for this department and period")
         }
 
         val department = Department(id = request.departmentId, name = "Budget-${request.departmentId}")
@@ -64,6 +65,10 @@ class BudgetService(
     fun update(id: Long, request: UpdateBudgetRequest): Budget {
         val budget = budgetRepository.findById(id).orElseThrow { IllegalArgumentException("Budget not found") }
         val before = budget.amount to budget.active
+        val deactivating = request.active == false && budget.active
+        if (deactivating && budget.committedAmount > BigDecimal.ZERO) {
+            throw IllegalStateException("Cannot deactivate a budget with active commitments")
+        }
         request.amount?.let { amount ->
             require(amount >= BigDecimal.ZERO) { "amount must not be negative" }
             budget.amount = amount
@@ -73,7 +78,7 @@ class BudgetService(
         if (before != (updated.amount to updated.active)) {
             auditService?.record(
                 AuditRecord.currentActor(
-                    AuditAction.BUDGET_UPDATED,
+                    if (deactivating) AuditAction.BUDGET_DEACTIVATED else AuditAction.BUDGET_UPDATED,
                     "BUDGET",
                     updated.id.toString(),
                     previousState = mapOf("amount" to before.first, "active" to before.second),

@@ -13,6 +13,8 @@ import com.resourcetracker.request.service.StockCorrectionRequest
 import com.resourcetracker.request.service.StockIssueRequest
 import com.resourcetracker.request.service.StockOperationsService
 import com.resourcetracker.request.service.VerifyReturnRequest
+import com.resourcetracker.request.service.RequestReturnExtension
+import com.resourcetracker.request.service.DecideReturnExtension
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
@@ -185,6 +187,25 @@ class ResourceController(
         @Valid @RequestBody request: CreateReturnRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = stockOperations.requestReturn(issueId, caller.id, request)
+
+    @PostMapping("/issues/{issueId}/extensions")
+    @RequiresRoles(Role.TEAM_LEAD)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Request an extension for an issued resource return")
+    fun requestReturnExtension(
+        @PathVariable @Min(1) issueId: Int,
+        @Valid @RequestBody request: RequestReturnExtension,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.requestReturnExtension(issueId, caller.id, request)
+
+    @PutMapping("/return-extensions/{extensionId}")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Approve or reject a return-date extension")
+    fun decideReturnExtension(
+        @PathVariable @Min(1) extensionId: Int,
+        @Valid @RequestBody request: DecideReturnExtension,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.decideReturnExtension(extensionId, caller.id, request)
 
     @PutMapping("/returns/{returnId}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)

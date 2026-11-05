@@ -2,6 +2,7 @@ package com.resourcetracker.budget
 
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditService
+import com.resourcetracker.common.ConflictException
 import com.resourcetracker.department.Department
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -23,6 +24,26 @@ class BudgetServiceTest {
     private val service = BudgetService(budgetRepository, commitmentRepository, auditService)
 
     private val department = Department(id = 7, name = "Engineering")
+
+    @Test
+    fun `creating an overlapping active budget returns a conflict`() {
+        `when`(budgetRepository.existsActiveOverlap(7, BudgetPeriodType.MONTHLY, LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30)))
+            .thenReturn(true)
+
+        val error = assertThrows<ConflictException> {
+            service.create(
+                CreateBudgetRequest(
+                    departmentId = 7,
+                    periodType = BudgetPeriodType.MONTHLY,
+                    periodStart = LocalDate.of(2026, 11, 1),
+                    periodEnd = LocalDate.of(2026, 11, 30),
+                    amount = BigDecimal("1000.00"),
+                ),
+            )
+        }
+
+        assertEquals("An active budget already exists for this department and period", error.message)
+    }
 
     @Test
     fun `remaining equals amount minus active commitments`() {
