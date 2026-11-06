@@ -55,7 +55,7 @@ class UserService(
         if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
             throw BusinessRuleException("${request.role} users must be assigned to at least one team")
         }
-        if (request.role != Role.MANAGING_DIRECTOR && request.departmentId == null) {
+        if (request.role !in setOf(Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR) && request.departmentId == null) {
             throw BusinessRuleException("${request.role} users require a department")
         }
         if (request.role == Role.MANAGING_DIRECTOR && request.teamIds?.isNotEmpty() == true) {
@@ -63,10 +63,11 @@ class UserService(
         }
 
         val userTeams = activeTeams(request.teamIds ?: emptySet())
-        val department = if (request.role == Role.MANAGING_DIRECTOR)
-            managingDirectorDepartment()
-        else
-            activeDepartment(requireNotNull(request.departmentId))
+        val department = when {
+            request.role == Role.MANAGING_DIRECTOR -> managingDirectorDepartment()
+            request.departmentId == null -> null
+            else -> activeDepartment(request.departmentId)
+        }
         val user = User(
             username = username,
             email = email,
@@ -91,6 +92,30 @@ class UserService(
                 saved.id.toString(),
                 newState = snapshot(saved),
                 changedFields = listOf("username", "email", "fullName", "role", "departmentId", "teamIds", "active"),
+            ),
+        )
+        return saved.toResponse()
+    }
+
+    @Transactional
+    fun assignDepartment(id: Int, departmentId: Int): UserResponse {
+        val user = find(id)
+        if (user.role != Role.DEPARTMENT_MANAGER) {
+            throw BusinessRuleException("Only Department Managers can be assigned to a department")
+        }
+        val department = activeDepartment(departmentId)
+        val before = snapshot(user)
+        user.department = department
+        val saved = users.saveAndFlush(user)
+        val after = snapshot(saved)
+        audit.record(
+            AuditRecord.currentActor(
+                AuditAction.USER_UPDATED,
+                "USER",
+                saved.id.toString(),
+                previousState = before,
+                newState = after,
+                changedFields = listOf("departmentId"),
             ),
         )
         return saved.toResponse()
@@ -215,7 +240,7 @@ class UserService(
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName ?: username,
         role = role,
-        department = DepartmentReference(department.id, department.name),
+        department = department?.let { DepartmentReference(it.id, it.name) },
         teams = teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
         active = active,
         passwordSet = passwordHash != null,
@@ -226,7 +251,7 @@ class UserService(
         "email" to user.email,
         "fullName" to user.fullName,
         "role" to user.role.name,
-        "departmentId" to user.department.id,
+        "departmentId" to user.department?.id,
         "teamIds" to user.teams.map { it.id }.sorted(),
         "active" to user.active,
     )

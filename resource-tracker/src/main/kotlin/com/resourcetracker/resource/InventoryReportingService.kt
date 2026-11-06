@@ -250,7 +250,7 @@ class InventoryReportingService(
             Role.DEPARTMENT_MANAGER -> {
                 val departmentId = users.findById(caller.id)
                     .orElseThrow { ResourceNotFoundException("User not found") }
-                    .department.id
+                    .department?.id ?: forbidden()
                 if (requestedDepartmentId != null && requestedDepartmentId != departmentId) forbidden()
                 departmentId
             }

@@ -55,7 +55,7 @@ data class TokenPair(
 
 data class ProfileResponse(
     val id: Int, val username:String, val email: String, val fullName: String,
-    val role: String, val department: DepartmentReference, val teams: List<TeamReference>, val active: Boolean,
+    val role: String, val department: DepartmentReference?, val teams: List<TeamReference>, val active: Boolean,
 )
 
 @RestController
@@ -102,7 +102,7 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         return ProfileResponse(
             u.id, u.username, u.email, u.fullName ?: u.username,
             u.role.name,
-            DepartmentReference(u.department.id, u.department.name),
+            u.department?.let { DepartmentReference(it.id, it.name) },
             u.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
             u.active,
         )

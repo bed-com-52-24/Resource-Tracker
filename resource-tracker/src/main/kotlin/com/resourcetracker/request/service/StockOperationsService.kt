@@ -244,7 +244,10 @@ class StockOperationsService(
         val resource = resources.findById(resourceId).orElseThrow { notFound("Resource not found") }
         val allowed = when (actor.role) {
             Role.MANAGING_DIRECTOR -> true
-            Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER -> resource.department?.id == actor.department.id
+            Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER -> {
+                val departmentId = actor.department?.id
+                departmentId != null && resource.department?.id == departmentId
+            }
             else -> false
         }
         if (!allowed) forbidden()
@@ -527,7 +530,8 @@ class StockOperationsService(
         if (actor.role != Role.DEPARTMENT_MANAGER) forbidden()
         if (dto.newQuantity < 0 || dto.reason.isBlank()) badRequest("newQuantity must be non-negative and reason is required")
         val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
-        if (resource.department?.id != actor.department.id) notFound("Resource not found")
+        val departmentId = actor.department?.id
+        if (departmentId == null || resource.department?.id != departmentId) notFound("Resource not found")
         if (resource.type != ResourceType.INTERNAL) badRequest("Only internal resources have physical stock")
         val current = resource.quantity ?: 0
         val difference = dto.newQuantity - current

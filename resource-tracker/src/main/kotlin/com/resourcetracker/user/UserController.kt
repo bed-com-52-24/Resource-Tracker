@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController
 @Validated
 @RestController
 @RequestMapping("/api/v1/users")
-@RequiresRoles(Role.ADMIN)
+@RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR)
 @Tag(name = "Users", description = "Create and manage Resource Tracker user accounts")
 @SecurityRequirement(name = "bearerAuth")
 class UserController(private val users: UserService) {
@@ -74,6 +74,22 @@ class UserController(private val users: UserService) {
         ]
     )
     fun create(@Valid @RequestBody request: CreateUserRequest): UserResponse = users.create(request)
+
+    @PutMapping("/{id}/department")
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Assign a department manager to a department", description = "Assigns an existing active department to a Department Manager. This also assigns managers created without a department.")
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Department manager assigned", content = [Content(schema = Schema(implementation = UserResponse::class))]),
+            ApiResponse(responseCode = "400", description = "User is not a Department Manager or department is inactive", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "404", description = "User or department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ],
+    )
+    fun assignDepartment(
+        @Parameter(description = "User ID", example = "42") @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: AssignDepartmentRequest,
+    ): UserResponse = users.assignDepartment(id, request.departmentId)
 
     @PostMapping("/{id}/resend-setup")
     @Operation(summary = "Resend password setup link", description = "Replaces the unused setup token and emails a new setup link.")

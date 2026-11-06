@@ -191,7 +191,7 @@ class ResourceController(
 
     private fun departmentScope(caller: AuthenticatedUser): Int? =
         if (caller.role == Role.MANAGING_DIRECTOR) null
-        else users.findById(caller.id).orElseThrow { ResourceNotFoundException("User not found") }.department.id
+        else users.findById(caller.id).orElseThrow { ResourceNotFoundException("User not found") }.department?.id
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

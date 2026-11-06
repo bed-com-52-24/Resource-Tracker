@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 data class CreateUserRequest(
     @field:NotBlank @field:Size(min = 3, max = 50) @field:Schema(example = "jdoe") val username: String,
     @field:NotBlank @field:Email @field:Size(max = 150) @field:Schema(example = "jdoe@example.com") val email: String,
-    @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,    @field:Schema(description = "Existing active department ID. Required for non-managing-director users; omitted for managing directors.", example = "1", nullable = true)
+    @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD, and ADMIN users; optional for DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
     val departmentId: Int? = null,
     @field:Schema(
         description = "Existing active team IDs. Each team must exist and be active. " +
@@ -28,6 +28,12 @@ data class UpdateUserRequest(
     val active: Boolean? = null,
     @field:Schema(description = "New role. Optional; requires Admin. Omit to leave the role unchanged.", nullable = true)
     val role: Role? = null,
+)
+
+@Schema(description = "Assign an existing active department to a department manager")
+data class AssignDepartmentRequest(
+    @field:Schema(description = "Existing active department ID", example = "1")
+    val departmentId: Int,
 )
 
 data class PasswordSetRequest(
@@ -51,7 +57,7 @@ data class UserResponse(
     val email: String,
     val fullName: String,
     val role: Role,
-    val department: DepartmentReference,
+    val department: DepartmentReference?,
     val teams: List<TeamReference>,
     val active: Boolean,
     val passwordSet: Boolean,

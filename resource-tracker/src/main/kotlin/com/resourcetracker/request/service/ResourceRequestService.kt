@@ -71,7 +71,8 @@ class ResourceRequestService(
         val team = teams.findById(dto.teamId).orElseThrow { badRequest("Unknown team") }
         if (caller.teams.none { it.id == team.id }) forbidden("You do not belong to this team")
         if (!team.isActive) badRequest("Team is inactive")
-        if (team.department.id != caller.department.id) forbidden("Team belongs to another department")
+        val callerDepartmentId = caller.department?.id
+        if (callerDepartmentId == null || team.department.id != callerDepartmentId) forbidden("Team belongs to another department")
         val project = projects.findById(dto.projectId).orElseThrow { badRequest("Unknown project") }
         if (!project.active || team.projects.none { it.id == project.id }) badRequest("Project is not active or assigned to the team")
 
@@ -431,7 +432,7 @@ class ResourceRequestService(
         val request = requestRepository.findForUpdateById(requestId) ?: throw ResourceNotFoundException("Request not found")
         val oldManager = request.assignedManagerId
         val manager = users.findById(managerId).orElseThrow { badRequest("Manager not found") }
-        if (!manager.active || manager.role != Role.DEPARTMENT_MANAGER || manager.department.id != request.departmentId) badRequest("Manager must be active and belong to the request department")
+        if (!manager.active || manager.role != Role.DEPARTMENT_MANAGER || manager.department?.id != request.departmentId) badRequest("Manager must be active and belong to the request department")
         request.assignedManagerId = manager.id
         request.needsReassignment = false
         val saved = requestRepository.saveAndFlush(request)
