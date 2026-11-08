@@ -1,0 +1,2 @@
+ALTER TABLE teams
+    ADD COLUMN description VARCHAR(500) NULL;

@@ -586,6 +586,7 @@ class ResourceRequestService(
                 RequestLineItemResponseDto(
                     lineItemId = requireNotNull(line.lineItemId),
                     quantity = line.quantity,
+                    approvedQuantity = line.approvedQuantity,
                     type = ResourceType.valueOf(line.fulfillmentPreference),
                     requestedDurationDays = line.requestedDurationDays,
                     approvedDurationDays = line.approvedDurationDays,

@@ -45,7 +45,7 @@ class TeamService(
         val teamProjects = activeProjects(req.projectIds)
 
         val saved = teams.save(
-            Team(name = name, department = dept, manager = manager, projects = teamProjects.toMutableSet())
+            Team(name = name, description = req.description?.trim()?.takeIf { it.isNotEmpty() }, department = dept, manager = manager, projects = teamProjects.toMutableSet())
         )
         audit.record(
             AuditRecord.currentActor(
@@ -53,7 +53,7 @@ class TeamService(
                 "TEAM",
                 saved.id.toString(),
                 newState = snapshot(saved),
-                changedFields = listOf("name", "departmentId", "managerId", "projectIds", "isActive"),
+                changedFields = listOf("name", "description", "departmentId", "managerId", "projectIds", "isActive"),
             ),
         )
         return saved.toResponse()

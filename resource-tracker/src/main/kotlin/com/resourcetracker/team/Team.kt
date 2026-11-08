@@ -17,6 +17,9 @@ class Team(
     @Column(name = "team_name", nullable = false, length = 100)
     var name: String,
 
+    @Column(name = "description", length = 500)
+    var description: String? = null,
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "department_id")
     var department: Department,
