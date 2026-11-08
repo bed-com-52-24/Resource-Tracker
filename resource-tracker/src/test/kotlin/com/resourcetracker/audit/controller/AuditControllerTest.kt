@@ -1,5 +1,6 @@
-package com.resourcetracker.request.controller
+package com.resourcetracker.audit.controller
 
+import com.resourcetracker.audit.controller.AuditController
 import com.resourcetracker.request.dto.RequestHistoryResponseDto
 import com.resourcetracker.request.service.AuditRetrievalService
 import com.resourcetracker.security.AuthenticatedUser

@@ -1,7 +1,9 @@
-package com.resourcetracker.request.controller
+package com.resourcetracker.audit.controller
 
+import com.resourcetracker.audit.AuditEntryQueryService
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.request.service.AuditRetrievalService
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
@@ -27,23 +29,23 @@ import java.time.LocalDate
 @RestController
 @Validated
 @RequestMapping("/api/v1/audit")
-@Tag(name = "Audit", description = "Read-only retrieval of request audit history")
+@Tag(name = "Audit", description = "Read-only retrieval of audit history")
 @SecurityRequirement(name = "bearerAuth")
 class AuditController(
     private val audit: AuditRetrievalService,
-    private val auditEntries: com.resourcetracker.audit.AuditEntryQueryService,
+    private val auditEntries: AuditEntryQueryService,
 ) {
     @GetMapping("/actors/{actorId}")
     @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "Retrieve audit history by actor",
-        description = "Managing Director and Admin only. Defaults to the last 30 days; date ranges may not exceed one year.",
+        description = "Admin only. Defaults to the last 30 days; date ranges may not exceed one year.",
     )
     @ApiResponses(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Invalid date range or actor ID", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "403", description = "Managing Director or Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
     fun byActor(
@@ -53,13 +55,13 @@ class AuditController(
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = audit.byActor(
+    ) = PagedResponse.from(audit.byActor(
         actorId,
         caller.role,
         from,
         to,
         pageable(page, size),
-    )
+    ))
 
     @GetMapping("/items/{itemType}/{itemId}")
     @RequiresRoles(Role.ADMIN)
@@ -84,13 +86,13 @@ class AuditController(
     @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "Retrieve audit history by action and date range",
-        description = "Managing Director and Admin only. Filter by one or more event types and inclusive from/to dates. The range may not exceed one year.",
+        description = "Admin only. Filter by one or more event types and inclusive from/to dates. The range may not exceed one year.",
     )
     @ApiResponses(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Missing actions or dates, or invalid date range", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "403", description = "Managing Director or Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
     fun byActions(
@@ -101,19 +103,19 @@ class AuditController(
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = audit.byActions(actions, caller.role, from, to, pageable(page, size))
+    ) = PagedResponse.from(audit.byActions(actions, caller.role, from, to, pageable(page, size)))
 
     @GetMapping("/entries")
     @RequiresRoles(Role.ADMIN)
     @Operation(
         summary = "List general audit entries",
-        description = "Admin and Managing Director only. Filter by actor, action, item, and an inclusive ISO-8601 timestamp range.",
+        description = "Admin only. Filter by actor, action, item, and an inclusive ISO-8601 timestamp range.",
     )
     @ApiResponses(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-            ApiResponse(responseCode = "403", description = "Admin or Managing Director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
     fun entries(
@@ -127,7 +129,7 @@ class AuditController(
         @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) to: java.time.Instant?,
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) size: Int,
-    ) = auditEntries.list(actorId, action, itemType, itemId, from, to, page, size)
+    ) = PagedResponse.from(auditEntries.list(actorId, action, itemType, itemId, from, to, page, size))
 
     private fun pageable(page: Int, size: Int) = ListQuery.pageable(
         page,

@@ -20,7 +20,6 @@ data class TeamRequest(
 
 data class UpdateTeamRequest(
     @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
-    @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String? = null,
 
     @field:Schema(description = "Optional department ID. Null or omitted preserves the current department.")
@@ -64,6 +63,16 @@ data class TeamMemberResponse(
     val role: com.resourcetracker.user.Role,
     val active: Boolean,
     val teams: List<com.resourcetracker.common.TeamReference>,
+)
+
+data class TeamMemberHistoryResponse(
+    val id: Int,
+    val user: UserReference,
+    val fromTeam: com.resourcetracker.common.TeamReference?,
+    val toTeam: com.resourcetracker.common.TeamReference?,
+    val action: TeamMemberAction,
+    val performedBy: UserReference,
+    val createdAt: java.time.Instant,
 )
 
 fun Team.toResponse() = TeamResponse(

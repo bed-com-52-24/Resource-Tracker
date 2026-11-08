@@ -98,30 +98,6 @@ class UserService(
     }
 
     @Transactional
-    fun assignDepartment(id: Int, departmentId: Int): UserResponse {
-        val user = find(id)
-        if (user.role != Role.DEPARTMENT_MANAGER) {
-            throw BusinessRuleException("Only Department Managers can be assigned to a department")
-        }
-        val department = activeDepartment(departmentId)
-        val before = snapshot(user)
-        user.department = department
-        val saved = users.saveAndFlush(user)
-        val after = snapshot(saved)
-        audit.record(
-            AuditRecord.currentActor(
-                AuditAction.USER_UPDATED,
-                "USER",
-                saved.id.toString(),
-                previousState = before,
-                newState = after,
-                changedFields = listOf("departmentId"),
-            ),
-        )
-        return saved.toResponse()
-    }
-
-    @Transactional
     fun update(id: Int, request: UpdateUserRequest): UserResponse {
         val user = find(id)
         val before = snapshot(user)

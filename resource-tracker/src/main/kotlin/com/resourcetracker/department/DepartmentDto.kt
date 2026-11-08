@@ -3,6 +3,7 @@ package com.resourcetracker.department
 import com.resourcetracker.common.UserReference
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import jakarta.validation.constraints.Min
 import io.swagger.v3.oas.annotations.media.Schema
 
 data class DepartmentRequest(
@@ -28,8 +29,10 @@ data class DepartmentResponse(
 )
 
 data class UpdateDepartmentRequest(
-    @field:Schema(description = "Optional department name. Null or omitted preserves the current name.")
-    @field:NotBlank(message = "Department name is required")
+    @field:Schema(description = "Optional department name. Null or omitted preserves the current name.",
+        nullable = true
+    )
+    //@field:NotBlank(message = "Department name is required")
     @field:Size(min = 2, max = 100, message = "Department name must be 2 to 100 characters")
     val name: String? = null,
 
@@ -42,4 +45,13 @@ data class UpdateDepartmentRequest(
         nullable = true
     )
     val active: Boolean? = null,
-)
+
+    @field:Schema(
+        description = "Optional. ID of an active Department Manager to assign to this department." +
+                "Any current manager is unassigned. Omit to leave the manager unchanged.",
+        nullable = true,
+        example = "2"
+    )
+    @field:Min(value = 1, message = "Manager ID must be positive")
+    val managerId: Int? = null,
+    )

@@ -79,6 +79,7 @@ class DepartmentService(
     fun update(id: Int, request: UpdateDepartmentRequest): DepartmentResponse {
         val department = findOrThrow(id)
         val before = snapshot(department)
+
         request.name?.let {
             val name = it.trim()
             if (!department.name.equals(name, ignoreCase = true) &&
@@ -90,6 +91,8 @@ class DepartmentService(
         }
         request.active?.let { applyActive(department, it) }
         request.description?.let { department.description = it }
+        request.managerId?.let {applyManager(department,it)}
+
         val saved = departmentRepository.save(department)
         val after = snapshot(saved)
         val changed = before.keys.filter { before[it] != after[it] }
@@ -97,6 +100,7 @@ class DepartmentService(
             val action = when {
                 "status" in changed && saved.status == "ACTIVE" -> AuditAction.DEPARTMENT_RESTORED
                 "status" in changed -> AuditAction.DEPARTMENT_ARCHIVED
+                "managerId" in changed -> AuditAction.DEPARTMENT_MANAGER_ASSIGNED
                 else -> AuditAction.DEPARTMENT_UPDATED
             }
             audit.record(
@@ -112,6 +116,38 @@ class DepartmentService(
         }
         return saved.toResponse()
     }
+
+    private fun applyManager(department: Department, managerId: Int){
+        if(department.status != "ACTIVE"){
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot assign a manager to an inactive department")
+        }
+
+        val manager = userRepository.findById(managerId).orElseThrow{
+            ResponseStatusException(HttpStatus.NOT_FOUND, "Cannot assign a manager with id $managerId")
+        }
+
+        if(manager.role != Role.DEPARTMENT_MANAGER){
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "User $managerId is not a Department Manager")
+        }
+
+        if(!manager.active){
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "User $managerId is not active")
+        }
+
+        if(manager.department?.id == department.id) return
+
+        val previous = userRepository
+            .findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, department.id)
+            .filter{ it.id != manager.id}
+        previous.forEach { it.department = null }
+
+        manager.department = department
+        userRepository.saveAll(previous + manager)
+    }
+
+    private fun currentManagerId(department: Department): Int? =
+            userRepository.findActiveByRoleAndDepartmentId(Role. DEPARTMENT_MANAGER, department.id)
+                .firstOrNull()?.id
 
     private fun applyActive(department: Department, active: Boolean) {
         val target = if (active) "ACTIVE" else "INACTIVE"
@@ -160,6 +196,7 @@ class DepartmentService(
         "name" to department.name,
         "description" to department.description,
         "status" to department.status,
+        "managerId" to currentManagerId(department),
     )
 
     private companion object {
