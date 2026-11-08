@@ -63,11 +63,7 @@ class UserService(
         }
 
         val userTeams = activeTeams(request.teamIds ?: emptySet())
-        val department = when {
-            request.role == Role.MANAGING_DIRECTOR -> managingDirectorDepartment()
-            request.departmentId == null -> null
-            else -> activeDepartment(request.departmentId)
-        }
+        val department = if (request.role == Role.MANAGING_DIRECTOR) null else request.departmentId?.let(::activeDepartment)
         val user = User(
             username = username,
             email = email,
@@ -184,6 +180,10 @@ class UserService(
         if (newRole == Role.MEMBER && user.teams.isEmpty()) {
             throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
         }
+        if (newRole == Role.MANAGING_DIRECTOR) {
+            user.department = null
+            user.teams.clear()
+        }
         user.role = newRole
     }
 
@@ -238,10 +238,6 @@ class UserService(
     private fun activeDepartment(id: Int) =
         departments.findById(id).orElseThrow { ResourceNotFoundException("Department $id not found") }
             .also { if (it.status != "ACTIVE") throw BusinessRuleException("Department $id is inactive") }
-
-    private fun managingDirectorDepartment(): Department =
-        departments.findByNameIgnoreCase("All Departments")
-            ?: departments.save(Department(name = "All Departments", description = "Cross-department oversight", status = "ACTIVE"))
 
     private fun activeTeams(ids: Set<Int>) =
         ids.map { teams.findById(it).orElseThrow { ResourceNotFoundException("Team $it not found") } }
