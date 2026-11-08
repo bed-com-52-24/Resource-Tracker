@@ -67,7 +67,14 @@ class UserService(
         val user = User(
             username = username,
             email = email,
-            fullName = null,
+            fullName = listOfNotNull(request.firstName.trim(), request.middleName?.trim()?.takeIf(String::isNotEmpty), request.lastName.trim()).joinToString(" "),
+            firstName = request.firstName.trim(),
+            lastName = request.lastName.trim(),
+            middleName = request.middleName?.trim()?.takeIf(String::isNotEmpty),
+            position = request.position?.trim()?.takeIf(String::isNotEmpty),
+            phone = request.phone?.trim()?.takeIf(String::isNotEmpty),
+            address = request.address?.trim()?.takeIf(String::isNotEmpty),
+            title = request.title?.trim()?.takeIf(String::isNotEmpty),
             passwordHash = null,
             role = request.role,
             department = department,
@@ -97,6 +104,17 @@ class UserService(
     fun update(id: Int, request: UpdateUserRequest): UserResponse {
         val user = find(id)
         val before = snapshot(user)
+
+        request.firstName?.let { user.firstName = it.trim() }
+        request.lastName?.let { user.lastName = it.trim() }
+        request.middleName?.let { user.middleName = it.trim().takeIf(String::isNotEmpty) }
+        request.position?.let { user.position = it.trim().takeIf(String::isNotEmpty) }
+        request.phone?.let { user.phone = it.trim().takeIf(String::isNotEmpty) }
+        request.address?.let { user.address = it.trim().takeIf(String::isNotEmpty) }
+        request.title?.let { user.title = it.trim().takeIf(String::isNotEmpty) }
+        if (request.firstName != null || request.lastName != null || request.middleName != null) {
+            user.fullName = listOfNotNull(user.firstName, user.middleName, user.lastName).joinToString(" ")
+        }
 
         request.role?.let { newRole ->
             if(newRole != user.role){
@@ -215,6 +233,8 @@ class UserService(
 
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName ?: username,
+        firstName = firstName, lastName = lastName, middleName = middleName,
+        position = position, phone = phone, address = address, title = title,
         role = role,
         department = department?.let { DepartmentReference(it.id, it.name) },
         teams = teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
@@ -226,6 +246,8 @@ class UserService(
         "username" to user.username,
         "email" to user.email,
         "fullName" to user.fullName,
+        "firstName" to user.firstName, "lastName" to user.lastName, "middleName" to user.middleName,
+        "position" to user.position, "phone" to user.phone, "address" to user.address, "title" to user.title,
         "role" to user.role.name,
         "departmentId" to user.department?.id,
         "teamIds" to user.teams.map { it.id }.sorted(),
