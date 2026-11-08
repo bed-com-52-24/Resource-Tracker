@@ -27,8 +27,8 @@ class ResourceRequest(
     @Column(name = "item_description", nullable = false, length = 255)
     var itemDescription: String = "",
 
-    @Column(name = "manufacturer", nullable = false, length = 150)
-    var manufacturer: String = "",
+    @Column(name = "manufacturer", length = 150)
+    var manufacturer: String? = null,
 
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     var unitPrice: BigDecimal = BigDecimal.ZERO,
