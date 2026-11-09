@@ -41,6 +41,13 @@ class User(
     @Column(nullable = false, unique = true, length = 50) var username: String,
     @Column(nullable = false, unique = true) var email: String,
     @Column(name = "full_name", length = 255) var fullName: String? = null,
+    @Column(name = "first_name", nullable = false, length = 100) var firstName: String = "",
+    @Column(name = "last_name", nullable = false, length = 100) var lastName: String = "",
+    @Column(name = "middle_name", length = 100) var middleName: String? = null,
+    @Column(name = "position", length = 150) var position: String? = null,
+    @Column(name = "phone", length = 30) var phone: String? = null,
+    @Column(name = "address", length = 500) var address: String? = null,
+    @Column(name = "title", length = 50) var title: String? = null,
     @Column(name = "password_hash", length = 255) var passwordHash: String? = null,
     @Enumerated(EnumType.STRING) @Column(nullable = false) var role: Role,
     @ManyToOne(fetch = FetchType.LAZY, optional = true)

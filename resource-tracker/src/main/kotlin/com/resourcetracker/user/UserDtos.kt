@@ -11,6 +11,13 @@ import io.swagger.v3.oas.annotations.media.Schema
 data class CreateUserRequest(
     @field:NotBlank @field:Size(min = 3, max = 50) @field:Schema(example = "jdoe") val username: String,
     @field:NotBlank @field:Email @field:Size(max = 150) @field:Schema(example = "jdoe@example.com") val email: String,
+    @field:NotBlank @field:Size(max = 100) @field:Schema(example = "Jane") val firstName: String,
+    @field:NotBlank @field:Size(max = 100) @field:Schema(example = "Doe") val lastName: String,
+    @field:Size(max = 100) val middleName: String? = null,
+    @field:Size(max = 150) val position: String? = null,
+    @field:Size(max = 30) val phone: String? = null,
+    @field:Size(max = 500) val address: String? = null,
+    @field:Size(max = 50) val title: String? = null,
     @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD, and ADMIN users; optional for DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
     val departmentId: Int? = null,
     @field:Schema(
@@ -24,6 +31,13 @@ data class CreateUserRequest(
 
 @Schema(description = "Role and account status fields that an administrator may update")
 data class UpdateUserRequest(
+    @field:Size(max = 100) val firstName: String? = null,
+    @field:Size(max = 100) val lastName: String? = null,
+    @field:Size(max = 100) val middleName: String? = null,
+    @field:Size(max = 150) val position: String? = null,
+    @field:Size(max = 30) val phone: String? = null,
+    @field:Size(max = 500) val address: String? = null,
+    @field:Size(max = 50) val title: String? = null,
     @field:Schema(description = "Set to false to deactivate the account (revokes refresh tokens). Null or omitted leaves the current value unchanged.", nullable = true)
     val active: Boolean? = null,
     @field:Schema(description = "New role. Optional; requires Admin. Omit to leave the role unchanged.", nullable = true)
@@ -56,6 +70,13 @@ data class UserResponse(
     val username: String,
     val email: String,
     val fullName: String,
+    val firstName: String,
+    val lastName: String,
+    val middleName: String?,
+    val position: String?,
+    val phone: String?,
+    val address: String?,
+    val title: String?,
     val role: Role,
     val department: DepartmentReference?,
     val teams: List<TeamReference>,
