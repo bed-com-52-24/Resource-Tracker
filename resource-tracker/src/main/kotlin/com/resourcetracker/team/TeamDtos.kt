@@ -8,6 +8,10 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 
 data class TeamRequest(
+    @field:Schema(description = "Optional description of the team", example = "Handles customer support operations", nullable = true)
+    @field:Size(max = 500)
+    val description: String? = null,
+
     @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String,
 
@@ -20,7 +24,6 @@ data class TeamRequest(
 
 data class UpdateTeamRequest(
     @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
-    @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String? = null,
 
     @field:Schema(description = "Optional department ID. Null or omitted preserves the current department.")
@@ -42,6 +45,7 @@ data class UpdateTeamRequest(
 data class TeamResponse(
     val id: Int,
     val name: String,
+    val description: String?,
     val department: DepartmentReference,
     val manager: UserReference?,
     val projects: List<ProjectReference>,
@@ -66,9 +70,20 @@ data class TeamMemberResponse(
     val teams: List<com.resourcetracker.common.TeamReference>,
 )
 
+data class TeamMemberHistoryResponse(
+    val id: Int,
+    val user: UserReference,
+    val fromTeam: com.resourcetracker.common.TeamReference?,
+    val toTeam: com.resourcetracker.common.TeamReference?,
+    val action: TeamMemberAction,
+    val performedBy: UserReference,
+    val createdAt: java.time.Instant,
+)
+
 fun Team.toResponse() = TeamResponse(
     id = id,
     name = name,
+    description = description,
     department = DepartmentReference(department.id, department.name),
     manager = manager?.let { UserReference(it.id, it.fullName ?: it.username) },
     projects = projects.map { ProjectReference(it.id, it.name, it.code) }.sortedBy { it.name },

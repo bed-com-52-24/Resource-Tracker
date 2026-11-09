@@ -1,0 +1,1 @@
+ALTER TABLE users MODIFY COLUMN department_id INT NULL;

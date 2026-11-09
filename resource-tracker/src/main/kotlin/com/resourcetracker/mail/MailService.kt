@@ -2,7 +2,6 @@ package com.resourcetracker.mail
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.context.annotation.Profile
 import org.springframework.mail.MailException
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
@@ -16,7 +15,6 @@ interface MailService {
 }
 
 @Service
-@Profile("!dev")
 class SmtpMailService(
     private val sender: JavaMailSender,
     @Value("\${app.mail.from}") private val from: String,
@@ -42,16 +40,6 @@ Regards,
 Resource Tracker Support
 """.trimIndent()
         sender.send(message)
-    }
-}
-
-@Service
-@Profile("dev")
-class ConsoleMailService : MailService {
-    private val log = LoggerFactory.getLogger(javaClass)
-
-    override fun sendPasswordCode(email: String, username: String, code: String) {
-        log.info("DEV ONLY: password setup/reset code for {} ({}): {}", username, email, code)
     }
 }
 

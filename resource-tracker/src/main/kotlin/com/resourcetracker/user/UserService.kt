@@ -6,6 +6,7 @@ import com.resourcetracker.auth.RefreshTokenRepository
 import com.resourcetracker.auth.PasswordTokenPurpose
 import com.resourcetracker.auth.PasswordTokenRepository
 import com.resourcetracker.auth.PasswordTokenService
+import com.resourcetracker.department.Department
 import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.common.DuplicateResourceException
@@ -20,7 +21,6 @@ import org.springframework.data.domain.Pageable
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-
 @Service
 class UserService(
     private val users: UserRepository,
@@ -32,7 +32,7 @@ class UserService(
     private val passwordTokenService: PasswordTokenService,
 ) {
     companion object {
-        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN)
+        val ASSIGNABLE_ROLES = setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
 
         private val SORTABLE = setOf("username", "email", "fullName", "role", "department", "active")
         private const val MAX_PAGE_SIZE = 100
@@ -55,15 +55,22 @@ class UserService(
         if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
             throw BusinessRuleException("${request.role} users must be assigned to at least one team")
         }
+        if (request.role !in setOf(Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR) && request.departmentId == null) {
+            throw BusinessRuleException("${request.role} users require a department")
+        }
+        if (request.role == Role.MANAGING_DIRECTOR && request.teamIds?.isNotEmpty() == true) {
+            throw BusinessRuleException("Managing directors are not assigned to teams")
+        }
 
         val userTeams = activeTeams(request.teamIds ?: emptySet())
+        val department = if (request.role == Role.MANAGING_DIRECTOR) null else request.departmentId?.let(::activeDepartment)
         val user = User(
             username = username,
             email = email,
             fullName = null,
             passwordHash = null,
             role = request.role,
-            department = activeDepartment(request.departmentId),
+            department = department,
             teams = userTeams,
         )
         requireMemberHasTeam(user)
@@ -173,6 +180,10 @@ class UserService(
         if (newRole == Role.MEMBER && user.teams.isEmpty()) {
             throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
         }
+        if (newRole == Role.MANAGING_DIRECTOR) {
+            user.department = null
+            user.teams.clear()
+        }
         user.role = newRole
     }
 
@@ -205,7 +216,7 @@ class UserService(
     private fun User.toResponse() = UserResponse(
         id = id, username = username, email = email, fullName = fullName ?: username,
         role = role,
-        department = DepartmentReference(department.id, department.name),
+        department = department?.let { DepartmentReference(it.id, it.name) },
         teams = teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
         active = active,
         passwordSet = passwordHash != null,
@@ -216,7 +227,7 @@ class UserService(
         "email" to user.email,
         "fullName" to user.fullName,
         "role" to user.role.name,
-        "departmentId" to user.department.id,
+        "departmentId" to user.department?.id,
         "teamIds" to user.teams.map { it.id }.sorted(),
         "active" to user.active,
     )

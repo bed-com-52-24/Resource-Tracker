@@ -2,6 +2,7 @@ package com.resourcetracker.request.controller
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.request.dto.*
 import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.request.entity.RequestStatus
@@ -63,14 +64,8 @@ class ResourceRequestController(
                                   "lineItems": [
                                     {
                                       "resourceId": 7,
-                                      "description": "",
-                                      "manufacturer": "N/A",
-                                      "unitPrice": 0,
                                       "quantity": 4,
-                                      "category": "OTHER",
-                                      "batchNumber": null,
-                                      "unitOfMeasure": "unit",
-                                      "fulfillmentPreference": "INTERNAL"
+                                      "requestedDurationDays": 30
                                     }
                                   ]
                                 }
@@ -115,27 +110,110 @@ class ResourceRequestController(
     fun create(@Valid @RequestBody dto: CreateResourceRequestDto, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.createRequest(dto, caller.id)
 
-    @PostMapping("/api/v1/requests/{id}/decision")
+    @PostMapping("/api/v1/requests/{id}/issues")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Issue reserved stock for a request line")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "201", description = "Stock issued"),
+        ApiResponse(responseCode = "400", description = "Invalid issue quantity or non-internal line"),
+        ApiResponse(responseCode = "403", description = "Assigned department manager role required"),
+        ApiResponse(responseCode = "404", description = "Request or line item not found"),
+        ApiResponse(responseCode = "409", description = "Request is not issuable, stock is not reserved/available, or quantity exceeds the approved balance"),
+    ])
+    fun issueStock(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody dto: StockIssueRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.issue(id, caller.id, dto)
+
+    @GetMapping("/api/v1/requests/{id}/issues")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "List issued stock, due dates, and extension history for a request")
+    fun listIssuedStock(
+        @PathVariable @Min(1) id: Int,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.listIssues(id, caller.id)
+
+    @PutMapping("/api/v1/requests/{id}/issue")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
     @Operation(
-        summary = "Query, approve, reject, or waitlist a request",
-        description = "WAITLIST approves the request into the FIFO waitlist; all request lines must be internal resources.",
+        summary = "Submit or decide an issued-item return or due-date extension",
+        description = """
+            One role-scoped workflow for an issue belonging to the request in {id}. Select one action and send only its fields:
+
+            | action | caller | required fields | effect/status transition |
+            | SUBMIT_RETURN | TEAM_LEAD belonging to the issue's team | issueId, quantity; optional note | creates a PENDING return; inventory is unchanged |
+            | VERIFY_RETURN | department manager assigned to the request | issueId, returnId, condition; optional quantity/note | PENDING return becomes VERIFIED; accepted quantity updates inventory according to condition |
+            | REQUEST_EXTENSION | TEAM_LEAD belonging to the issue's team | issueId, newExpectedReturnDate, reason | creates a PENDING extension |
+            | DECIDE_EXTENSION | department manager assigned to the request | issueId, extensionId, decision; REJECT requires comment | PENDING extension becomes APPROVED or REJECTED; approval updates the issue due date |
+
+            Do not send a status value: the server controls these transitions. Issue fulfillment status is derived as NOT_STARTED, RESERVED, PARTIALLY_ISSUED, ISSUED, PARTIALLY_RETURNED, or RETURNED from reservation, issue, and verified return quantities. Use GET /api/v1/requests/{id}/issues to review issue, return, and extension records and obtain their IDs before calling this endpoint.
+        """,
+        requestBody = OpenApiRequestBody(
+            required = true,
+            content = [Content(mediaType = "application/json", schema = Schema(implementation = IssueWorkflowRequest::class), examples = [
+                ExampleObject(name = "Submit return", summary = "Team lead submits a return", value = """
+                    {"action":"SUBMIT_RETURN","issueId":21,"quantity":2,"note":"Returning two units"}
+                """),
+                ExampleObject(name = "Verify return", summary = "Assigned department manager verifies a return", value = """
+                    {"action":"VERIFY_RETURN","issueId":21,"returnId":31,"condition":"USABLE","quantity":2,"note":"Inspected and usable"}
+                """),
+                ExampleObject(name = "Request extension", summary = "Team lead requests a later due date", value = """
+                    {"action":"REQUEST_EXTENSION","issueId":21,"newExpectedReturnDate":"2026-12-01","reason":"Project requires the equipment for two more weeks"}
+                """),
+                ExampleObject(name = "Decide extension", summary = "Assigned department manager approves or rejects an extension", value = """
+                    {"action":"DECIDE_EXTENSION","issueId":21,"extensionId":42,"decision":"APPROVE","comment":"Approved"}
+                """),
+            ])],
+        ),
     )
     @ApiResponses(value = [
-        ApiResponse(responseCode = "409", description = "Request cannot transition to the selected decision or cannot be waitlisted"),
+        ApiResponse(responseCode = "200", description = "Workflow action completed"),
+        ApiResponse(responseCode = "400", description = "Required action fields are missing or invalid"),
+        ApiResponse(responseCode = "403", description = "Role, team membership, or assigned-manager check failed"),
+        ApiResponse(responseCode = "404", description = "Request, issue, return, or extension was not found"),
+        ApiResponse(responseCode = "409", description = "Return quantity, issue state, or extension state does not allow this action"),
     ])
-    fun decide(
+    fun updateIssueWorkflow(
         @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody dto: RequestDecisionDto,
+        @Valid @RequestBody request: IssueWorkflowRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.decide(id, serviceUser(caller), dto)
+    ) = stockOperations.processIssueWorkflow(id, caller.id, request)
 
     @PutMapping("/api/v1/requests/{id}")
-    @RequiresRoles(Role.TEAM_LEAD)
-    @Operation(summary = "Clarify or cancel an owned request")
+    @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
+    @Operation(
+        summary = "Edit a request or make its manager decision",
+        description = "Role-scoped request update. TEAM_LEAD may set status to PENDING (clarify a queried request) or CANCELLED, provide comment, and optionally replace lineItems while the request is QUERIED. A clarification requires comment; lineItems are editable only when queried. DEPARTMENT_MANAGER may set status to QUERIED, APPROVED, REJECTED, or WAITLISTED and provide commentApproval and approvedQuantities. Managers cannot send comment or lineItems; team leads cannot send manager fields. QUERY and REJECT require commentApproval. WAITLISTED is only valid for internal resource lines. On an already APPROVED request, approvedQuantities changes approved amounts; on an already WAITLISTED request, it waives outstanding quantities. Each quantity change requires commentApproval. expectedFulfillmentDate may accompany an approvedQuantities entry.",
+        requestBody = OpenApiRequestBody(
+            required = true,
+            content = [Content(mediaType = "application/json", schema = Schema(implementation = UpdateRequestDto::class), examples = [
+                ExampleObject(name = "Team lead clarification", summary = "Team lead responds to a query and edits lines", value = """
+                    {"status":"PENDING","comment":"Updated requested quantities","lineItems":[{"resourceId":7,"quantity":4,"requestedDurationDays":30}]}
+                """),
+                ExampleObject(name = "Team lead cancellation", summary = "Team lead cancels a pending or queried request", value = """
+                    {"status":"CANCELLED","comment":"The team no longer needs these items"}
+                """),
+                ExampleObject(name = "Manager decision", summary = "Department manager approves with per-line quantities", value = """
+                    {"status":"APPROVED","commentApproval":"Approved for the project","approvedQuantities":[{"lineItemId":12,"quantity":4,"expectedFulfillmentDate":"2026-11-20","approvedDurationDays":21}]}
+                """),
+                ExampleObject(name = "Manager query", summary = "Department manager asks the team lead to clarify", value = """
+                    {"status":"QUERIED","commentApproval":"Please explain why four units are needed"}
+                """),
+            ])],
+        ),
+    )
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Request updated or decision applied"),
+        ApiResponse(responseCode = "400", description = "Invalid status, missing comment, or invalid line quantities"),
+        ApiResponse(responseCode = "403", description = "Caller role or request ownership/assignment check failed"),
+        ApiResponse(responseCode = "404", description = "Request or line item was not found"),
+        ApiResponse(responseCode = "409", description = "Request cannot make the requested transition"),
+    ])
     fun edit(
         @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody dto: UpdateResourceRequestDto,
+        @Valid @RequestBody dto: UpdateRequestDto,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = service.updateRequest(id, serviceUser(caller), dto)
 
@@ -161,7 +239,7 @@ class ResourceRequestController(
         @RequestParam(required = false) from: LocalDate?,
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.list(
+    ) = PagedResponse.from(service.list(
         serviceUser(caller), status, teamId, projectId, assignedManagerId,
         needsReassignment, from, to, search,
         ListQuery.pageable(
@@ -169,7 +247,7 @@ class ResourceRequestController(
             setOf("createdAt", "requestNumber", "status", "requiredDate", "totalAmount"),
             "createdAt",
         ),
-    )
+    ))
 
     @GetMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
@@ -198,51 +276,7 @@ class ResourceRequestController(
     fun history(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.history(id, serviceUser(caller))
 
-    @PutMapping("/api/v1/requests/{id}/manager")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Assign or reassign a department manager")
-    fun reassign(
-        @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody dto: ManagerReassignmentDto,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = service.reassign(id, serviceUser(caller), dto.managerId)
-
-    @PutMapping("/api/v1/returns/{returnId}")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Verify a resource return")
-    fun verifyReturn(
-        @PathVariable @Min(1) returnId: Int,
-        @Valid @RequestBody request: VerifyReturnRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.verifyReturn(returnId, caller.id, request)
-
-    @GetMapping("/api/v1/procurements")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
-    fun procurements(
-        @Parameter(description = "Search associated request numbers", example = "REQ-2026")
-        @RequestParam(required = false) search: String?,
-        @Parameter(description = "Zero-based page number", example = "0")
-        @RequestParam(defaultValue = "0") @Min(0) page: Int,
-        @Parameter(description = "Page size, from 1 to 100", example = "20")
-        @RequestParam(defaultValue = "20") @Min(1) size: Int,
-        @Parameter(description = "Sort field: id, requestId, lineItemId, vendorId, estimatedCost, expectedDelivery, status, or receivedQuantity", example = "id")
-        @RequestParam(defaultValue = "id") sort: String,
-        @Parameter(description = "Sort direction: asc or desc", example = "desc")
-        @RequestParam(defaultValue = "desc") direction: String,
-        @Parameter(description = "Filter by procurement status", example = "ORDERED")
-        @RequestParam(required = false) status: ProcurementStatus?,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = procurementService.list(caller.id, status, search, page, size, sort, direction)
-
-    @PutMapping("/api/v1/procurements/{id}")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Update a procurement")
-    fun updateProcurement(
-        @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody request: UpdateProcurementRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = procurementService.update(id, caller.id, request)
+    // Procurement management is exposed by ProcurementController (/api/v1/resources/procurements)
 
     private fun serviceUser(caller: AuthenticatedUser) = service.loadUser(caller.id)
 }

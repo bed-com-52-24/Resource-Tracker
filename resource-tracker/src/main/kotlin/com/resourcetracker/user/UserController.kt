@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController
 @Validated
 @RestController
 @RequestMapping("/api/v1/users")
-@RequiresRoles(Role.ADMIN)
+@RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR)
 @Tag(name = "Users", description = "Create and manage Resource Tracker user accounts")
 @SecurityRequirement(name = "bearerAuth")
 class UserController(private val users: UserService) {

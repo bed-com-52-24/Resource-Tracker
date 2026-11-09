@@ -52,13 +52,13 @@ class DevDataSeeder(
 
     override fun run(args: ApplicationArguments) {
         seedUser()
-        seedDepartments()
-        seedVendors()
-        seedProjects()
-        seedManagers()   // teams need an active DEPARTMENT_MANAGER, so these come first
-        seedTeams()
-        seedTeamUsers()  // MEMBER and TEAM_LEAD users need at least one team, so these come last
-        seedResources()
+        //seedDepartments()
+        //seedVendors()
+        //seedProjects()
+        //seedManagers()   // teams need an active DEPARTMENT_MANAGER, so these come first
+        //seedTeams()
+        //seedTeamUsers()  // MEMBER and TEAM_LEAD users need at least one team, so these come last
+        //seedResources()
         log.info("Dev seed data ready. Log in as 'admin' / 'Admin@2026', or any other seeded user / '$DEV_PASSWORD'.")
     }
 

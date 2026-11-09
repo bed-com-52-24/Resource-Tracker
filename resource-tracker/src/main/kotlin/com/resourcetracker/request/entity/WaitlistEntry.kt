@@ -6,7 +6,7 @@ import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-enum class WaitlistStatus { WAITING, FULFILLABLE, FULFILLED, CANCELLED }
+enum class WaitlistStatus { WAITING, FULFILLABLE, FULFILLED, CANCELLED, WAIVED }
 
 /** Who performed an audited action. SYSTEM = no human user (automatic fulfilment). */
 enum class ActorType { USER, SYSTEM }

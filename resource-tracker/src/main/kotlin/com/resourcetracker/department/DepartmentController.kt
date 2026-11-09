@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.*
 class DepartmentController(private val departmentService: DepartmentService) {
 
     @PostMapping
-    @RequiresRoles(Role.ADMIN)
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a department", description = "Create a new active department.")
     @ApiResponses(value = [
@@ -71,7 +71,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     ))
 
     @GetMapping("/{id}")
-    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a department", description = "Return a department by its numeric identifier.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
@@ -82,16 +82,15 @@ class DepartmentController(private val departmentService: DepartmentService) {
     fun get(@PathVariable id: Int) = departmentService.getById(id)
 
     @PutMapping("/{id}")
-    @RequiresRoles(Role.ADMIN)
-    @Operation(summary = "Update a department", description = "All fields are optional; null or omitted fields preserve their current values. Updates name and description. If `active` is false, the department is deactivated; " +
-        "if true, it is reactivated. Omit `active` to leave the status unchanged."
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Update a department", description = "All fields are optional; null or omitted fields preserve their current values. Updates name, description, status, and manager. If `active` is false the department is deactivated, if true it is reactivated. If `managerId` is supplied, that active Department Manager becomes the department's manager and any previous manager is unassigned."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Department updated", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
-        ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid request body, user is not active Department Manager, or department is inactive", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Department not found or manager user not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Name already exists, or department is in use and cannot be deactivated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun update(@PathVariable id: Int, @Valid @RequestBody request: UpdateDepartmentRequest) =

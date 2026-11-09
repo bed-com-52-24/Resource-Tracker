@@ -4,10 +4,10 @@ import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.request.entity.FulfillmentPreference
+import java.time.LocalDate
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.server.ResponseStatusException
-
 @Component
 class ExternalBudgetHandler(
     private val budget: BudgetPort,
@@ -18,25 +18,26 @@ class ExternalBudgetHandler(
 
         val departmentId = budget.departmentOfRequest(decision.requestId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request ${decision.requestId} not found")
-        val before = budget.status(departmentId)
+        val date = budget.requestDateOfRequest(decision.requestId) ?: LocalDate.now()
+        val before = budget.status(departmentId, date)
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Department $departmentId has no budget set up")
         val lineId = requireNotNull(decision.line.lineItemId)
         val cost = budget.lineCost(lineId)
         val overrideComment = decision.comment?.trim().orEmpty()
 
-        if (budget.tryCommit(departmentId, cost)) {
+        if (budget.tryCommit(departmentId, date, cost)) {
             audit(decision, departmentId, AuditAction.BUDGET_COMMITTED, committedComment(lineId, before, cost))
             return
         }
 
-        if (overrideComment.isEmpty()) {
+        if (overrideComment.isEmpty() || overrideComment.length < 10) {
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
-                "Approval exceeds the department budget: cost $cost, remaining ${before.remaining}. Add a comment to override.",
+                "Approval exceeds the department budget: cost $cost, remaining ${before.remaining}. Add a comment of at least 10 characters to override.",
             )
         }
 
-        budget.forceCommit(departmentId, cost)
+        budget.forceCommit(departmentId, date, cost)
         audit(decision, departmentId, AuditAction.BUDGET_COMMITTED, committedComment(lineId, before, cost))
         audit(
             decision,

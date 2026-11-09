@@ -43,9 +43,9 @@ class User(
     @Column(name = "full_name", length = 255) var fullName: String? = null,
     @Column(name = "password_hash", length = 255) var passwordHash: String? = null,
     @Enumerated(EnumType.STRING) @Column(nullable = false) var role: Role,
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "department_id", nullable = false)
-    var department: Department,
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "department_id", nullable = true)
+    var department: Department?,
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "user_teams",

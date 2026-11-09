@@ -45,7 +45,7 @@ class TeamService(
         val teamProjects = activeProjects(req.projectIds)
 
         val saved = teams.save(
-            Team(name = name, department = dept, manager = manager, projects = teamProjects.toMutableSet())
+            Team(name = name, description = req.description?.trim()?.takeIf { it.isNotEmpty() }, department = dept, manager = manager, projects = teamProjects.toMutableSet())
         )
         audit.record(
             AuditRecord.currentActor(
@@ -53,7 +53,7 @@ class TeamService(
                 "TEAM",
                 saved.id.toString(),
                 newState = snapshot(saved),
-                changedFields = listOf("name", "departmentId", "managerId", "projectIds", "isActive"),
+                changedFields = listOf("name", "description", "departmentId", "managerId", "projectIds", "isActive"),
             ),
         )
         return saved.toResponse()
@@ -182,10 +182,20 @@ class TeamService(
     }
 
     @Transactional(readOnly = true)
-    fun history(teamId: Int): List<TeamMemberHistory> {
+    fun history(teamId: Int): List<TeamMemberHistoryResponse> {
         val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
         if (!team.isActive) throw BusinessRuleException("Team is inactive")
-        return memberHistory.findHistoryForTeam(teamId)
+        return memberHistory.findHistoryForTeam(teamId).map { history ->
+            TeamMemberHistoryResponse(
+                id = history.id,
+                user = com.resourcetracker.common.UserReference(history.user.id, history.user.fullName ?: history.user.username),
+                fromTeam = history.fromTeam?.let { com.resourcetracker.common.TeamReference(it.id, it.name) },
+                toTeam = history.toTeam?.let { com.resourcetracker.common.TeamReference(it.id, it.name) },
+                action = history.action,
+                performedBy = com.resourcetracker.common.UserReference(history.performedBy.id, history.performedBy.fullName ?: history.performedBy.username),
+                createdAt = history.createdAt,
+            )
+        }
     }
 
     private fun currentActor(): User {

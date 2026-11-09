@@ -90,6 +90,12 @@ class NotificationService(
             NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
             NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
             NotificationType.OVERDUE_RETURN -> "An overdue return needs attention${if (resource != null) " for $resource" else ""}."
+            NotificationType.RETURN_DUE_7_DAYS -> "A resource issued for request ${payload["requestNumber"] ?: requestId ?: "unknown"} is due in 7 days (${payload["expectedReturnDate"] ?: "date unknown"})."
+            NotificationType.RETURN_DUE_2_DAYS -> "A resource issued for request ${payload["requestNumber"] ?: requestId ?: "unknown"} is due in 2 days (${payload["expectedReturnDate"] ?: "date unknown"})."
+            NotificationType.RETURN_DUE_TODAY -> "A resource issued for request ${payload["requestNumber"] ?: requestId ?: "unknown"} is due today (${payload["expectedReturnDate"] ?: "date unknown"})."
+            NotificationType.RETURN_EXTENSION_REQUESTED -> "A return-date extension to ${payload["requestedReturnDate"] ?: "an unspecified date"} was requested for issue ${payload["issueId"] ?: "unknown"} on request ${payload["requestNumber"] ?: requestId ?: "unknown"}."
+            NotificationType.RETURN_EXTENSION_APPROVED -> "The return-date extension to ${payload["requestedReturnDate"] ?: "the requested date"} for issue ${payload["issueId"] ?: "unknown"} on request ${payload["requestNumber"] ?: requestId ?: "unknown"} was approved."
+            NotificationType.RETURN_EXTENSION_REJECTED -> "The return-date extension for issue ${payload["issueId"] ?: "unknown"} on request ${payload["requestNumber"] ?: requestId ?: "unknown"} was rejected."
             NotificationType.PROCUREMENT -> "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."
             NotificationType.REASSIGNMENT_REQUIRED -> payload["message"]?.toString()
                 ?: "Request ${requestId ?: "unknown"} needs manager reassignment."

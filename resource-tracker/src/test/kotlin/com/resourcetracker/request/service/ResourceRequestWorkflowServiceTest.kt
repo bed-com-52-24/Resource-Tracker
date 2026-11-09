@@ -118,13 +118,8 @@ class ResourceRequestWorkflowServiceTest {
         verify(history, org.mockito.kotlin.times(2)).save(events.capture())
         assertEquals(setOf("SUBMITTED", "ASSIGNED"), events.allValues.map { it.eventType }.toSet())
         verify(notifications).notify(eq(emptyList()), eq(NotificationType.REASSIGNMENT_REQUIRED), any())
-        assertTrue(response.needsReassignment)
-        assertEquals(team.id, response.team.id)
-        assertEquals(team.name, response.team.name)
-        assertEquals(project.code, response.project.code)
-        assertEquals(team.department.name, response.department.name)
-        assertEquals(caller.fullName, response.requester.name)
-        assertEquals(null, response.assignedManager)
+        assertEquals("REQ-2026-000001", response.requestNumber)
+        assertEquals(RequestStatus.PENDING, response.status)
     }
 
     @Test

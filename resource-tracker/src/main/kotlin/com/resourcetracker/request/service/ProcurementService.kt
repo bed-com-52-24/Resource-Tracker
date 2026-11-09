@@ -59,6 +59,11 @@ class ProcurementService(
     }
 
     @Transactional(readOnly = true)
+    fun acceptedQuantity(requestId: Int, lineItemId: Int): Int =
+        procurements.findAllByRequestId(requestId)
+            .filter { it.lineItemId == lineItemId && it.status == ProcurementStatus.ACCEPTED }
+            .sumOf { it.receivedQuantity ?: 0 }
+
     fun list(
         actorId: Int,
         status: ProcurementStatus?,

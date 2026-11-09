@@ -29,22 +29,15 @@ data class CreateProjectRequest(
 
 data class UpdateProjectRequest(
     @field:Schema(description = "Optional project name. Null or omitted preserves the current name.")
-    @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String? = null,
 
     @field:Schema(description = "Optional project code. Null or omitted preserves the current code.")
-    @field:NotBlank @field:Pattern(
-        regexp = "^[A-Z0-9]{2,20}$",
-        message = "Code must be 2-20 uppercase letters or digits"
-    )
     val code: String? = null,
 
     @field:Schema(description = "Optional department ID. Null or omitted preserves the current department.")
-    @field:NotNull
     val departmentId: Int? = null,
 
     @field:Schema(description = "Optional start date. Null or omitted preserves the current start date.")
-    @field:NotNull
     val startDate: LocalDate? = null,
 
     @field:Schema(description = "Optional end date. Null or omitted preserves the current end date.")

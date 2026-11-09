@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.LocalDate
 
 data class CreateResourceRequestDto(
@@ -30,4 +31,7 @@ data class RequestLineItemDto(
     @field:Size(max = 50) val batchNumber: String? = null,
     val unitOfMeasure: String? = null,
     val fulfillmentPreference: FulfillmentPreference = FulfillmentPreference.INTERNAL,
+    @field:Positive
+    @field:Schema(description = "Requested use duration in days for internal resources. The manager may approve a different duration.", example = "30")
+    val requestedDurationDays: Int? = null,
 )
