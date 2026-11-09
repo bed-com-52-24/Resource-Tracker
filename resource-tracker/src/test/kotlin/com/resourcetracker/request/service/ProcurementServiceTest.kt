@@ -52,6 +52,7 @@ class ProcurementServiceTest {
             lineItemId = 1,
             requestId = 1,
             fulfillmentPreference = FulfillmentPreference.EXTERNAL.name,
+            vendorId = null,
         )
 
         val exception = assertThrows<ResponseStatusException> {

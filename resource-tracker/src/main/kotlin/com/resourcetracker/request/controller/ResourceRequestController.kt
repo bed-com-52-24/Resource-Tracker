@@ -58,7 +58,6 @@ class ResourceRequestController(
                                 {
                                   "teamId": 3,
                                   "projectId": 12,
-                                  "vendorId": null,
                                   "justification": "Replacement laptops for the design team",
                                   "requiredDate": "2026-11-15",
                                   "lineItems": [
@@ -78,13 +77,13 @@ class ResourceRequestController(
                                 {
                                   "teamId": 3,
                                   "projectId": 12,
-                                  "vendorId": 5,
                                   "justification": "Purchase laptops not available in stock",
                                   "requiredDate": "2026-11-15",
                                   "lineItems": [
                                     {
                                       "resourceId": null,
                                       "description": "Business laptop",
+                                      "vendorId": 5,
                                       "manufacturer": "Example Manufacturer",
                                       "unitPrice": 850000,
                                       "quantity": 4,
@@ -257,6 +256,16 @@ class ResourceRequestController(
     @Operation(summary = "Get a visible request with its line items")
     fun get(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.get(id, serviceUser(caller))
+
+    @PostMapping("/api/v1/requests/{id}/issues")
+    @RequiresRoles(Role.DEPARTMENT_MANAGER)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Issue approved internal stock to the request receiver")
+    fun issueStock(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: StockIssueRequest,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ) = stockOperations.issue(id, caller.id, request)
 
     @GetMapping("/api/v1/requests/{id}/history")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)

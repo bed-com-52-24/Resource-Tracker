@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.CreationTimestamp
 import java.time.LocalDateTime
 
 @Entity
@@ -33,6 +34,8 @@ class RequestHistory(
     @Column(name = "comment", length = 1000)
     var comment: String? = null,
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
     @Enumerated(EnumType.STRING)
     @Column(name = "actor_type", nullable = false, length = 10)

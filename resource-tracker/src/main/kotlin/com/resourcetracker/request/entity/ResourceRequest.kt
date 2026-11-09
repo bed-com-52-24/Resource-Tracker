@@ -9,6 +9,8 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import jakarta.persistence.Version
+import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.UpdateTimestamp
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.LocalDate
@@ -27,8 +29,8 @@ class ResourceRequest(
     @Column(name = "item_description", nullable = false, length = 255)
     var itemDescription: String = "",
 
-    @Column(name = "manufacturer", nullable = false, length = 150)
-    var manufacturer: String = "",
+    @Column(name = "manufacturer", length = 150)
+    var manufacturer: String? = null,
 
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     var unitPrice: BigDecimal = BigDecimal.ZERO,
@@ -104,10 +106,12 @@ class ResourceRequest(
     @Column(name = "queried_at")
     var queriedAt: LocalDateTime? = null,
 
-    @Column(name = "created_at", insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
 
-    @Column(name = "updated_at", insertable = false, updatable = false)
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     var updatedAt: LocalDateTime? = null,
 
     @Version

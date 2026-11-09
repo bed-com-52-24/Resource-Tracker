@@ -131,3 +131,9 @@ class BudgetServiceTest {
         assertEquals(AuditAction.BUDGET_OVERRIDE_USED, auditCaptor.firstValue.action)
     }
 }
+
+private data class BudgetRequestStub(
+    val requestId: Int,
+    val department: Department,
+    val date: LocalDate = LocalDate.of(2026, 11, 15),
+)

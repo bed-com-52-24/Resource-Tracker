@@ -38,10 +38,10 @@ class AuditEntry(
     @Column(name = "item_id", nullable = false, length = 128)
     val itemId: String = "",
 
-    @Column(name = "previous_state", columnDefinition = "json")
+    @Column(name = "previous_state", columnDefinition = "TEXT")
     val previousState: String? = null,
 
-    @Column(name = "new_state", columnDefinition = "json")
+    @Column(name = "new_state", columnDefinition = "TEXT")
     val newState: String? = null,
 
     @Column(name = "comment", length = 500)
@@ -53,7 +53,7 @@ class AuditEntry(
     @Column(name = "user_agent", length = 512)
     val userAgent: String? = null,
 
-    @Column(name = "changed_fields", columnDefinition = "json")
+    @Column(name = "changed_fields", columnDefinition = "TEXT")
     val changedFields: String? = null,
 
     @Column(name = "correlation_id", nullable = false, length = 64)

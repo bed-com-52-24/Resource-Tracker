@@ -42,8 +42,8 @@ class ProcurementService(
         val externalLines = lineItems.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
         if (externalLines.isEmpty()) return
 
-        val vendorId = request.vendorId ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
         externalLines.forEach { line ->
+            val vendorId = line.vendorId ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
             val quantity = line.approvedQuantity ?: line.quantity
             val procurement = procurements.save(
                 Procurement(

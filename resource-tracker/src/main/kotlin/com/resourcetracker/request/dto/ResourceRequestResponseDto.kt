@@ -7,6 +7,9 @@ import java.time.LocalDate
 
 data class RequestLineItemResponseDto(
     val lineItemId: Int,
+    val vendorId: Int?,
+    val manufacturer: String?,
+    val unitOfMeasure: String?,
     val quantity: Int,
     val approvedQuantity: Int?,
     val type: ResourceType,
