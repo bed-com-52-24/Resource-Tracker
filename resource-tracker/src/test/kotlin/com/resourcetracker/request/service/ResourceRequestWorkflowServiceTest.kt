@@ -100,8 +100,37 @@ class ResourceRequestWorkflowServiceTest {
         projectId = project.id,
         justification = "Needed for field work",
         requiredDate = LocalDate.now(clock).plusDays(2),
-        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4)),
+        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4, requestedDurationDays = 30)),
     )
+
+    @Test
+    fun `external request line carries vendorId on the line item itself`() {
+        setup(emptyList())
+        val vendor = com.resourcetracker.vendor.Vendor(id = 5, name = "Northwind", status = "ACTIVE")
+        whenever(vendors.findById(5)).thenReturn(Optional.of(vendor))
+
+        val response = service().createRequest(
+            body().copy(
+                lineItems = listOf(
+                    RequestLineItemDto(
+                        description = "Safety cones",
+                        vendorId = 5,
+                        manufacturer = null,
+                        unitOfMeasure = null,
+                        quantity = 4,
+                        fulfillmentPreference = FulfillmentPreference.EXTERNAL,
+                        unitPrice = java.math.BigDecimal("12.50"),
+                    ),
+                ),
+            ),
+            caller.id,
+        )
+
+        assertEquals(1, response.lineItems.size)
+        assertEquals(5, response.lineItems.first().vendorId)
+        assertEquals(null, response.lineItems.first().manufacturer)
+        assertEquals(null, response.lineItems.first().unitOfMeasure)
+    }
 
     @Test
     fun `request without exactly one manager is saved flagged and admins notified`() {
@@ -201,6 +230,7 @@ class ResourceRequestWorkflowServiceTest {
             quantity = 2,
             resourceId = 4,
             fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 14,
         )
         val resource = Resource(
             id = 4,

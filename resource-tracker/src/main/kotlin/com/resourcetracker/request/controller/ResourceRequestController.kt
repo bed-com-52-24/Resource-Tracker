@@ -58,7 +58,6 @@ class ResourceRequestController(
                                 {
                                   "teamId": 3,
                                   "projectId": 12,
-                                  "vendorId": null,
                                   "justification": "Replacement laptops for the design team",
                                   "requiredDate": "2026-11-15",
                                   "lineItems": [
@@ -78,13 +77,13 @@ class ResourceRequestController(
                                 {
                                   "teamId": 3,
                                   "projectId": 12,
-                                  "vendorId": 5,
                                   "justification": "Purchase laptops not available in stock",
                                   "requiredDate": "2026-11-15",
                                   "lineItems": [
                                     {
                                       "resourceId": null,
                                       "description": "Business laptop",
+                                      "vendorId": 5,
                                       "manufacturer": "Example Manufacturer",
                                       "unitPrice": 850000,
                                       "quantity": 4,

@@ -76,14 +76,15 @@ class ResourceRequestService(
         val project = projects.findById(dto.projectId).orElseThrow { badRequest("Unknown project") }
         if (!project.active || team.projects.none { it.id == project.id }) badRequest("Project is not active or assigned to the team")
 
-        val normalized = normalizeLines(dto.lineItems, dto.vendorId)
+        val normalized = normalizeLines(dto.lineItems)
         val externalLines = normalized.any { it.preference == FulfillmentPreference.EXTERNAL }
-        val vendorId = if (externalLines) {
-            val vendorId = dto.vendorId ?: badRequest("vendorId is required for external lines")
-            val vendor = vendors.findById(vendorId).orElseThrow { badRequest("Unknown vendor") }
-            if (!vendor.status.equals("ACTIVE", ignoreCase = true)) badRequest("Vendor is inactive")
-            vendor.id
-        } else null
+        if (externalLines) {
+            normalized.filter { it.preference == FulfillmentPreference.EXTERNAL }.forEach { line ->
+                val vendorId = line.dto.vendorId ?: badRequest("vendorId is required for external lines")
+                val vendor = vendors.findById(vendorId).orElseThrow { badRequest("Unknown vendor") }
+                if (!vendor.status.equals("ACTIVE", ignoreCase = true)) badRequest("Vendor is inactive")
+            }
+        }
 
         val managers = users.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, team.department.id)
         val managerId = managers.singleOrNull()?.id
@@ -98,7 +99,6 @@ class ResourceRequestService(
                 unitPrice = first.unitPrice,
                 quantity = first.dto.quantity,
                 batchNumber = first.dto.batchNumber,
-                vendorId = vendorId,
                 departmentId = team.department.id,
                 projectId = project.id,
                 teamId = team.id,
@@ -124,6 +124,7 @@ class ResourceRequestService(
                 batchNumber = line.dto.batchNumber,
                 resourceId = line.resource?.id,
                 fulfillmentPreference = line.preference.name,
+                vendorId = line.dto.vendorId,
                 unitOfMeasure = line.unitOfMeasure,
                 requestedDurationDays = line.dto.requestedDurationDays,
             )
@@ -226,7 +227,7 @@ class ResourceRequestService(
                 if (request.requiredDate == null) add("requiredDate")
                 if (lines.isEmpty()) add("lineItems")
                 if (request.needsReassignment || request.assignedManagerId == null) add("assignedManager")
-                if (lines.any { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name } && request.vendorId == null) add("vendorId")
+                if (lines.any { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name && it.vendorId == null }) add("vendorId")
             }
             if (missing.isNotEmpty()) conflict("Cannot decide request; missing: ${missing.joinToString()}")
         }
@@ -375,7 +376,7 @@ class ResourceRequestService(
         if (action == RequestAction.CLARIFY && comment == null) badRequest("A response comment is required")
         if (action == RequestAction.CLARIFY && dto.lineItems != null) {
             if (request.status != RequestStatus.QUERIED) conflict("Line items may only be edited while queried")
-            val normalized = normalizeLines(dto.lineItems, request.vendorId)
+            val normalized = normalizeLines(dto.lineItems)
             if (normalized.any { it.preference == FulfillmentPreference.EXTERNAL }) {
                 conflict("External request lines cannot be edited during clarification")
             }
@@ -388,7 +389,7 @@ class ResourceRequestService(
             request.batchNumber = first.dto.batchNumber
             request.totalAmount = total
             lineItemRepository.deleteAllByRequestId(requestId)
-            lineItemRepository.saveAll(normalized.map { line -> ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, unitOfMeasure = line.unitOfMeasure, requestedDurationDays = line.dto.requestedDurationDays) })
+            lineItemRepository.saveAll(normalized.map { line -> ResourceRequestLineItem(requestId = requestId, description = line.description, manufacturer = line.manufacturer, unitPrice = line.unitPrice, quantity = line.dto.quantity, category = line.dto.category, batchNumber = line.dto.batchNumber, resourceId = line.resource?.id, fulfillmentPreference = line.preference.name, vendorId = line.dto.vendorId, unitOfMeasure = line.unitOfMeasure, requestedDurationDays = line.dto.requestedDurationDays) })
             request.editedAfterQuery = true
         }
         if (action == RequestAction.CANCEL) {
@@ -520,12 +521,12 @@ class ResourceRequestService(
         val resource: Resource?,
         val preference: FulfillmentPreference,
         val description: String,
-        val manufacturer: String,
+        val manufacturer: String?,
         val unitPrice: BigDecimal,
         val unitOfMeasure: String?,
     )
 
-    private fun normalizeLines(items: List<RequestLineItemDto>, vendorId: Int?): List<NormalizedLine> {
+    private fun normalizeLines(items: List<RequestLineItemDto>): List<NormalizedLine> {
         if (items.isEmpty()) badRequest("At least one line item is required")
         return items.mapIndexed { index, dto ->
             if (dto.quantity !in 1..100000) badRequest("Line ${index + 1}: quantity must be between 1 and 100000")
@@ -541,13 +542,14 @@ class ResourceRequestService(
             }
             val description = resource?.name ?: dto.description.trim()
             if (description.isBlank()) badRequest("Line ${index + 1}: resourceId or description is required")
-            if (description.length > 255 || dto.manufacturer.length > 120 || (dto.unitOfMeasure?.length ?: 0) > 50) badRequest("Line ${index + 1}: text fields exceed their maximum length")
-            if (preference == FulfillmentPreference.EXTERNAL && vendorId == null) badRequest("vendorId is required for external lines")
+            if (description.length > 255 || (dto.manufacturer?.length ?: 0) > 120 || (dto.unitOfMeasure?.length ?: 0) > 50) badRequest("Line ${index + 1}: text fields exceed their maximum length")
+            if (preference == FulfillmentPreference.EXTERNAL && dto.vendorId == null) badRequest("vendorId is required for external lines")
             if (dto.unitPrice < BigDecimal.ZERO || dto.unitPrice.scale() > 2) badRequest("Line ${index + 1}: invalid unit price")
             if (preference == FulfillmentPreference.EXTERNAL && dto.unitPrice <= BigDecimal.ZERO) badRequest("Line ${index + 1}: external unit price must be positive")
             if (dto.category == RequestCategory.CONSUMABLE && dto.batchNumber.isNullOrBlank()) badRequest("Line ${index + 1}: batch number is required for consumables")
             if (dto.category != RequestCategory.CONSUMABLE && dto.batchNumber != null) badRequest("Line ${index + 1}: batch number is only valid for consumables")
-            NormalizedLine(dto, resource, preference, description, resource?.let { "N/A" } ?: dto.manufacturer.ifBlank { "N/A" }, dto.unitPrice, dto.unitOfMeasure ?: resource?.unitOfMeasure)
+            val manufacturer = resource?.let { null } ?: dto.manufacturer?.ifBlank { null }
+            NormalizedLine(dto, resource, preference, description, manufacturer, dto.unitPrice, dto.unitOfMeasure ?: resource?.unitOfMeasure)
         }
     }
 
@@ -585,6 +587,9 @@ class ResourceRequestService(
             lineItems = lines.map { line ->
                 RequestLineItemResponseDto(
                     lineItemId = requireNotNull(line.lineItemId),
+                    vendorId = line.vendorId,
+                    manufacturer = line.manufacturer,
+                    unitOfMeasure = line.unitOfMeasure,
                     quantity = line.quantity,
                     approvedQuantity = line.approvedQuantity,
                     type = ResourceType.valueOf(line.fulfillmentPreference),

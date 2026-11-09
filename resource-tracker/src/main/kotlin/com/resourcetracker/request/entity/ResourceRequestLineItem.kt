@@ -18,8 +18,8 @@ class ResourceRequestLineItem(
     @Column(name = "description", nullable = false)
     var description: String = "",
 
-    @Column(name = "manufacturer", nullable = false)
-    var manufacturer: String = "",
+    @Column(name = "manufacturer")
+    var manufacturer: String? = null,
 
     @Column(name = "unit_price", nullable = false, precision = 19, scale = 2)
     var unitPrice: BigDecimal = BigDecimal.ZERO,
@@ -39,6 +39,9 @@ class ResourceRequestLineItem(
 
     @Column(name = "fulfillment_preference", nullable = false, length = 10)
     var fulfillmentPreference: String = "INTERNAL",
+
+    @Column(name = "vendor_id")
+    var vendorId: Int? = null,
 
     @Column(name = "unit_of_measure", length = 50)
     var unitOfMeasure: String? = null,
