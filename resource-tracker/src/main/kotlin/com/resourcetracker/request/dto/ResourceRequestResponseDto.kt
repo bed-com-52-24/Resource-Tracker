@@ -1,6 +1,7 @@
 package com.resourcetracker.request.dto
 
 import com.resourcetracker.request.entity.RequestStatus
+import com.resourcetracker.request.entity.RequestPriority
 import com.resourcetracker.resource.ResourceType
 import java.time.LocalDate
 
@@ -20,5 +21,6 @@ data class ResourceRequestResponseDto(
     val requestId: Int,
     val requestNumber: String,
     val status: RequestStatus,
+    val priority: RequestPriority = RequestPriority.MEDIUM,
     val lineItems: List<RequestLineItemResponseDto>,
 )

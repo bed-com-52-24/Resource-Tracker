@@ -23,6 +23,7 @@ class StockReservation(
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 10) var status: ReservationStatus = ReservationStatus.ACTIVE,
     @Column(name = "expires_at") var expiresAt: LocalDateTime? = null,
     @Column(name = "created_by") var createdBy: Int?,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var createdAt: LocalDateTime? = null,
     @CreationTimestamp
     @Column(name = "created_at", nullable = false) var createdAt: LocalDateTime? = null,
     @Column(name = "closed_at") var closedAt: LocalDateTime? = null,
@@ -65,7 +66,7 @@ class StockReturnExtension(
     @Column(name = "decided_by") var decidedBy: Int? = null,
     @Column(name = "decided_at") var decidedAt: LocalDateTime? = null,
     @Column(name = "decision_comment", length = 1000) var decisionComment: String? = null,
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var createdAt: LocalDateTime? = null,
 )
 
 @Entity

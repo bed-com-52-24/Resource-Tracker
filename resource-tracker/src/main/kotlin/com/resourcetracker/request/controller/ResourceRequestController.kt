@@ -184,7 +184,7 @@ class ResourceRequestController(
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
     @Operation(
         summary = "Edit a request or make its manager decision",
-        description = "Role-scoped request update. TEAM_LEAD may set status to PENDING (clarify a queried request) or CANCELLED, provide comment, and optionally replace lineItems while the request is QUERIED. A clarification requires comment; lineItems are editable only when queried. DEPARTMENT_MANAGER may set status to QUERIED, APPROVED, REJECTED, or WAITLISTED and provide commentApproval and approvedQuantities. An APPROVED decision becomes PARTIALLY_APPROVED when any line is approved below its requested quantity; quantity 0 rejects that line, and at least one line must have a positive approved quantity. Managers cannot send comment or lineItems; team leads cannot send manager fields. QUERY and REJECT require commentApproval. WAITLISTED is only valid for internal resource lines. On an already APPROVED or PARTIALLY_APPROVED request, approvedQuantities changes approved amounts; on an already WAITLISTED request, it waives outstanding quantities. Each quantity change requires commentApproval. expectedFulfillmentDate may accompany an approvedQuantities entry.",
+        description = "TEAM_LEAD may clarify or cancel requests. DEPARTMENT_MANAGER may set priority (CRITICAL, HIGH, MEDIUM, LOW) only for requests in their department, and may make decisions or adjust quantities as allowed by the request status.",
         requestBody = OpenApiRequestBody(
             required = true,
             content = [Content(mediaType = "application/json", schema = Schema(implementation = UpdateRequestDto::class), examples = [
@@ -197,6 +197,9 @@ class ResourceRequestController(
                 ExampleObject(name = "Manager decision", summary = "Department manager approves with per-line quantities", value = """
                     {"status":"APPROVED","commentApproval":"Approved for the project","approvedQuantities":[{"lineItemId":12,"quantity":4,"expectedFulfillmentDate":"2026-11-20","approvedDurationDays":21}]}
                 """),
+                ExampleObject(name = "Manager sets priority", summary = "Department manager sets request priority", value = """
+                    {"priority":"HIGH"}
+                """),
                 ExampleObject(name = "Manager query", summary = "Department manager asks the team lead to clarify", value = """
                     {"status":"QUERIED","commentApproval":"Please explain why four units are needed"}
                 """),
@@ -206,7 +209,7 @@ class ResourceRequestController(
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Request updated or decision applied"),
         ApiResponse(responseCode = "400", description = "Invalid status, missing comment, or invalid line quantities"),
-        ApiResponse(responseCode = "403", description = "Caller role or request ownership/assignment check failed"),
+        ApiResponse(responseCode = "403", description = "Caller role or department scope check failed"),
         ApiResponse(responseCode = "404", description = "Request or line item was not found"),
         ApiResponse(responseCode = "409", description = "Request cannot make the requested transition"),
     ])

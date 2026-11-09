@@ -4,6 +4,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema
+import com.resourcetracker.request.entity.RequestPriority
 import java.time.LocalDate
 
 enum class RequesterUpdateStatus { PENDING, CANCELLED }
@@ -20,6 +21,8 @@ data class UpdateRequestDto(
     @field:Size(max = 1000) val commentApproval: String? = null,
     @field:Schema(description = "DEPARTMENT_MANAGER only. Required quantities for initial APPROVED/WAITLISTED decisions. On an already APPROVED request these adjust approved amounts; on an already WAITLISTED request they waive outstanding amounts. expectedFulfillmentDate may be provided per entry.")
     @field:Valid val approvedQuantities: List<ApprovedQuantityDecision> = emptyList(),
+    @field:Schema(description = "DEPARTMENT_MANAGER only. Set request priority within your department.", example = "HIGH")
+    val priority: RequestPriority? = null,
 )
 
 @Schema(description = "Team-lead edit: use PENDING to clarify/edit or CANCELLED to cancel. Line items are optional when editing.")
