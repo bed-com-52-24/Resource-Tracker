@@ -174,7 +174,12 @@ class StockOperationsService(
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")
         requireAssignedManager(request, actor.id, actor.role)
-        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
+        if (request.status !in setOf(
+                RequestStatus.APPROVED,
+                RequestStatus.PARTIALLY_APPROVED,
+                RequestStatus.WAITLISTED,
+            )
+        ) {
             conflict("Request must be approved before issuing stock")
         }
         val receiver = users.findById(request.requesterId).orElseThrow { notFound("Request receiver not found") }
@@ -229,8 +234,8 @@ class StockOperationsService(
             quantity = issue.quantity,
             returnedQuantity = issue.returnedQuantity,
             receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
+            expectedReturnDate = issue.expectedReturnDate,
         )
-        return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity, issue.expectedReturnDate)
     }
 
     @Transactional(readOnly = true)

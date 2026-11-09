@@ -39,7 +39,7 @@ interface RequestLineItemRepository :
           and resource.type = :resourceType
           and resource.active = true
           and line.fulfillmentPreference = 'INTERNAL'
-          and request.status = :requestStatus
+          and request.status in :requestStatuses
           and ( :departmentId is null or resource.department.id = :departmentId )
           and (coalesce(line.approvedQuantity, line.quantity) -
                coalesce((select sum(issue.quantity) from StockIssue issue where issue.lineItemId = line.lineItemId), 0) -
@@ -75,7 +75,7 @@ interface RequestLineItemRepository :
     )
     fun findApprovedWaitlist(
         @Param("resourceType") resourceType: ResourceType,
-        @Param("requestStatus") requestStatus: RequestStatus,
+        @Param("requestStatuses") requestStatuses: Collection<RequestStatus>,
         @Param("departmentId") departmentId: Int?,
         pageable: Pageable,
     ): Page<WaitlistLineProjection>

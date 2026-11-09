@@ -22,6 +22,7 @@ class RequestTransitionsTest {
             Triple(RequestStatus.PENDING, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
             Triple(RequestStatus.QUERIED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
             Triple(RequestStatus.APPROVED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
+            Triple(RequestStatus.PARTIALLY_APPROVED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
             Triple(RequestStatus.WAITLISTED, RequestAction.CANCEL, RequestActor.TEAM_LEAD) to RequestStatus.CANCELLED,
         )
         assertEquals(expected.keys, RequestTransitions.allowedPairs())

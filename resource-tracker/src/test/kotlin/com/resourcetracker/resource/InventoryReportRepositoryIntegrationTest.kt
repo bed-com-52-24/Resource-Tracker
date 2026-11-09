@@ -54,7 +54,7 @@ class InventoryReportRepositoryIntegrationTest {
         assertTrue(
             lines.findApprovedWaitlist(
                 ResourceType.INTERNAL,
-                RequestStatus.APPROVED,
+                listOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED),
                 null,
                 PageRequest.of(0, 20),
             ).isEmpty,

@@ -39,7 +39,10 @@ class ProcurementService(
 ) {
     @Transactional
     fun authorize(request: ResourceRequest, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
-        val externalLines = lineItems.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
+        val externalLines = lineItems.filter {
+            it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name &&
+                (it.approvedQuantity ?: it.quantity) > 0
+        }
         if (externalLines.isEmpty()) return
 
         externalLines.forEach { line ->

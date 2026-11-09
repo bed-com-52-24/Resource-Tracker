@@ -182,6 +182,7 @@ class ConcurrencyIntegrityTest {
                 unitOfMeasure = "unit",
                 approvedQuantity = 1,
                 requestedDurationDays = 30,
+                approvedDurationDays = 30,
             ),
         )
     }

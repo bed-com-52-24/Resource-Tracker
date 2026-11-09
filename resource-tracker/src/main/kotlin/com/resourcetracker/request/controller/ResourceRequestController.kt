@@ -257,16 +257,6 @@ class ResourceRequestController(
     fun get(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.get(id, serviceUser(caller))
 
-    @PostMapping("/api/v1/requests/{id}/issues")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Issue approved internal stock to the request receiver")
-    fun issueStock(
-        @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody request: StockIssueRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ) = stockOperations.issue(id, caller.id, request)
-
     @GetMapping("/api/v1/requests/{id}/history")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get append-only request history")

@@ -81,7 +81,8 @@ class DashboardAnalyticsService(
             Role.DEPARTMENT_MANAGER -> {
                 val departmentId = users.findById(caller.id)
                     .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "User not found") }
-                    .department.id
+                    .department?.id
+                    ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "Department manager must belong to a department")
                 if (requestedDepartmentId != null && requestedDepartmentId != departmentId) forbidden()
                 departmentId
             }

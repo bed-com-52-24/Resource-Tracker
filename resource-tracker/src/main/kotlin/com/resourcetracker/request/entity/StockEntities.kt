@@ -46,7 +46,6 @@ class StockIssue(
     @Column(name = "issued_by", nullable = false) var issuedBy: Int,
     @CreationTimestamp
     @Column(name = "issued_at", nullable = false) var issuedAt: LocalDateTime? = null,
-    @Column(name = "issued_at", nullable = false, insertable = false, updatable = false) var issuedAt: LocalDateTime? = null,
     @Column(name = "expected_return_date") var expectedReturnDate: LocalDate? = null,
     @Column(name = "reminder_7_days_sent", nullable = false) var reminder7DaysSent: Boolean = false,
     @Column(name = "reminder_2_days_sent", nullable = false) var reminder2DaysSent: Boolean = false,
