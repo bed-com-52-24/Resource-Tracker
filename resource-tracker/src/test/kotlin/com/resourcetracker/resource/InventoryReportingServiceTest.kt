@@ -124,12 +124,12 @@ class InventoryReportingServiceTest {
             department = Department(id = 3, name = "Operations"),
         )
         whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
-        whenever(lines.findApprovedWaitlist(ResourceType.INTERNAL, RequestStatus.APPROVED, 3, pageable))
+        whenever(lines.findApprovedWaitlist(ResourceType.INTERNAL, listOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED), 3, pageable))
             .thenReturn(PageImpl(emptyList(), pageable, 0))
 
         service.waitlist(caller(manager.id, manager.role), null, pageable)
 
-        verify(lines).findApprovedWaitlist(ResourceType.INTERNAL, RequestStatus.APPROVED, 3, pageable)
+        verify(lines).findApprovedWaitlist(ResourceType.INTERNAL, listOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED), 3, pageable)
     }
 
     @Test
@@ -161,7 +161,7 @@ class InventoryReportingServiceTest {
             override val requiredDate = LocalDate.parse("2026-11-20")
         }
         val resource = internalResource(quantity = 2, unavailable = 0)
-        whenever(lines.findApprovedWaitlist(ResourceType.INTERNAL, RequestStatus.APPROVED, null, pageable))
+        whenever(lines.findApprovedWaitlist(ResourceType.INTERNAL, listOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED), null, pageable))
             .thenReturn(PageImpl(listOf(line), pageable, 1))
         whenever(resources.findAllById(listOf(1))).thenReturn(listOf(resource))
         whenever(availability.availableQuantity(resource)).thenReturn(2)

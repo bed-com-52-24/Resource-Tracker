@@ -160,7 +160,12 @@ class StockOperationsService(
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")
         requireAssignedManager(request, actor.id, actor.role)
-        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
+        if (request.status !in setOf(
+                RequestStatus.APPROVED,
+                RequestStatus.PARTIALLY_APPROVED,
+                RequestStatus.WAITLISTED,
+            )
+        ) {
             conflict("Request must be approved before issuing stock")
         }
         if (dto.quantity <= 0) badRequest("quantity must be positive")

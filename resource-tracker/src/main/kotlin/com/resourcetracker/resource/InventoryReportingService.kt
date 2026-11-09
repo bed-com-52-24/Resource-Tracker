@@ -174,7 +174,7 @@ class InventoryReportingService(
         val departmentScope = departmentScope(caller, departmentId)
         val waiting = lines.findApprovedWaitlist(
             ResourceType.INTERNAL,
-            RequestStatus.APPROVED,
+            listOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED),
             departmentScope,
             pageable,
         )

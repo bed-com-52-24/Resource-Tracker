@@ -81,7 +81,11 @@ class ReservationService(
     fun reserveApprovedInternalLines(requestId: Int, lineItems: List<ResourceRequestLineItem>, actorId: Int): List<Pair<Int, Int>> {
         val backorders = mutableListOf<Pair<Int, Int>>()
         lineItems
-            .filter { it.fulfillmentPreference == FulfillmentPreference.INTERNAL.name && it.resourceId != null }
+            .filter {
+                it.fulfillmentPreference == FulfillmentPreference.INTERNAL.name &&
+                    it.resourceId != null &&
+                    (it.approvedQuantity ?: it.quantity) > 0
+            }
             .sortedBy { it.resourceId }
             .forEach { line ->
                 val lineId = requireNotNull(line.lineItemId)
@@ -102,8 +106,10 @@ class ReservationService(
     fun reserve(requestId: Int, actorId: Int, command: CreateReservationRequest): ReservationResponse {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")
+        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.PARTIALLY_APPROVED) {
+            conflict("Request must be approved before stock can be reserved")
+        }
         if (actor.role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != actor.id) forbidden()
-        if (request.status != RequestStatus.APPROVED) conflict("Request must be approved before stock can be reserved")
         if (command.quantity <= 0) badRequest("quantity must be positive")
         val line = lines.findById(command.lineItemId).orElseThrow { notFound("Line item not found") }
         if (line.requestId != requestId) notFound("Line item not found")
