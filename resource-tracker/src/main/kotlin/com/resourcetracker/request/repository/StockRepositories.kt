@@ -14,6 +14,17 @@ interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     @Query("select coalesce(sum(r.quantity), 0) from StockReservation r where r.resourceId = :resourceId and r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE")
     fun sumActiveByResourceId(@Param("resourceId") resourceId: Int): Long
     @Query(
+        """
+        select coalesce(sum(reservation.quantity), 0)
+        from StockReservation reservation, Resource resource
+        where reservation.resourceId = resource.id
+          and reservation.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE
+          and resource.type = com.resourcetracker.resource.ResourceType.INTERNAL
+          and (:departmentId is null or resource.department.id = :departmentId)
+        """,
+    )
+    fun sumActiveByDepartmentId(@Param("departmentId") departmentId: Int?): Long
+    @Query(
         """select r.resourceId as resourceId, sum(r.quantity) as totalQuantity
            from StockReservation r
            where r.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE
@@ -38,6 +49,17 @@ interface ActiveReservationTotal {
 }
 
 interface StockIssueRepository : JpaRepository<StockIssue, Int> {
+    @Query(
+        """
+        select coalesce(sum(issue.quantity - issue.returnedQuantity), 0)
+        from StockIssue issue, Resource resource
+        where issue.resourceId = resource.id
+          and resource.type = com.resourcetracker.resource.ResourceType.INTERNAL
+          and (:departmentId is null or resource.department.id = :departmentId)
+        """,
+    )
+    fun sumOutstandingByDepartmentId(@Param("departmentId") departmentId: Int?): Long
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from StockIssue i where i.id = :id")
     fun findForUpdateById(@Param("id") id: Int): StockIssue?

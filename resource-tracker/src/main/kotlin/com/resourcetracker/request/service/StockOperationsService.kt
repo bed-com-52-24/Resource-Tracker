@@ -4,8 +4,10 @@ import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
+import com.resourcetracker.common.UserReference
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
+import jakarta.validation.constraints.Min
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -13,8 +15,19 @@ import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
 import java.time.LocalDateTime
 
-data class StockIssueRequest(val lineItemId: Int, val quantity: Int)
-data class StockIssueResponse(val id: Int, val requestId: Int, val lineItemId: Int, val resourceId: Int, val quantity: Int, val returnedQuantity: Int)
+data class StockIssueRequest(
+    @field:Min(1) val lineItemId: Int,
+    @field:Min(1) val quantity: Int,
+)
+data class StockIssueResponse(
+    val id: Int,
+    val requestId: Int,
+    val lineItemId: Int,
+    val resourceId: Int,
+    val quantity: Int,
+    val returnedQuantity: Int,
+    val receiver: UserReference,
+)
 data class CreateReturnRequest(val quantity: Int, val note: String? = null)
 data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null)
 data class StockCorrectionRequest(val newQuantity: Int, val reason: String)
@@ -43,6 +56,7 @@ class StockOperationsService(
         if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
             conflict("Request must be approved before issuing stock")
         }
+        val receiver = users.findById(request.requesterId).orElseThrow { notFound("Request receiver not found") }
         if (dto.quantity <= 0) badRequest("quantity must be positive")
         val line = lines.findById(dto.lineItemId).orElseThrow { notFound("Line item not found") }
         if (line.requestId != requestId) notFound("Line item not found")
@@ -82,7 +96,15 @@ class StockOperationsService(
         movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
         history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
         requestCompletion.completeIfFulfilled(requestId, actor.id)
-        return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity)
+        return StockIssueResponse(
+            id = issue.id,
+            requestId = issue.requestId,
+            lineItemId = issue.lineItemId,
+            resourceId = issue.resourceId,
+            quantity = issue.quantity,
+            returnedQuantity = issue.returnedQuantity,
+            receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
+        )
     }
 
     @Transactional

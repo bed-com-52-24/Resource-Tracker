@@ -2,6 +2,8 @@ package com.resourcetracker.budget
 
 import com.resourcetracker.department.Department
 import jakarta.persistence.*
+import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.UpdateTimestamp
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -16,8 +18,8 @@ enum class BudgetCommitmentStatus { ACTIVE, RELEASED }
         UniqueConstraint(name = "uk_budget_department_period", columnNames = ["department_id", "period_type", "period_start", "period_end"]),
     ],
     indexes = [
-        Index(name = "idx_budget_department", columnNames = ["department_id"]),
-        Index(name = "idx_budget_period", columnNames = ["period_start", "period_end"]),
+        Index(name = "idx_budget_department", columnList = "department_id"),
+        Index(name = "idx_budget_period", columnList = "period_start, period_end"),
     ],
 )
 class Budget(
@@ -49,10 +51,12 @@ class Budget(
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
 
-    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     var updatedAt: LocalDateTime? = null,
 ) {
     fun remaining(): BigDecimal = amount - committedAmount
@@ -63,7 +67,7 @@ class Budget(
 @Entity
 @Table(
     name = "budget_commitment",
-    indexes = [Index(name = "idx_budget_commitment_budget", columnNames = ["budget_id"])],
+    indexes = [Index(name = "idx_budget_commitment_budget", columnList = "budget_id")],
 )
 class BudgetCommitment(
     @Id
@@ -88,6 +92,7 @@ class BudgetCommitment(
     @Column(name = "comment", length = 500)
     var comment: String? = null,
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
 )

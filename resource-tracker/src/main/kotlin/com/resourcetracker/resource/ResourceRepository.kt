@@ -41,4 +41,22 @@ interface ResourceRepository : JpaRepository<Resource, Int>, JpaSpecificationExe
 
     fun existsByPreferredVendorIdAndActiveTrue(vendorId: Int): Boolean
 
+    @Query(
+        """
+        select count(r) as resourceCount,
+               coalesce(sum(coalesce(r.quantity, 0)), 0) as onHandQuantity,
+               coalesce(sum(r.unavailableQuantity), 0) as unavailableQuantity
+        from Resource r
+        where r.type = com.resourcetracker.resource.ResourceType.INTERNAL
+          and (:departmentId is null or r.department.id = :departmentId)
+        """,
+    )
+    fun summarizeInternalStock(@Param("departmentId") departmentId: Int?): InternalStockTotals
+
+}
+
+interface InternalStockTotals {
+    fun getResourceCount(): Long
+    fun getOnHandQuantity(): Long
+    fun getUnavailableQuantity(): Long
 }
