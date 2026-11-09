@@ -32,7 +32,7 @@ class RequestHistory(
     var quantity: Int? = null,
     @Column(name = "comment", length = 1000)
     var comment: String? = null,
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     var createdAt: LocalDateTime? = null,
     @Enumerated(EnumType.STRING)
     @Column(name = "actor_type", nullable = false, length = 10)

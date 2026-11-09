@@ -91,14 +91,15 @@ class BudgetServiceTest {
             periodStart = LocalDate.of(2026, 11, 1),
             periodEnd = LocalDate.of(2026, 11, 30),
             amount = BigDecimal("500.00"),
+            committedAmount = BigDecimal("400.00"),
             active = true,
         )
 
-        `when`(budgetRepository.findActiveBudgetForDate(7, LocalDate.of(2026, 11, 15))).thenReturn(Optional.of(budget))
+        `when`(budgetRepository.findActiveBudgetForDateForUpdate(7, LocalDate.of(2026, 11, 15))).thenReturn(Optional.of(budget))
         `when`(commitmentRepository.sumActiveAmountByBudgetId(13L)).thenReturn(BigDecimal("400.00"))
 
         val error = assertThrows<IllegalArgumentException> {
-            service.commit(request = BudgetRequestStub(requestId = 99, department = department), amount = BigDecimal("120.00"), overrideComment = null)
+            service.commit(request = BudgetRequest(requestId = 99, departmentId = 7, date = LocalDate.of(2026, 11, 15)), amount = BigDecimal("120.00"), overrideComment = null)
         }
 
         assertEquals("Override requires a reason with at least 10 characters", error.message)
@@ -113,14 +114,15 @@ class BudgetServiceTest {
             periodStart = LocalDate.of(2026, 11, 1),
             periodEnd = LocalDate.of(2026, 11, 30),
             amount = BigDecimal("500.00"),
+            committedAmount = BigDecimal("400.00"),
             active = true,
         )
 
-        `when`(budgetRepository.findActiveBudgetForDate(7, LocalDate.of(2026, 11, 15))).thenReturn(Optional.of(budget))
+        `when`(budgetRepository.findActiveBudgetForDateForUpdate(7, LocalDate.of(2026, 11, 15))).thenReturn(Optional.of(budget))
         `when`(commitmentRepository.sumActiveAmountByBudgetId(14L)).thenReturn(BigDecimal("400.00"))
         `when`(commitmentRepository.save(org.mockito.ArgumentMatchers.any(BudgetCommitment::class.java))).thenAnswer { it.arguments[0] as BudgetCommitment }
 
-        val request = BudgetRequestStub(requestId = 100, department = department)
+        val request = BudgetRequest(requestId = 100, departmentId = 7, date = LocalDate.of(2026, 11, 15))
         val commitment = service.commit(request, BigDecimal("120.00"), "Budget override reason")
 
         assertEquals(BigDecimal("120.00"), commitment.amount)
@@ -129,8 +131,3 @@ class BudgetServiceTest {
         assertEquals(AuditAction.BUDGET_OVERRIDE_USED, auditCaptor.firstValue.action)
     }
 }
-
-private data class BudgetRequestStub(
-    val requestId: Int,
-    val department: Department,
-)

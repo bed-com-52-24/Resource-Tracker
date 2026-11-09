@@ -9,6 +9,7 @@ import com.resourcetracker.project.Project
 import com.resourcetracker.project.ProjectRepository
 import com.resourcetracker.request.dto.CreateResourceRequestDto
 import com.resourcetracker.request.dto.RequestLineItemDto
+import com.resourcetracker.request.dto.UpdateRequestDto
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.resource.Resource
@@ -100,8 +101,105 @@ class ResourceRequestWorkflowServiceTest {
         projectId = project.id,
         justification = "Needed for field work",
         requiredDate = LocalDate.now(clock).plusDays(2),
-        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4)),
+        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4, requestedDurationDays = 30)),
     )
+
+    private fun priorityRequest() = ResourceRequest(
+        requestId = 101,
+        requestNumber = "REQ-2026-000101",
+        itemDescription = "Safety cones",
+        manufacturer = "N/A",
+        departmentId = department.id,
+        projectId = project.id,
+        teamId = team.id,
+        requesterId = 56,
+        status = RequestStatus.PENDING,
+    )
+
+    private fun manager(department: Department? = this.department) = User(
+        id = 56,
+        username = "manager",
+        email = "manager@example.test",
+        fullName = "Department Manager",
+        passwordHash = "hash",
+        role = Role.DEPARTMENT_MANAGER,
+        department = department,
+    )
+
+    private fun stubPriorityResponse(request: ResourceRequest) {
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findAllByRequestId(101)).thenReturn(emptyList())
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
+        whenever(users.findById(56)).thenReturn(Optional.of(manager()))
+    }
+
+    @Test
+    fun `same department manager can set request priority and history is recorded`() {
+        val request = priorityRequest()
+        stubPriorityResponse(request)
+
+        val response = service().updateRequest(101, manager(), UpdateRequestDto(priority = RequestPriority.CRITICAL))
+
+        assertEquals(RequestPriority.CRITICAL, request.priority)
+        assertEquals(RequestPriority.CRITICAL, response.priority)
+        val event = argumentCaptor<RequestHistory>()
+        verify(history).save(event.capture())
+        assertEquals("PRIORITY_UPDATED", event.firstValue.eventType)
+        assertEquals("Priority changed from MEDIUM to CRITICAL", event.firstValue.comment)
+    }
+
+    @Test
+    fun `manager cannot set priority for a request in another department`() {
+        val request = priorityRequest().apply { departmentId = 2 }
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+
+        val exception = assertThrows<ResponseStatusException> {
+            service().updateRequest(101, manager(), UpdateRequestDto(priority = RequestPriority.HIGH))
+        }
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
+        verify(requests, never()).saveAndFlush(any())
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `manager without a department cannot set request priority`() {
+        val request = priorityRequest()
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+
+        val exception = assertThrows<ResponseStatusException> {
+            service().updateRequest(101, manager(department = null), UpdateRequestDto(priority = RequestPriority.LOW))
+        }
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
+        verify(requests, never()).saveAndFlush(any())
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `team lead cannot set request priority`() {
+        val exception = assertThrows<ResponseStatusException> {
+            service().updateRequest(101, caller, UpdateRequestDto(priority = RequestPriority.HIGH))
+        }
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
+        verify(requests, never()).findForUpdateById(101)
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `setting the existing priority does not create an audit history event`() {
+        val request = priorityRequest()
+        stubPriorityResponse(request)
+
+        val response = service().updateRequest(101, manager(), UpdateRequestDto(priority = RequestPriority.MEDIUM))
+
+        assertEquals(RequestPriority.MEDIUM, response.priority)
+        verify(requests, never()).saveAndFlush(any())
+        verify(history, never()).save(any())
+    }
 
     @Test
     fun `request without exactly one manager is saved flagged and admins notified`() {
@@ -201,6 +299,7 @@ class ResourceRequestWorkflowServiceTest {
             quantity = 2,
             resourceId = 4,
             fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
         )
         val resource = Resource(
             id = 4,

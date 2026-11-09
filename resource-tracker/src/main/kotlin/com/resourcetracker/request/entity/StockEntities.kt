@@ -22,7 +22,7 @@ class StockReservation(
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 10) var status: ReservationStatus = ReservationStatus.ACTIVE,
     @Column(name = "expires_at") var expiresAt: LocalDateTime? = null,
     @Column(name = "created_by") var createdBy: Int?,
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var createdAt: LocalDateTime? = null,
     @Column(name = "closed_at") var closedAt: LocalDateTime? = null,
     @Column(name = "close_reason", length = 255) var closeReason: String? = null,
     @Enumerated(EnumType.STRING) @Column(name = "actor_type", nullable = false, length = 10) var actorType: ActorType = ActorType.USER,
@@ -41,7 +41,7 @@ class StockIssue(
     @Column(nullable = false) var quantity: Int,
     @Column(name = "returned_quantity", nullable = false) var returnedQuantity: Int = 0,
     @Column(name = "issued_by", nullable = false) var issuedBy: Int,
-    @Column(name = "issued_at", nullable = false, insertable = false, updatable = false) var issuedAt: LocalDateTime? = null,
+    @Column(name = "issued_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var issuedAt: LocalDateTime? = null,
     @Column(name = "expected_return_date") var expectedReturnDate: LocalDate? = null,
     @Column(name = "reminder_7_days_sent", nullable = false) var reminder7DaysSent: Boolean = false,
     @Column(name = "reminder_2_days_sent", nullable = false) var reminder2DaysSent: Boolean = false,
@@ -62,7 +62,7 @@ class StockReturnExtension(
     @Column(name = "decided_by") var decidedBy: Int? = null,
     @Column(name = "decided_at") var decidedAt: LocalDateTime? = null,
     @Column(name = "decision_comment", length = 1000) var decisionComment: String? = null,
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var createdAt: LocalDateTime? = null,
 )
 
 @Entity
@@ -73,7 +73,7 @@ class StockReturn(
     @Column(nullable = false) var quantity: Int,
     @Enumerated(EnumType.STRING) @Column(name = "condition_reported", length = 12) var condition: ReturnCondition? = null,
     @Column(name = "returned_by", nullable = false) var returnedBy: Int,
-    @Column(name = "returned_at", nullable = false, insertable = false, updatable = false) var returnedAt: LocalDateTime? = null,
+    @Column(name = "returned_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var returnedAt: LocalDateTime? = null,
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 12) var status: ReturnStatus = ReturnStatus.PENDING,
     @Column(name = "verified_by") var verifiedBy: Int? = null,
     @Column(name = "verified_at") var verifiedAt: LocalDateTime? = null,
@@ -92,7 +92,7 @@ class StockMovement(
     @Column(name = "return_id") var returnId: Int? = null,
     @Column(name = "actor_id", nullable = false) var actorId: Int,
     @Column(length = 500) var reason: String? = null,
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP") var createdAt: LocalDateTime? = null,
 )
 
 @Entity

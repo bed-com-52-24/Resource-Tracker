@@ -88,6 +88,10 @@ class ResourceRequest(
     @Column(name = "status", nullable = false, length = 20)
     var status: RequestStatus = RequestStatus.PENDING,
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false, length = 10)
+    var priority: RequestPriority = RequestPriority.MEDIUM,
+
     @Column(name = "justification", length = 500)
     var justification: String? = null,
 

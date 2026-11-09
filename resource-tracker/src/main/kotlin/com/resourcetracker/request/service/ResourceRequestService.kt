@@ -314,7 +314,7 @@ class ResourceRequestService(
     fun updateRequest(requestId: Int, caller: User, dto: UpdateRequestDto): ResourceRequestResponseDto {
         return when (caller.role) {
             Role.TEAM_LEAD -> {
-                if (dto.commentApproval != null || dto.approvedQuantities.isNotEmpty()) forbidden("Team leads cannot edit manager decision fields")
+                if (dto.commentApproval != null || dto.approvedQuantities.isNotEmpty() || dto.priority != null) forbidden("Team leads cannot edit manager decision fields")
                 val status = when (dto.status) {
                     null, RequestStatus.PENDING -> RequesterUpdateStatus.PENDING
                     RequestStatus.CANCELLED -> RequesterUpdateStatus.CANCELLED
@@ -324,7 +324,26 @@ class ResourceRequestService(
             }
             Role.DEPARTMENT_MANAGER -> {
                 if (dto.comment != null || dto.lineItems != null) forbidden("Department managers cannot edit team lead request fields")
-                val current = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
+                val current = requestRepository.findForUpdateById(requestId) ?: throw ResourceNotFoundException("Request not found")
+                dto.priority?.let { priority ->
+                    val managerDepartmentId = caller.department?.id
+                        ?: forbidden("Your manager account must be assigned to a department")
+                    if (current.departmentId != managerDepartmentId) forbidden("You can only set priority for requests in your department")
+                    if (current.priority != priority) {
+                        val previousPriority = current.priority
+                        current.priority = priority
+                        requestRepository.saveAndFlush(current)
+                        historyRepository.save(RequestHistory(
+                            requestId = requestId,
+                            eventType = "PRIORITY_UPDATED",
+                            actorId = caller.id,
+                            comment = "Priority changed from $previousPriority to $priority",
+                        ))
+                    }
+                }
+                if (dto.status == null && dto.approvedQuantities.isEmpty()) {
+                    current.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
+                } else {
                 if (current.status in setOf(RequestStatus.APPROVED, RequestStatus.WAITLISTED) && dto.status == current.status) {
                     val hasQuantityChanges = dto.approvedQuantities.any { it.quantity > 0 }
                     val reason = dto.commentApproval?.trim()?.takeIf(String::isNotEmpty)
@@ -357,6 +376,7 @@ class ResourceRequestService(
                     else -> badRequest("Invalid manager decision status")
                 }
                 decide(requestId, caller, RequestDecisionDto(decision, dto.commentApproval, dto.approvedQuantities))
+                }
                 }
             }
             else -> forbidden()
@@ -582,6 +602,7 @@ class ResourceRequestService(
             requestId = requireNotNull(requestId),
             requestNumber = requestNumber,
             status = status,
+            priority = priority,
             lineItems = lines.map { line ->
                 RequestLineItemResponseDto(
                     lineItemId = requireNotNull(line.lineItemId),

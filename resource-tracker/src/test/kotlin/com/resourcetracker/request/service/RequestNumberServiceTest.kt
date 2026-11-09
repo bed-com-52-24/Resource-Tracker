@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.test.context.ActiveProfiles
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -15,6 +16,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @SpringBootTest(properties = ["app.security.jwt-secret=resource-tracker-request-number-test-secret-32"])
+@ActiveProfiles("test")
 class RequestNumberServiceTest {
 
     @Autowired
