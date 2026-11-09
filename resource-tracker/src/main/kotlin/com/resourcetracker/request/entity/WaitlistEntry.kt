@@ -1,6 +1,8 @@
 package com.resourcetracker.request.entity
 
 import jakarta.persistence.*
+import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -27,6 +29,8 @@ class WaitlistEntry(
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 12) var status: WaitlistStatus = WaitlistStatus.WAITING,
     @Column(name = "expected_fulfillment_date") var expectedFulfillmentDate: LocalDate? = null,
     @Column(name = "overdue_notified_date") var overdueNotifiedDate: LocalDate? = null,
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false) var createdAt: LocalDateTime? = null,
-    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false) var updatedAt: LocalDateTime? = null,
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false) var createdAt: LocalDateTime? = null,
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false) var updatedAt: LocalDateTime? = null,
 )

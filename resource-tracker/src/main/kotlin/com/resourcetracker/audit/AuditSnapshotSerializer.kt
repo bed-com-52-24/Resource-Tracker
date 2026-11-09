@@ -33,7 +33,7 @@ class AuditSnapshotSerializer(private val objectMapper: ObjectMapper) {
     private fun isSensitiveName(name: String): Boolean {
         val normalized = name.filter(Char::isLetterOrDigit).lowercase()
         return listOf(
-            "password", "passwordhash", "token", "secret", "apikey",
+            "password", "passwordhash", "token", "secret", "apikey", "key",
             "privatekey", "authorization", "credential",
         ).any(normalized::contains)
     }

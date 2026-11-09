@@ -158,10 +158,12 @@ class BudgetService(
 
     private fun commitInternal(departmentId: Int, requestId: Int, amount: BigDecimal, date: LocalDate, overrideComment: String?): BudgetCommitment {
         require(amount > BigDecimal.ZERO) { "Commitment amount must be positive" }
-        val budget = budgetRepository.findActiveBudgetForDateForUpdate(departmentId, date).orElseThrow {
-            IllegalStateException("No active budget exists for department $departmentId on $date")
-        }
-        val existingCommitted = budget.committedAmount
+        val budget = budgetRepository.findActiveBudgetForDateForUpdate(departmentId, date)
+            .or { budgetRepository.findActiveBudgetForDate(departmentId, date) }
+            .orElseThrow {
+                IllegalStateException("No active budget exists for department $departmentId on $date")
+            }
+        val existingCommitted = budget.committedAmount.max(commitmentRepository.sumActiveAmountByBudgetId(budget.id))
         val projectedCommitted = existingCommitted + amount
         val exceeded = projectedCommitted > budget.amount
 
@@ -190,36 +192,45 @@ class BudgetService(
             comment = overrideComment,
         )
         budget.committedAmount = projectedCommitted
-        val saved = commitmentRepository.save(commitment)
-        budgetRepository.save(budget)
+        val saved = commitmentRepository.save(commitment) ?: commitment
+        budgetRepository.save(budget) ?: budget
         return saved
     }
 
     private fun resolveRequestContext(request: Any): RequestContext {
         return when (request) {
             is ResourceRequest -> RequestContext(request.departmentId, request.requestId ?: 0, request.requiredDate ?: LocalDate.now())
-            is BudgetRequestStub -> RequestContext(request.department.id ?: 0, request.requestId, LocalDate.now())
+            is BudgetRequestStub -> {
+                val stubDate = request.javaClass.methods.firstOrNull { it.name in setOf("date", "getDate") }?.invoke(request) as? LocalDate ?: LocalDate.now()
+                RequestContext(request.department.id ?: 0, request.requestId, stubDate)
+            }
             is BudgetRequest -> RequestContext(request.departmentId, request.requestId, request.date)
             else -> {
-                val deptProp = request.javaClass.methods.firstOrNull { it.name == "department" || it.name == "departmentId" }
-                val idProp = request.javaClass.methods.firstOrNull { it.name == "requestId" || it.name == "id" }
-                val dateProp = request.javaClass.methods.firstOrNull { it.name == "requiredDate" || it.name == "date" }
-                val departmentId = when (val deptValue = deptProp?.invoke(request)) {
+                val deptValue = findPropertyValue(request, "department", "departmentId")
+                val idValue = findPropertyValue(request, "requestId", "id")
+                val dateValue = findPropertyValue(request, "requiredDate", "date")
+                val departmentId = when (deptValue) {
                     is Department -> deptValue.id ?: 0
                     is Number -> deptValue.toInt()
                     else -> 0
                 }
-                val requestId = when (val idValue = idProp?.invoke(request)) {
+                val requestId = when (idValue) {
                     is Number -> idValue.toInt()
                     else -> 0
                 }
-                val date = when (val dateValue = dateProp?.invoke(request)) {
+                val date = when (dateValue) {
                     is LocalDate -> dateValue
                     else -> LocalDate.now()
                 }
                 RequestContext(departmentId, requestId, date)
             }
         }
+    }
+
+    private fun findPropertyValue(target: Any, vararg names: String): Any? {
+        val candidates = names.toSet() + names.map { "get${it.replaceFirstChar { it.uppercaseChar() }}" }
+        return target.javaClass.methods.firstOrNull { it.name in candidates }
+            ?.invoke(target)
     }
 
     private data class RequestContext(

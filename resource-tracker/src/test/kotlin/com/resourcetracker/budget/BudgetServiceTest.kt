@@ -133,4 +133,5 @@ class BudgetServiceTest {
 private data class BudgetRequestStub(
     val requestId: Int,
     val department: Department,
+    val date: LocalDate = LocalDate.of(2026, 11, 15),
 )
