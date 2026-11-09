@@ -348,10 +348,6 @@ class ResourceRequestService(
             }
             Role.DEPARTMENT_MANAGER -> {
                 if (dto.comment != null || dto.lineItems != null) forbidden("Department managers cannot edit team lead request fields")
-                val current = requestRepository.findById(requestId).orElseThrow { ResourceNotFoundException("Request not found") }
-                if (current.status in setOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED, RequestStatus.WAITLISTED) &&
-                    dto.status == current.status
-                ) {
                 val current = requestRepository.findForUpdateById(requestId) ?: throw ResourceNotFoundException("Request not found")
                 dto.priority?.let { priority ->
                     val managerDepartmentId = caller.department?.id
@@ -372,8 +368,8 @@ class ResourceRequestService(
                 if (dto.status == null && dto.approvedQuantities.isEmpty()) {
                     current.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
                 } else {
-                if (current.status in setOf(RequestStatus.APPROVED, RequestStatus.WAITLISTED) && dto.status == current.status) {
-                    val hasQuantityChanges = dto.approvedQuantities.any { it.quantity > 0 }
+                if (current.status in setOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED, RequestStatus.WAITLISTED) && dto.status == current.status) {
+                    val hasQuantityChanges = dto.approvedQuantities.isNotEmpty()
                     val reason = dto.commentApproval?.trim()?.takeIf(String::isNotEmpty)
                     if (hasQuantityChanges && reason == null) badRequest("A commentApproval reason is required when adjusting quantities")
                     var result = current.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)

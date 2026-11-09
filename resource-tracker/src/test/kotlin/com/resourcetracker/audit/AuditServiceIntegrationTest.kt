@@ -35,13 +35,11 @@ class AuditServiceIntegrationTest {
             "CREATE TRIGGER IF NOT EXISTS audit_entry_no_update " +
                 "BEFORE UPDATE ON audit_entry FOR EACH ROW " +
                 "CALL 'com.resourcetracker.testsupport.AuditEntryImmutabilityTrigger'",
-                "CALL \"com.resourcetracker.testsupport.ImmutableAuditEntryTrigger\"",
         )
         jdbc.execute(
             "CREATE TRIGGER IF NOT EXISTS audit_entry_no_delete " +
                 "BEFORE DELETE ON audit_entry FOR EACH ROW " +
                 "CALL 'com.resourcetracker.testsupport.AuditEntryImmutabilityTrigger'",
-                "CALL \"com.resourcetracker.testsupport.ImmutableAuditEntryTrigger\"",
         )
     }
 
