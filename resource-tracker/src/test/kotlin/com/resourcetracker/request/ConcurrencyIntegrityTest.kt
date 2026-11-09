@@ -181,6 +181,7 @@ class ConcurrencyIntegrityTest {
                 fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
                 unitOfMeasure = "unit",
                 approvedQuantity = 1,
+                requestedDurationDays = 30,
             ),
         )
     }

@@ -33,6 +33,7 @@ class RequestHistory(
     var quantity: Int? = null,
     @Column(name = "comment", length = 1000)
     var comment: String? = null,
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false, columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
