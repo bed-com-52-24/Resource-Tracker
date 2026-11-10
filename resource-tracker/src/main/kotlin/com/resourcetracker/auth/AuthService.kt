@@ -20,7 +20,6 @@ import com.resourcetracker.user.ForgotPasswordRequest
 import com.resourcetracker.user.PasswordResetResponse
 import com.resourcetracker.user.UpdateOwnProfileRequest
 import com.resourcetracker.user.ChangePasswordRequest
-import com.resourcetracker.user.PasswordSetResponse
 import com.resourcetracker.common.UnauthenticatedException
 import com.resourcetracker.common.AccountDeactivatedException
 import org.springframework.stereotype.Service
@@ -230,15 +229,30 @@ class AuthService(
 
     @Transactional
     fun changeOwnPassword(caller: AuthenticatedUser, request: ChangePasswordRequest): PasswordSetResponse {
+        val currentPassword = request.currentPassword
         val user = users.findById(caller.id).orElseThrow { UnauthenticatedException() }
         val currentHash = user.passwordHash ?: throw InvalidCredentialsException()
-        if (!encoder.matches(request.currentPassword, currentHash)) throw InvalidCredentialsException()
+        if (currentPassword == null || !encoder.matches(currentPassword, currentHash)) throw InvalidCredentialsException()
         val violations = PasswordPolicy.violations(request.newPassword)
         if (violations.isNotEmpty()) throw WeakPasswordException(violations)
         user.passwordHash = encoder.encode(request.newPassword)!!
         passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.SETUP)
         passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.RESET)
         return PasswordSetResponse(passwordSet = true)
+    }
+
+    fun updatePassword(caller: AuthenticatedUser?, request: ChangePasswordRequest): PasswordSetResponse {
+        val hasCode = !request.code.isNullOrBlank()
+        val hasCurrentPassword = !request.currentPassword.isNullOrBlank()
+        if (hasCode == hasCurrentPassword) {
+            throw IllegalArgumentException("Provide either a password setup/reset code or the current password")
+        }
+        if (hasCode) {
+            val code = request.code ?: throw IllegalArgumentException("A setup/reset code is required")
+            return setPassword(PasswordSetRequest(code = code, password = request.newPassword))
+        }
+        val authenticatedCaller = caller ?: throw UnauthenticatedException()
+        return changeOwnPassword(authenticatedCaller, request)
     }
 
     @Transactional

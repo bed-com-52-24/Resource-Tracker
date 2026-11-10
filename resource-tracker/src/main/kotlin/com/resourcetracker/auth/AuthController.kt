@@ -121,19 +121,17 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         return me(caller)
     }
 
-    @PostMapping("/change-password")
-    @Operation(summary = "Change current password", description = "Changes the authenticated user's password after verifying the current password.", security = [SecurityRequirement(name = "bearerAuth")])
-    fun changePassword(@AuthenticationPrincipal caller: AuthenticatedUser, @Valid @RequestBody request: ChangePasswordRequest) =
-        auth.changeOwnPassword(caller, request)
-
-    @PostMapping("/set-password")
+    @PostMapping("/password")
     @ResponseStatus(HttpStatus.OK)
-    @Operation(summary = "Set or reset a password", description = "Consumes a single-use 8-digit password setup or reset code.")
+    @Operation(summary = "Change, set, or reset a password", description = "Provide either the authenticated user's current password or a single-use 8-digit setup/reset code, together with the new password.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Password updated", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordSetResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid or expired code, or password does not meet policy", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
     ])
-    fun setPassword(@Valid @RequestBody request: PasswordSetRequest) = auth.setPassword(request)
+    fun updatePassword(
+        @AuthenticationPrincipal caller: AuthenticatedUser?,
+        @Valid @RequestBody request: ChangePasswordRequest,
+    ) = auth.updatePassword(caller, request)
 
     @PostMapping("/forgot-password")
     @ResponseStatus(HttpStatus.ACCEPTED)
