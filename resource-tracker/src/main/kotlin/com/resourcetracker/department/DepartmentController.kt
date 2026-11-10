@@ -71,7 +71,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     ))
 
     @GetMapping("/{id}")
-    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(summary = "Get a department", description = "Return a department by its numeric identifier.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),

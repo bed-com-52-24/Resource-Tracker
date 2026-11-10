@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @Validated
 @RequestMapping("/api/v1/teams")
-@RequiresRoles(Role.MEMBER,Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+@RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
 @Tag(name = "Teams", description = "Create, search, update, and deactivate teams")
 @SecurityRequirement(name = "bearerAuth")
 class TeamController(private val service: TeamService) {
@@ -195,8 +195,8 @@ class TeamController(private val service: TeamService) {
         service.update(id, body)
 
     @GetMapping("/{id}")
-    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "Get a team", description = "Members, team leads, department managers, and managing directors can retrieve a team. Admin users are not permitted.")
+    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Get a team", description = "Admins can retrieve team details for user assignment. Members, team leads, department managers, and managing directors can also retrieve a team.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Team returned"),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -206,10 +206,10 @@ class TeamController(private val service: TeamService) {
     fun get(@PathVariable id: Int): TeamResponse = service.get(id)
 
     @GetMapping
-    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(
         summary = "List teams",
-        description = "Members, team leads, department managers, and managing directors can list teams. Admin users are not permitted. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
+        description = "Admins can list teams for user assignment. Members, team leads, department managers, and managing directors can also list teams. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Teams returned"),
