@@ -29,6 +29,7 @@ object ResourceSpecifications {
                 cb.or(
                     cb.equal(root.get<ResourceType>("type"), ResourceType.EXTERNAL),
                     cb.equal(department.get<Int>("id"), scope),
+                    cb.isNull(department.get<Int>("id")),
                 ),
             )
         }

@@ -157,7 +157,6 @@ class DevDataSeeder(
                     quantity = r.quantity,
                     location = r.location,
                     reorderLevel = r.reorderLevel,
-                    departmentId = r.department?.let { department(it).id },
                     preferredVendorId = r.vendor?.let { vendorIds.getValue(it) },
                 ),
                 actorId,

@@ -22,14 +22,14 @@ data class CreateUserRequest(
     val departmentId: Int? = null,
     @field:Schema(
         description = "Existing active team IDs. Each team must exist and be active. " +
-                "Required for MEMBER users; optional for ADMIN and DEPARTMENT_MANAGER users.",
+                "At least one is required for MEMBER and TEAM_LEAD users. Managing Directors cannot be assigned to teams.",
         example = "[3, 4]",
         nullable = true,
     )
     val teamIds: Set<Int>? = null,
 )
 
-@Schema(description = "Role and account status fields that an administrator may update")
+@Schema(description = "Profile, role, and account status fields that an administrator may update")
 data class UpdateUserRequest(
     @field:Size(max = 100) val firstName: String? = null,
     @field:Size(max = 100) val lastName: String? = null,
@@ -40,7 +40,7 @@ data class UpdateUserRequest(
     @field:Size(max = 50) val title: String? = null,
     @field:Schema(description = "Set to false to deactivate the account (revokes refresh tokens). Null or omitted leaves the current value unchanged.", nullable = true)
     val active: Boolean? = null,
-    @field:Schema(description = "New role. Optional; requires Admin. Omit to leave the role unchanged.", nullable = true)
+    @field:Schema(description = "New role. Optional; requires Admin or Managing Director. Omit to leave the role unchanged.", nullable = true)
     val role: Role? = null,
 )
 

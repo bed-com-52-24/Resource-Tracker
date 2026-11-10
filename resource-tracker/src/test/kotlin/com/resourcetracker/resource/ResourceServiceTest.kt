@@ -53,7 +53,6 @@ class ResourceServiceTest {
         category = ResourceCategory.EQUIPMENT,
         unitOfMeasure = "unit",
         quantity = quantity,
-        departmentId = 1,
     )
 
     @Test
@@ -126,14 +125,12 @@ class ResourceServiceTest {
     @Test
     fun `zero quantity is out of stock`() {
         `when`(codes.next()).thenReturn("R-2")
-        `when`(departments.findById(1)).thenReturn(Optional.of(Department(id = 1, name = "Engineering")))
         `when`(resources.save(org.mockito.ArgumentMatchers.any())).thenAnswer { it.arguments[0] }
 
         val response = service.create(internalRequest(0), 1)
 
         assertEquals(ResourceStatus.OUT_OF_STOCK, response.status)
-        assertEquals(1, response.department?.id)
-        assertEquals("Engineering", response.department?.name)
+        assertEquals(null, response.department)
     }
 
     @Test

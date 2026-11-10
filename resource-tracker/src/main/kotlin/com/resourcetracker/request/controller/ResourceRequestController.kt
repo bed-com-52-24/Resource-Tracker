@@ -104,7 +104,9 @@ class ResourceRequestController(
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Request submitted"),
         ApiResponse(responseCode = "400", description = "Invalid references or request data", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Team Lead role or team membership required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Team, project, or referenced resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun create(@Valid @RequestBody dto: CreateResourceRequestDto, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.createRequest(dto, caller.id)
@@ -116,6 +118,7 @@ class ResourceRequestController(
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Stock issued"),
         ApiResponse(responseCode = "400", description = "Invalid issue quantity or non-internal line"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Assigned department manager role required"),
         ApiResponse(responseCode = "404", description = "Request or line item not found"),
         ApiResponse(responseCode = "409", description = "Request is not issuable, stock is not reserved/available, or quantity exceeds the approved balance"),
@@ -128,7 +131,13 @@ class ResourceRequestController(
 
     @GetMapping("/api/v1/requests/{id}/issues")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "List issued stock, due dates, and extension history for a request")
+    @Operation(summary = "List issued stock, due dates, and extension history for a request", description = "Returns issued quantities, due dates, returns, and extension decisions for a request visible to the caller.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Issue and return records returned"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Request is not visible to the caller", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Request not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun listIssuedStock(
         @PathVariable @Min(1) id: Int,
         @AuthenticationPrincipal caller: AuthenticatedUser,
@@ -170,6 +179,7 @@ class ResourceRequestController(
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Workflow action completed"),
         ApiResponse(responseCode = "400", description = "Required action fields are missing or invalid"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Role, team membership, or assigned-manager check failed"),
         ApiResponse(responseCode = "404", description = "Request, issue, return, or extension was not found"),
         ApiResponse(responseCode = "409", description = "Return quantity, issue state, or extension state does not allow this action"),
@@ -209,6 +219,7 @@ class ResourceRequestController(
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Request updated or decision applied"),
         ApiResponse(responseCode = "400", description = "Invalid status, missing comment, or invalid line quantities"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Caller role or department scope check failed"),
         ApiResponse(responseCode = "404", description = "Request or line item was not found"),
         ApiResponse(responseCode = "409", description = "Request cannot make the requested transition"),
@@ -221,7 +232,13 @@ class ResourceRequestController(
 
     @GetMapping("/api/v1/requests")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "List requests visible to the current role")
+    @Operation(summary = "List requests visible to the current role", description = "Returns a paginated list of requests visible to the caller, with optional status, team, project, manager, date, and reassignment filters.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Requests returned"),
+        ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Caller role is not permitted", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun list(
         @Parameter(description = "Search request numbers", example = "REQ-2026")
         @RequestParam(required = false) search: String?,
@@ -253,7 +270,13 @@ class ResourceRequestController(
 
     @GetMapping("/api/v1/requests/{id}")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.ADMIN, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "Get a visible request with its line items")
+    @Operation(summary = "Get a visible request with its line items", description = "Returns a request and its line items when the caller is permitted to view it.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Request returned"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Request is not visible to the caller", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Request not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun get(@PathVariable @Min(1) id: Int, @AuthenticationPrincipal caller: AuthenticatedUser) =
         service.get(id, serviceUser(caller))
 
@@ -262,6 +285,7 @@ class ResourceRequestController(
     @Operation(summary = "Get append-only request history")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Chronological request history"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Owner, assigned manager, Managing Director, or Admin access required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Request not found or not visible to the caller", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])

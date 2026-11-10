@@ -77,7 +77,11 @@ class NotificationController(
     // The general GET endpoint already supports status=READ or status=UNREAD filtering.
 
     @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    @Operation(summary = "Stream unread notification counts", description = "Server-sent events stream for real-time notification visibility.")
+    @Operation(summary = "Stream unread notification counts", description = "Opens a server-sent events stream for the authenticated user. Sends an initial unread-count event and then sends another event when the count changes.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Unread count event stream opened", content = [Content(mediaType = "text/event-stream")]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
+    ])
     fun stream(@AuthenticationPrincipal caller: AuthenticatedUser): SseEmitter =
         service.streamForUser(caller.id)
 

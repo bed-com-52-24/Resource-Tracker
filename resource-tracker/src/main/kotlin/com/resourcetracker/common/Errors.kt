@@ -127,7 +127,15 @@ data class ErrorResponse(
     val message: String,
     val path: String,
     val correlationId: String,
-    val details: List<String> = emptyList()
+    val details: List<String> = emptyList(),
+    val action: String,
+    val fieldErrors: List<FieldErrorResponse> = emptyList(),
+)
+
+data class FieldErrorResponse(
+    val field: String,
+    val message: String,
+    val action: String,
 )
 
 @RestControllerAdvice
@@ -140,14 +148,7 @@ class GlobalExceptionHandler {
         ex: ApiException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        val forbidden = ex as? ForbiddenRoleException
-
         val details = when {
-            forbidden != null -> listOf(
-                "Required role: ${forbidden.required.joinToString(" or ") { it.name }}",
-                "Actual role: ${forbidden.actual.name}"
-            )
-
             ex is WeakPasswordException -> ex.violations
 
             ex is AccountLockedException && ex.until != null ->
@@ -181,6 +182,13 @@ class GlobalExceptionHandler {
             code = "VALIDATION_FAILED",
             message = "Please review the information you entered and correct the fields listed below.",
             details = details,
+            fieldErrors = ex.bindingResult.fieldErrors.map { error ->
+                FieldErrorResponse(
+                    field = error.field,
+                    message = validationMessage(error.defaultMessage),
+                    action = "Provide a valid value for ${fieldLabel(error.field)}.",
+                )
+            }.distinctBy { it.field to it.message }.sortedBy { it.field },
             request = request
         )
     }
@@ -198,6 +206,10 @@ class GlobalExceptionHandler {
                 val field = it.propertyPath.lastOrNull()?.name
                 validationDetail(field, it.message)
             }.distinct().sorted(),
+            fieldErrors = ex.constraintViolations.mapNotNull {
+                val field = it.propertyPath.lastOrNull()?.name ?: return@mapNotNull null
+                FieldErrorResponse(field, validationMessage(it.message), "Provide a valid value for ${fieldLabel(field)}.")
+            }.distinctBy { it.field to it.message }.sortedBy { it.field },
             request = request
         )
 
@@ -364,6 +376,7 @@ class GlobalExceptionHandler {
         message: String,
         request: HttpServletRequest,
         details: List<String> = emptyList(),
+        fieldErrors: List<FieldErrorResponse> = emptyList(),
         correlationId: String = correlationId(request)
     ): ResponseEntity<ErrorResponse> {
         val body = ErrorResponse(
@@ -374,7 +387,9 @@ class GlobalExceptionHandler {
             message = message,
             path = request.requestURI,
             correlationId = correlationId,
-            details = details
+            details = details,
+            action = recommendedAction(status.value()),
+            fieldErrors = fieldErrors,
         )
 
         return ResponseEntity.status(status)
@@ -462,6 +477,30 @@ class GlobalExceptionHandler {
             }
         }
         return if (label == null) friendly else "$label $friendly"
+    }
+
+    private fun validationMessage(message: String?): String {
+        val rule = message.orEmpty()
+        return when {
+            rule.contains("must not be blank", ignoreCase = true) ||
+                rule.contains("must not be empty", ignoreCase = true) ||
+                rule.contains("must not be null", ignoreCase = true) -> "This field is required."
+            rule.startsWith("must be a well-formed", ignoreCase = true) -> "Enter a value in a valid format."
+            rule.startsWith("must be a valid", ignoreCase = true) -> "Enter a valid value."
+            rule.isBlank() -> "Check this value."
+            else -> rule.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    private fun recommendedAction(status: Int): String = when (status) {
+        400, 422 -> "Review the request and correct the indicated values, then try again."
+        401 -> "Sign in and try again."
+        403 -> "Contact an administrator if you believe you need access to this action."
+        404 -> "Check the address or selected item and try again."
+        409 -> "Review the current record state, resolve the conflict, and try again."
+        429 -> "Wait briefly, then try again."
+        in 500..599 -> "Try again shortly. If the problem continues, contact support with the reference ID."
+        else -> "Review the request and try again."
     }
 
     private fun fieldLabel(field: String): String = field

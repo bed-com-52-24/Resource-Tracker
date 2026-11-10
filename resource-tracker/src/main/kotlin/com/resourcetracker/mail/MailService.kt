@@ -2,11 +2,15 @@ package com.resourcetracker.mail
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import org.springframework.mail.MailException
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
+import org.springframework.scheduling.annotation.Async
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.scheduling.annotation.Scheduled
@@ -20,6 +24,7 @@ import jakarta.persistence.LockModeType
 import java.time.Instant
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.concurrent.ThreadPoolExecutor
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -71,6 +76,7 @@ class PasswordLinkMailListener(
     private val log = LoggerFactory.getLogger(javaClass)
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Async("mailTaskExecutor")
     fun send(event: PasswordCodeRequested) {
         try {
             mailService.sendPasswordCode(event.email, event.username, event.code)
@@ -87,6 +93,19 @@ class PasswordLinkMailListener(
                 log.error("Unable to persist failed password email for retry", storageException)
             }
         }
+    }
+}
+
+@Configuration
+class MailTaskConfiguration {
+    @Bean("mailTaskExecutor")
+    fun mailTaskExecutor(): ThreadPoolTaskExecutor = ThreadPoolTaskExecutor().apply {
+        corePoolSize = 2
+        maxPoolSize = 4
+        setQueueCapacity(500)
+        setThreadNamePrefix("mail-")
+        setRejectedExecutionHandler(ThreadPoolExecutor.CallerRunsPolicy())
+        initialize()
     }
 }
 

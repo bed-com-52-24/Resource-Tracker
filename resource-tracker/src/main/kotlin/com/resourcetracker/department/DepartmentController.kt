@@ -36,7 +36,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         ApiResponse(responseCode = "201", description = "Department created", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Managing Director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "A department with this name already exists", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun create(@Valid @RequestBody request: DepartmentRequest) =
@@ -49,7 +49,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         ApiResponse(responseCode = "200", description = "Departments returned"),
         ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Caller role is not permitted for department access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
         @Parameter(description = "Search department names (optional)")
@@ -76,7 +76,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Caller role is not permitted for department access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun get(@PathVariable id: Int) = departmentService.getById(id)
@@ -89,7 +89,7 @@ class DepartmentController(private val departmentService: DepartmentService) {
         ApiResponse(responseCode = "200", description = "Department updated", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body, user is not active Department Manager, or department is inactive", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Managing Director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Department not found or manager user not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Name already exists, or department is in use and cannot be deactivated", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])

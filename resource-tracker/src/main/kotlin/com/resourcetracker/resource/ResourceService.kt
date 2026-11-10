@@ -32,11 +32,8 @@ class ResourceService(
     private val movements: StockMovementRepository,
 ) {
     @Transactional
-    fun create(request: CreateResourceRequest, actorId: Int, scopeDepartmentId: Int? = null): ResourceResponse {
-        validateTypeRules(request.type, request.departmentId, request.preferredVendorId, request.quantity)
-        if (scopeDepartmentId != null && request.type == ResourceType.INTERNAL && request.departmentId != scopeDepartmentId) {
-            throw ResourceNotFoundException("Resource not found")
-        }
+    fun create(request: CreateResourceRequest, actorId: Int): ResourceResponse {
+        validateTypeRules(request.type, null, request.preferredVendorId, request.quantity, requireInternalDepartment = false)
         val unitOfMeasure = ResourceUnits.normalize(request.category, request.unitOfMeasure)
         val resource = Resource(
             code = resourceCodeGenerator.next(),
@@ -45,7 +42,7 @@ class ResourceService(
             category = request.category,
             unitOfMeasure = unitOfMeasure,
             description = request.description,
-            department = request.departmentId?.let(::findDepartment),
+            department = null,
             preferredVendor = request.preferredVendorId?.let(::findVendor),
             quantity = request.quantity,
             location = request.location,
@@ -70,29 +67,47 @@ class ResourceService(
 
     @Transactional
     fun update(id: Int, request: UpdateResourceRequest, scopeDepartmentId: Int? = null): ResourceResponse {
-        validateTypeRules(request.type, request.departmentId, request.preferredVendorId, request.quantity)
-        val unitOfMeasure = ResourceUnits.normalize(request.category, request.unitOfMeasure)
         val resource = resourceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }
         requireInScope(resource, scopeDepartmentId)
-        if (scopeDepartmentId != null && request.type == ResourceType.INTERNAL && request.departmentId != scopeDepartmentId) {
-            throw ResourceNotFoundException("Resource not found")
-        }
-        val before = snapshot(resource)
-        if (request.type != resource.type) {
+        if (request.type != null && request.type != resource.type) {
             throw BusinessRuleException("Resource type cannot be changed; create a new resource")
         }
 
-        resource.name = request.name
-        resource.category = request.category
+        if (scopeDepartmentId != null && request.departmentId != null && request.departmentId != scopeDepartmentId) {
+            throw ResourceNotFoundException("Resource not found")
+        }
+        val effectiveDepartmentId = request.departmentId ?: resource.department?.id
+        val effectiveVendorId = request.preferredVendorId ?: resource.preferredVendor?.id
+        val effectiveQuantity = request.quantity ?: resource.quantity
+        validateTypeRules(
+            resource.type,
+            effectiveDepartmentId,
+            effectiveVendorId,
+            effectiveQuantity,
+            requireInternalDepartment = false,
+        )
+        val before = snapshot(resource)
+        val category = request.category ?: resource.category
+        val unitOfMeasure = request.unitOfMeasure?.let { ResourceUnits.normalize(category, it) }
+            ?: if (category == resource.category) resource.unitOfMeasure
+            else ResourceUnits.normalize(category, resource.unitOfMeasure)
+
+        request.name?.let { resource.name = it }
+        resource.category = category
         resource.unitOfMeasure = unitOfMeasure
-        resource.description = request.description
-        resource.department = request.departmentId?.let(::findDepartment)
-        resource.preferredVendor = request.preferredVendorId?.let(::findVendor)
+        request.description?.let { resource.description = it }
+        request.departmentId?.let { resource.department = findDepartment(it) }
+        request.preferredVendorId?.let { resource.preferredVendor = findVendor(it) }
         if (request.quantity != null && request.quantity != resource.quantity) {
             throw BusinessRuleException("Physical quantity can only change through stock operations")
         }
-        resource.update(request.type, resource.quantity, request.location, request.reorderLevel)
+        resource.update(
+            resource.type,
+            resource.quantity,
+            request.location ?: resource.location,
+            request.reorderLevel ?: resource.reorderLevel,
+        )
         request.active?.let { applyActive(resource, it) }
         val saved = resourceRepository.save(resource)
         val after = snapshot(saved)
@@ -189,7 +204,9 @@ class ResourceService(
     }
 
     private fun requireInScope(resource: Resource, scopeDepartmentId: Int?) {
-        if (scopeDepartmentId != null && resource.type == ResourceType.INTERNAL && resource.department?.id != scopeDepartmentId) {
+        if (scopeDepartmentId != null && resource.type == ResourceType.INTERNAL &&
+            resource.department?.id != null && resource.department?.id != scopeDepartmentId
+        ) {
             throw ResourceNotFoundException("Resource not found")
         }
     }
@@ -198,10 +215,16 @@ class ResourceService(
         resource.active = active
     }
 
-    private fun validateTypeRules(type: ResourceType, departmentId: Int?, vendorId: Int?, quantity: Int?) {
+    private fun validateTypeRules(
+        type: ResourceType,
+        departmentId: Int?,
+        vendorId: Int?,
+        quantity: Int?,
+        requireInternalDepartment: Boolean = true,
+    ) {
         when (type) {
             ResourceType.INTERNAL -> {
-                if (departmentId == null) {
+                if (requireInternalDepartment && departmentId == null) {
                     throw BadRequestException("departmentId is required for INTERNAL resources")
                 }
                 if (vendorId != null) {

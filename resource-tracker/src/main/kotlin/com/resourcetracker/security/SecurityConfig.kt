@@ -145,7 +145,8 @@ class RestAuthenticationEntryPoint(private val mapper: ObjectMapper) : Authentic
                 message = "Authentication required",
                 path = request.requestURI,
                 correlationId = correlationId,
-                details = emptyList()
+                details = emptyList(),
+                action = "Sign in and try again.",
             )
         )
     }

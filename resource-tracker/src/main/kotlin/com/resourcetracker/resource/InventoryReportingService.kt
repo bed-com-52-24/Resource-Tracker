@@ -207,7 +207,7 @@ class InventoryReportingService(
 
     @Transactional
     fun reconcile(resourceId: Int, actorId: Int, role: Role, request: ReconciliationRequest): ReconciliationReport {
-        requireAdmin(role)
+        requireManagingDirector(role)
         if (request.physicalCount < 0) badRequest("physicalCount must be non-negative")
         val reason = request.reason.trim()
         if (reason.isEmpty() || reason.length > 470) badRequest("reason must contain 1 to 470 characters")
@@ -238,7 +238,7 @@ class InventoryReportingService(
 
     @Transactional(readOnly = true)
     fun reconciliationHistory(resourceId: Int, role: Role): List<ReconciliationReport> {
-        requireAdmin(role)
+        requireManagingDirector(role)
         if (!resources.existsById(resourceId)) throw ResourceNotFoundException("Resource not found")
         return reconciliations.findAllByResourceIdOrderByCreatedAtAscIdAsc(resourceId).map { it.toReport() }
     }
@@ -285,8 +285,8 @@ class InventoryReportingService(
         createdAt = createdAt,
     )
 
-    private fun requireAdmin(role: Role) {
-        if (role != Role.ADMIN) forbidden()
+    private fun requireManagingDirector(role: Role) {
+        if (role != Role.MANAGING_DIRECTOR) forbidden()
     }
 
     private fun forbidden(): Nothing = throw ResponseStatusException(HttpStatus.FORBIDDEN, "Action is not permitted")

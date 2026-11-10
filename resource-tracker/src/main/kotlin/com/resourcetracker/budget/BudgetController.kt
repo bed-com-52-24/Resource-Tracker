@@ -1,8 +1,11 @@
 package com.resourcetracker.budget
 
 import com.resourcetracker.common.ErrorResponse
+import com.resourcetracker.common.ResourceNotFoundException
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
+import com.resourcetracker.user.UserRepository
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
@@ -14,7 +17,9 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import org.springframework.http.HttpStatus
 import org.springframework.validation.annotation.Validated
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ResponseStatusException
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -53,6 +58,7 @@ data class BudgetResponseDto(
 class BudgetController(
     private val budgetService: BudgetService,
     private val budgetRepository: BudgetRepository,
+    private val users: UserRepository,
 ) {
     @PostMapping
     @RequiresRoles(Role.MANAGING_DIRECTOR)
@@ -78,29 +84,49 @@ class BudgetController(
 
     @GetMapping("/{id}")
     @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Get a budget", description = "Return a budget by its numeric identifier, including committed and remaining amounts.")
+    @Operation(summary = "Get a budget", description = "Returns a budget by ID, including committed and remaining amounts. Department managers can only retrieve budgets belonging to their own department; Managing Directors can retrieve any budget.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Budget returned", content = [Content(schema = Schema(implementation = BudgetResponseDto::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Managing director or department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Budget not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Budget not found or outside the caller's department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun get(@PathVariable id: Long): BudgetResponseDto =
-        budgetRepository.findById(id).orElseThrow { IllegalArgumentException("Budget not found") }.toDto()
+    fun get(@PathVariable @Min(1) id: Long, @AuthenticationPrincipal caller: AuthenticatedUser): BudgetResponseDto {
+        val budget = budgetRepository.findById(id).orElseThrow { ResourceNotFoundException("Budget not found") }
+        requireBudgetVisibility(budget.department.id, caller)
+        return budget.toDto()
+    }
 
     @GetMapping
     @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "List budgets", description = "Return all budgets, optionally filtered by department ID. Both active and inactive budgets are included.")
+    @Operation(summary = "List budgets", description = "Returns active and inactive budgets. Department managers are always limited to their own department; Managing Directors may list all departments or filter by department ID.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Budgets returned", content = [Content(schema = Schema(implementation = BudgetResponseDto::class))]),
+        ApiResponse(responseCode = "400", description = "Department ID must be positive", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Managing director or department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun list(@RequestParam(required = false) departmentId: Int?): List<BudgetResponseDto> =
-        if (departmentId == null)
+    fun list(
+        @io.swagger.v3.oas.annotations.Parameter(description = "Department filter. Department managers may only provide their own department ID.")
+        @RequestParam(required = false) @Min(1) departmentId: Int?,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): List<BudgetResponseDto> {
+        val effectiveDepartmentId = when (caller.role) {
+            Role.MANAGING_DIRECTOR -> departmentId
+            Role.DEPARTMENT_MANAGER -> {
+                val ownDepartmentId = managerDepartmentId(caller)
+                if (departmentId != null && departmentId != ownDepartmentId) {
+                    throw ResponseStatusException(HttpStatus.FORBIDDEN, "Department access is not permitted")
+                }
+                ownDepartmentId
+            }
+            else -> throw ResponseStatusException(HttpStatus.FORBIDDEN, "Role is not permitted to view budgets")
+        }
+        return if (effectiveDepartmentId == null)
             budgetRepository.findAll().map { it.toDto() }
         else
-            budgetRepository.findAllByDepartment_Id(departmentId).map { it.toDto() }
+            budgetRepository.findAllByDepartment_Id(effectiveDepartmentId).map { it.toDto() }
+    }
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.MANAGING_DIRECTOR)
@@ -121,16 +147,32 @@ class BudgetController(
 
     @GetMapping("/{id}/remaining")
     @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Get remaining budget", description = "Return the remaining amount for the active budget belonging to the budget's department on the requested date.")
+    @Operation(summary = "Get remaining budget", description = "Returns the remaining amount for the active budget on the requested date. Department managers can only check budgets belonging to their own department; Managing Directors can check any budget.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Remaining amount returned"),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Managing director or department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Budget not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Budget not found or outside the caller's department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun remaining(@PathVariable id: Long, @RequestParam date: LocalDate): BigDecimal {
-        val budget = budgetRepository.findById(id).orElseThrow { IllegalArgumentException("Budget not found") }
+    fun remaining(
+        @PathVariable @Min(1) id: Long,
+        @RequestParam date: LocalDate,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): BigDecimal {
+        val budget = budgetRepository.findById(id).orElseThrow { ResourceNotFoundException("Budget not found") }
+        requireBudgetVisibility(budget.department.id, caller)
         return budgetService.remaining(budget.department, date)
+    }
+
+    private fun managerDepartmentId(caller: AuthenticatedUser): Int = users.findById(caller.id)
+        .orElseThrow { ResourceNotFoundException("User not found") }
+        .department?.id
+        ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "Department access is not configured")
+
+    private fun requireBudgetVisibility(departmentId: Int?, caller: AuthenticatedUser) {
+        if (caller.role == Role.DEPARTMENT_MANAGER && departmentId != managerDepartmentId(caller)) {
+            throw ResourceNotFoundException("Budget not found")
+        }
     }
 
     private fun Budget.toDto() = BudgetResponseDto(

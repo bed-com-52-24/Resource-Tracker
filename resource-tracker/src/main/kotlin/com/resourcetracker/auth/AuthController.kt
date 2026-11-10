@@ -111,10 +111,18 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
     @PostMapping("/set-password")
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Set or reset a password", description = "Consumes a single-use 8-digit password setup or reset code.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Password updated", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordSetResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid or expired code, or password does not meet policy", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
+    ])
     fun setPassword(@Valid @RequestBody request: PasswordSetRequest) = auth.setPassword(request)
 
     @PostMapping("/forgot-password")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    @Operation(summary = "Request a password reset", description = "Always returns the same response to protect account privacy.")
+    @Operation(summary = "Request a password reset", description = "Queues a one-time reset code for email delivery when an active account matches the address. Always returns the same response to protect account privacy.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "202", description = "Reset request accepted", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordResetResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid email address", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
+    ])
     fun forgotPassword(@Valid @RequestBody request: ForgotPasswordRequest) = auth.forgotPassword(request)
 }

@@ -58,7 +58,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "409",
-                description = "Project conflicts with an existing resource",
+                description = "Project name or code already exists in the department",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
         ]
@@ -129,7 +129,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin role is not permitted for project access",
+                description = "Caller role is not permitted for project access",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
             ApiResponse(
@@ -162,7 +162,7 @@ class ProjectController(private val service: ProjectService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin role is not permitted for project access",
+                description = "Caller role is not permitted for project access",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
         ]

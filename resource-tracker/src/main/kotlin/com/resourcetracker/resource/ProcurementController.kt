@@ -32,7 +32,13 @@ import org.springframework.web.bind.annotation.*
 class ProcurementController(private val procurements: ProcurementService) {
 
     @GetMapping
-    @Operation(summary = "List procurements", description = "Returns a paginated procurement list. Search matches the associated request number; managers see procurements for their assigned requests. Page size is capped at 100.")
+    @Operation(summary = "List procurements", description = "Department managers can list procurements for requests assigned to them. Search matches the associated request number; status is an optional filter. Page size is capped at 100.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Procurements returned"),
+        ApiResponse(responseCode = "400", description = "Invalid search, status, sort, or pagination parameter", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    ])
     fun list(
         @Parameter(description = "Search associated request numbers", example = "REQ-2026")
         @RequestParam(required = false) search: String?,
@@ -50,8 +56,13 @@ class ProcurementController(private val procurements: ProcurementService) {
     ): PagedResponse<com.resourcetracker.request.service.ProcurementResponse> = PagedResponse.from(procurements.list(caller.id, status, search, page, size, sort, direction))
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a procurement")
+    @Operation(summary = "Update a procurement", description = "Updates the procurement status, expected delivery date, or received quantity according to the valid procurement workflow. Department managers may update only procurements for requests assigned to them.")
     @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Procurement updated"),
+        ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Caller is not the assigned department manager", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Procurement not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Invalid procurement transition", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun updateProcurement(

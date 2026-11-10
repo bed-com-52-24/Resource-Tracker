@@ -48,7 +48,7 @@ class VendorController(private val vendorService: VendorService) {
         ApiResponse(responseCode = "200", description = "Vendors returned"),
         ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Caller role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun list(
         @Parameter(description = "Search vendor names", example = "office")
@@ -75,14 +75,14 @@ class VendorController(private val vendorService: VendorService) {
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Vendor returned", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Admin role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Caller role is not permitted for vendor access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun get(@PathVariable id: Int) = vendorService.getById(id)
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Update a vendor", description = "Update a vendor's name and contact information. Set active to true or false to change its status; omit it to leave status unchanged.")
+    @Operation(summary = "Update a vendor", description = "All fields are optional. Supplied name and contact information are updated; omitted or null fields remain unchanged. Set active to true or false to change status.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Vendor updated", content = [Content(schema = Schema(implementation = VendorResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
