@@ -18,6 +18,10 @@ import com.resourcetracker.user.PasswordSetRequest
 import com.resourcetracker.user.PasswordSetResponse
 import com.resourcetracker.user.ForgotPasswordRequest
 import com.resourcetracker.user.PasswordResetResponse
+import com.resourcetracker.user.UpdateOwnProfileRequest
+import com.resourcetracker.user.ChangePasswordRequest
+import com.resourcetracker.user.PasswordSetResponse
+import com.resourcetracker.common.UnauthenticatedException
 import com.resourcetracker.common.AccountDeactivatedException
 import org.springframework.stereotype.Service
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -197,6 +201,43 @@ class AuthService(
         passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.SETUP)
         passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.RESET)
         refreshTokens.revokeAllByUserId(user.id)
+        return PasswordSetResponse(passwordSet = true)
+    }
+
+    @Transactional
+    fun updateOwnProfile(caller: AuthenticatedUser, request: UpdateOwnProfileRequest) {
+        val user = users.findById(caller.id).orElseThrow { UnauthenticatedException() }
+        val before = mapOf("firstName" to user.firstName, "middleName" to user.middleName, "lastName" to user.lastName,
+            "position" to user.position, "phone" to user.phone, "address" to user.address, "title" to user.title)
+        request.firstName?.let { user.firstName = it.trim() }
+        request.middleName?.let { user.middleName = it.trim().takeIf(String::isNotEmpty) }
+        request.lastName?.let { user.lastName = it.trim() }
+        request.position?.let { user.position = it.trim().takeIf(String::isNotEmpty) }
+        request.phone?.let { user.phone = it.trim().takeIf(String::isNotEmpty) }
+        request.address?.let { user.address = it.trim().takeIf(String::isNotEmpty) }
+        request.title?.let { user.title = it.trim().takeIf(String::isNotEmpty) }
+        if (request.firstName != null || request.middleName != null || request.lastName != null) {
+            user.fullName = listOfNotNull(user.firstName, user.middleName, user.lastName).joinToString(" ")
+        }
+        val after = mapOf("firstName" to user.firstName, "middleName" to user.middleName, "lastName" to user.lastName,
+            "position" to user.position, "phone" to user.phone, "address" to user.address, "title" to user.title)
+        val changed = before.keys.filter { before[it] != after[it] }
+        if (changed.isNotEmpty()) {
+            audit.record(AuditRecord.currentActor(AuditAction.USER_UPDATED, "USER", user.id.toString(),
+                previousState = before, newState = after, changedFields = changed))
+        }
+    }
+
+    @Transactional
+    fun changeOwnPassword(caller: AuthenticatedUser, request: ChangePasswordRequest): PasswordSetResponse {
+        val user = users.findById(caller.id).orElseThrow { UnauthenticatedException() }
+        val currentHash = user.passwordHash ?: throw InvalidCredentialsException()
+        if (!encoder.matches(request.currentPassword, currentHash)) throw InvalidCredentialsException()
+        val violations = PasswordPolicy.violations(request.newPassword)
+        if (violations.isNotEmpty()) throw WeakPasswordException(violations)
+        user.passwordHash = encoder.encode(request.newPassword)!!
+        passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.SETUP)
+        passwordTokens.deleteByUserIdAndPurposeAndUsedAtIsNull(user.id, PasswordTokenPurpose.RESET)
         return PasswordSetResponse(passwordSet = true)
     }
 

@@ -4,6 +4,8 @@ import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.UserRepository
 import com.resourcetracker.user.PasswordSetRequest
 import com.resourcetracker.user.ForgotPasswordRequest
+import com.resourcetracker.user.UpdateOwnProfileRequest
+import com.resourcetracker.user.ChangePasswordRequest
 import com.resourcetracker.common.DepartmentReference
 import com.resourcetracker.common.TeamReference
 import com.resourcetracker.common.UnauthenticatedException
@@ -22,6 +24,7 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -55,6 +58,8 @@ data class TokenPair(
 
 data class ProfileResponse(
     val id: Int, val username:String, val email: String, val fullName: String,
+    val firstName: String, val middleName: String?, val lastName: String,
+    val position: String?, val phone: String?, val address: String?, val title: String?,
     val role: String, val department: DepartmentReference?, val teams: List<TeamReference>, val active: Boolean,
 )
 
@@ -101,12 +106,25 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         val u = users.findById(caller.id).orElseThrow{ UnauthenticatedException() }
         return ProfileResponse(
             u.id, u.username, u.email, u.fullName ?: u.username,
+            u.firstName, u.middleName, u.lastName, u.position, u.phone, u.address, u.title,
             u.role.name,
             u.department?.let { DepartmentReference(it.id, it.name) },
             u.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
             u.active,
         )
     }
+
+    @PatchMapping("/me")
+    @Operation(summary = "Update current profile", description = "Updates the authenticated user's first, middle, or last name, position, phone, address, or title.", security = [SecurityRequirement(name = "bearerAuth")])
+    fun updateMe(@AuthenticationPrincipal caller: AuthenticatedUser, @Valid @RequestBody request: UpdateOwnProfileRequest): ProfileResponse {
+        auth.updateOwnProfile(caller, request)
+        return me(caller)
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change current password", description = "Changes the authenticated user's password after verifying the current password.", security = [SecurityRequirement(name = "bearerAuth")])
+    fun changePassword(@AuthenticationPrincipal caller: AuthenticatedUser, @Valid @RequestBody request: ChangePasswordRequest) =
+        auth.changeOwnPassword(caller, request)
 
     @PostMapping("/set-password")
     @ResponseStatus(HttpStatus.OK)

@@ -44,6 +44,24 @@ data class UpdateUserRequest(
     val role: Role? = null,
 )
 
+@Schema(description = "Profile fields the authenticated user may update")
+data class UpdateOwnProfileRequest(
+    @field:Size(max = 100) val firstName: String? = null,
+    @field:Size(max = 100) val lastName: String? = null,
+    @field:Size(max = 100) val middleName: String? = null,
+    @field:Size(max = 150) val position: String? = null,
+    @field:Size(max = 30) val phone: String? = null,
+    @field:Size(max = 500) val address: String? = null,
+    @field:Size(max = 50) val title: String? = null,
+)
+
+data class ChangePasswordRequest(
+    @field:NotBlank @field:Size(max = 72) val currentPassword: String,
+    @field:NotBlank @field:Size(min = 8, max = 72) val newPassword: String,
+) {
+    override fun toString() = "ChangePasswordRequest(currentPassword=***, newPassword=***)"
+}
+
 @Schema(description = "Assign an existing active department to a department manager")
 data class AssignDepartmentRequest(
     @field:Schema(description = "Existing active department ID", example = "1")
