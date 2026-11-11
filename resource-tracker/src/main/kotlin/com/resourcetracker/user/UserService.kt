@@ -55,7 +55,7 @@ class UserService(
         if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
             throw BusinessRuleException("${request.role} users must be assigned to at least one team")
         }
-        if (request.role !in setOf(Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR) && request.departmentId == null) {
+        if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER) && request.departmentId == null) {
             throw BusinessRuleException("${request.role} users require a department")
         }
         if (request.role == Role.MANAGING_DIRECTOR && request.teamIds?.isNotEmpty() == true) {
