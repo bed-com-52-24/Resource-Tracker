@@ -52,9 +52,6 @@ class UserService(
             throw DuplicateResourceException("Email '$email' is already in use")
         }
 
-        if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
-            throw BusinessRuleException("${request.role} users must be assigned to at least one team")
-        }
         if (request.role !in setOf(Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR) && request.departmentId == null) {
             throw BusinessRuleException("${request.role} users require a department")
         }
@@ -62,8 +59,8 @@ class UserService(
             throw BusinessRuleException("Managing directors are not assigned to teams")
         }
 
-        val userTeams = activeTeams(request.teamIds ?: emptySet())
         val department = if (request.role == Role.MANAGING_DIRECTOR) null else request.departmentId?.let(::activeDepartment)
+        val userTeams = activeTeams(request.teamIds ?: emptySet(), department?.id)
         val user = User(
             username = username,
             email = email,
@@ -80,8 +77,6 @@ class UserService(
             department = department,
             teams = userTeams,
         )
-        requireMemberHasTeam(user)
-
         val saved = try {
             users.saveAndFlush(user)
         } catch (e: DataIntegrityViolationException) {
@@ -123,7 +118,6 @@ class UserService(
         }
 
         request.active?.let { applyActive(user, it) }
-        requireMemberHasTeam(user)
         val saved = users.saveAndFlush(user)
         val after = snapshot(saved)
         val changed = changedFields(before, after)
@@ -195,20 +189,11 @@ class UserService(
         if (user.active && user.role == Role.ADMIN && newRole != Role.ADMIN) {
             ensureAnotherActiveAdmin(user)
         }
-        if (newRole == Role.MEMBER && user.teams.isEmpty()) {
-            throw BusinessRuleException("A user must belong to at least one team to have the MEMBER role")
-        }
         if (newRole == Role.MANAGING_DIRECTOR) {
             user.department = null
             user.teams.clear()
         }
         user.role = newRole
-    }
-
-    private fun requireMemberHasTeam(user: User) {
-        if (user.role == Role.MEMBER && user.teams.isEmpty()) {
-            throw BusinessRuleException("MEMBER users must belong to at least one active team")
-        }
     }
 
     private fun applyActive(user: User, active: Boolean){
@@ -261,8 +246,13 @@ class UserService(
         departments.findById(id).orElseThrow { ResourceNotFoundException("Department $id not found") }
             .also { if (it.status != "ACTIVE") throw BusinessRuleException("Department $id is inactive") }
 
-    private fun activeTeams(ids: Set<Int>) =
+    private fun activeTeams(ids: Set<Int>, departmentId: Int?) =
         ids.map { teams.findById(it).orElseThrow { ResourceNotFoundException("Team $it not found") } }
-            .also { found -> if (found.any { !it.isActive }) throw BusinessRuleException("Inactive teams cannot be assigned") }
+            .also { found ->
+                if (found.any { !it.isActive }) throw BusinessRuleException("Inactive teams cannot be assigned")
+                if (found.any { it.department.id != departmentId }) {
+                    throw BusinessRuleException("Teams must belong to the user's department")
+                }
+            }
             .toMutableSet()
 }

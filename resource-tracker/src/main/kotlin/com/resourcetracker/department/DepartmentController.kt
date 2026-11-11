@@ -4,6 +4,7 @@ import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.Role
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.Min
 import org.springframework.http.HttpStatus
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 
 
 @RestController
@@ -44,9 +46,9 @@ class DepartmentController(private val departmentService: DepartmentService) {
 
     @GetMapping
     @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "List departments", description = "Returns a paginated department list. Search matches department names; active status is an optional filter. Page size is capped at 100.")
+    @Operation(summary = "List departments", description = "Allowed roles: ADMIN, MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. Returns a paginated department list. ADMIN responses include only department IDs and names; other allowed roles also receive descriptions, status, and manager details. Search matches department names; active status is an optional filter. Page size is capped at 100.")
     @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Departments returned"),
+        ApiResponse(responseCode = "200", description = "Departments returned; ADMIN items contain only id and name, while other allowed roles receive full department details"),
         ApiResponse(responseCode = "400", description = "Invalid search parameters", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Caller role is not permitted for department access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -64,22 +66,37 @@ class DepartmentController(private val departmentService: DepartmentService) {
         @RequestParam(defaultValue = "asc") direction: String,
         @Parameter(description = "Filter by active state. Omit to return both active and inactive departments.", example = "true")
         @RequestParam(required = false) active: Boolean?,
-    ): PagedResponse<DepartmentResponse> = PagedResponse.from(departmentService.search(
-        active,
-        search,
-        ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name")
-    ))
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): Any {
+        val result = departmentService.search(
+            active,
+            search,
+            ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name")
+        )
+        return if (caller.role == Role.ADMIN) {
+            PagedResponse.from(result.map { DepartmentSummaryResponse(it.id, it.name) })
+        } else {
+            PagedResponse.from(result)
+        }
+    }
 
     @GetMapping("/{id}")
     @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "Get a department", description = "Return a department by its numeric identifier.")
+    @Operation(summary = "Get a department", description = "Allowed roles: ADMIN, MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. Return a department by its numeric identifier. ADMIN responses include only the department ID and name; other allowed roles also receive description, status, and manager details.")
     @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(implementation = DepartmentResponse::class))]),
+        ApiResponse(responseCode = "200", description = "Department returned", content = [Content(schema = Schema(oneOf = [DepartmentSummaryResponse::class, DepartmentResponse::class]))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Caller role is not permitted for department access", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Department not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun get(@PathVariable id: Int) = departmentService.getById(id)
+    fun get(@PathVariable id: Int, @AuthenticationPrincipal caller: AuthenticatedUser): Any {
+        val department = departmentService.getById(id)
+        return if (caller.role == Role.ADMIN) {
+            DepartmentSummaryResponse(department.id, department.name)
+        } else {
+            department
+        }
+    }
 
     @PutMapping("/{id}")
     @RequiresRoles(Role.MANAGING_DIRECTOR)

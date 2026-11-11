@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @Validated
 @RequestMapping("/api/v1/teams")
-@RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+@RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
 @Tag(name = "Teams", description = "Create, search, update, and deactivate teams")
 @SecurityRequirement(name = "bearerAuth")
 class TeamController(private val service: TeamService) {
@@ -80,10 +80,10 @@ class TeamController(private val service: TeamService) {
 
     @PostMapping("/{id}/members")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Add members to a team", description = "Department managers may add existing active users only to teams in their own department.")
+    @Operation(summary = "Add members to a team", description = "Department managers may add existing active users from their department to teams in that department. This supports assigning users who were created without team membership.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Members added"),
-        ApiResponse(responseCode = "400", description = "Invalid member list", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid member list or a user belongs to another department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Department Manager role required or team is outside the caller's department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Team or user not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -151,7 +151,7 @@ class TeamController(private val service: TeamService) {
 
     @GetMapping("/{id}/members/history")
     @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "List team member history", description = "Members, team leads, department managers, and managing directors can view the membership history for a team. Admin users are not permitted.")
+    @Operation(summary = "List team member history", description = "Allowed roles: MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. These roles can view the membership history for a team; ADMIN is not permitted.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Team member history returned"),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -162,10 +162,10 @@ class TeamController(private val service: TeamService) {
 
     @PostMapping
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Create a team", description = "Department managers can create teams only in their own department. Supply memberUsernames to add existing active users during creation; omit it or send an empty list to create a team without members.")
+    @Operation(summary = "Create a team", description = "Department managers can create teams only in their own department. Supply memberUsernames to add existing active users from that department during creation; omit it or send an empty list to create a team without members.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Team created"),
-        ApiResponse(responseCode = "400", description = "Invalid team data or an inactive manager or project", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid team data, an inactive manager or project, or a listed user belongs to another department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Department Manager role required or requested department is outside the caller's department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Department, manager, project, or user not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -179,13 +179,13 @@ class TeamController(private val service: TeamService) {
     @Operation(
         summary = "Update a team",
         description = "Department managers may update teams only in their own department. All fields are optional; null or omitted fields preserve their current values. " +
-                "Updates name, department, manager and projects. `memberUsernames` adds existing active users; omitted users are not removed, and an empty list makes no membership changes. " +
+                "Updates name, department, manager and projects. `memberUsernames` adds existing active users from the team's department; omitted users are not removed, and an empty list makes no membership changes. " +
                 "If `isActive` is false, the team is deactivated; if true, it is reactivated. " +
                 "Omit `isActive` to leave the value unchanged. Returns 200, 400, 401, 403, 404 or 409."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Team updated"),
-        ApiResponse(responseCode = "400", description = "Invalid team data or inactive department, manager, or project", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid team data, inactive department, manager, or project, or a listed user belongs to another department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Department Manager role required or team or target department is outside the caller's department", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Team, department, manager, project, or user not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -195,8 +195,8 @@ class TeamController(private val service: TeamService) {
         service.update(id, body)
 
     @GetMapping("/{id}")
-    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "Get a team", description = "Admins can retrieve team details for user assignment. Members, team leads, department managers, and managing directors can also retrieve a team.")
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Get a team", description = "Allowed roles: MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. ADMIN does not have team access.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Team returned"),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -206,10 +206,10 @@ class TeamController(private val service: TeamService) {
     fun get(@PathVariable id: Int): TeamResponse = service.get(id)
 
     @GetMapping
-    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(
         summary = "List teams",
-        description = "Admins can list teams for user assignment. Members, team leads, department managers, and managing directors can also list teams. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
+        description = "Allowed roles: MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. ADMIN does not have team access. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Teams returned"),

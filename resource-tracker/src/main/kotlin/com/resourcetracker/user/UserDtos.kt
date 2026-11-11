@@ -21,8 +21,8 @@ data class CreateUserRequest(
     @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD, and ADMIN users; optional for DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
     val departmentId: Int? = null,
     @field:Schema(
-        description = "Existing active team IDs. Each team must exist and be active. " +
-                "At least one is required for MEMBER and TEAM_LEAD users. Managing Directors cannot be assigned to teams.",
+        description = "Optional existing active team IDs. Omit or send an empty set to create the user without team assignment; a department manager can assign the user later. " +
+                "Each supplied team must exist, be active, and belong to the selected department. Managing Directors cannot be assigned to teams.",
         example = "[3, 4]",
         nullable = true,
     )

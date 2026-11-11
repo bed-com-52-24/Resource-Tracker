@@ -41,8 +41,8 @@ class UserController(private val users: UserService) {
     @Operation(
         summary = "Create a user",
         description = "Creates an account without a password and emails a single-use 8-digit setup code. " +
-                "The department and every supplied team must exist and be active. " +
-                "At least one team is required for MEMBER and TEAM_LEAD users. Managing Directors cannot be assigned to teams. " +
+                "The department and every supplied team must exist and be active; supplied teams must belong to the selected department. " +
+                "Team assignment is optional at creation; a department manager may assign the user to a team later. Managing Directors cannot be assigned to teams. " +
                 "A department is required for MEMBER, TEAM_LEAD, and ADMIN users."
     )
     @ApiResponses(

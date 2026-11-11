@@ -47,7 +47,7 @@ class TeamService(
             throw DuplicateResourceException("Team name already exists in this department")
         val manager = validManager(req.managerId)
         val teamProjects = activeProjects(req.projectIds)
-        val members = activeUsers(req.memberUsernames)
+        val members = activeUsers(req.memberUsernames, dept.id)
 
         val saved = teams.save(
             Team(name = name, description = req.description?.trim()?.takeIf { it.isNotEmpty() }, department = dept, manager = manager, projects = teamProjects.toMutableSet())
@@ -159,7 +159,7 @@ class TeamService(
         val actor = currentActor()
         requireDepartmentAccess(team.department.id, actor)
         if (!team.isActive) throw BusinessRuleException("Team is inactive")
-        val members = activeUsers(usernames)
+        val members = activeUsers(usernames, team.department.id)
 
         members.forEach { user ->
             if (!user.active) throw BusinessRuleException("User is inactive")
@@ -170,9 +170,12 @@ class TeamService(
         return members
     }
 
-    private fun activeUsers(usernames: Set<String>): List<User> = usernames.map { username ->
+    private fun activeUsers(usernames: Set<String>, departmentId: Int?): List<User> = usernames.map { username ->
         val user = users.findByUsername(username) ?: throw ResourceNotFoundException("User not found: $username")
         if (!user.active) throw BusinessRuleException("User is inactive")
+        if (user.department?.id != departmentId) {
+            throw BusinessRuleException("User must belong to the team's department")
+        }
         user
     }
 

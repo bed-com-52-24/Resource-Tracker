@@ -22,14 +22,14 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @Validated
 @RequestMapping("/api/v1/dashboard")
-@RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+@RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
 @Tag(name = "Dashboard", description = "Dashboard analytics for requests and internal inventory")
 @SecurityRequirement(name = "bearerAuth")
 class DashboardAnalyticsController(private val analytics: DashboardAnalyticsService) {
     @GetMapping("/analytics")
     @Operation(
         summary = "Get dashboard analytics",
-        description = "Returns request counts by status and current internal-inventory totals. Department Managers are limited to their own department; Admins and Managing Directors may optionally filter by department.",
+        description = "Allowed roles: DEPARTMENT_MANAGER and MANAGING_DIRECTOR. Returns request counts by status and current internal-inventory totals. Department Managers are limited to their own department; Managing Directors may optionally filter by department.",
     )
     @ApiResponses(
         value = [

@@ -44,8 +44,8 @@ class ReportsController(
     private val users: UserRepository,
 ) {
     @GetMapping("/resources/utilisation")
-    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Resource utilisation report", description = "Returns a paginated summary of resource usage. Department managers are restricted to their department; managing directors and admins may filter by department.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Resource utilisation report", description = "Allowed roles: DEPARTMENT_MANAGER and MANAGING_DIRECTOR. Returns a paginated summary of resource usage. Department managers are restricted to their department; Managing Directors may filter by department.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Utilisation report returned"),
         ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -64,8 +64,8 @@ class ReportsController(
     ))
 
     @GetMapping("/resources/availability")
-    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Resource availability report", description = "Returns a paginated summary of on-hand, reserved, unavailable, and available stock. Department managers are restricted to their department.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Resource availability report", description = "Allowed roles: DEPARTMENT_MANAGER and MANAGING_DIRECTOR. Returns a paginated summary of on-hand, reserved, unavailable, and available stock. Department managers are restricted to their department.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Availability report returned"),
         ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -84,8 +84,8 @@ class ReportsController(
     ))
 
     @GetMapping("/resources/stock-balance")
-    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Resource stock balance report", description = "Returns paginated stock balances, including on-hand, reserved, unavailable, and available quantities. Department managers are restricted to their department.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Resource stock balance report", description = "Allowed roles: DEPARTMENT_MANAGER and MANAGING_DIRECTOR. Returns paginated stock balances, including on-hand, reserved, unavailable, and available quantities. Department managers are restricted to their department.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Stock balance report returned"),
         ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -102,8 +102,8 @@ class ReportsController(
     )
 
     @GetMapping("/resources/waitlist")
-    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Resource waitlist report", description = "Returns paginated requests waiting for resource stock. Department managers are restricted to their department.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "Resource waitlist report", description = "Allowed roles: DEPARTMENT_MANAGER and MANAGING_DIRECTOR. Returns paginated requests waiting for resource stock. Department managers are restricted to their department.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Waitlist report returned"),
         ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -152,8 +152,8 @@ class ReportsController(
     ): List<ReconciliationReport> = reports.reconciliationHistory(id, caller.role)
 
     @GetMapping("/budgets/spending")
-    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "List budget spending", description = "Returns budgets with committed and remaining amounts, optionally filtered by department. Department managers can only access their own department.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
+    @Operation(summary = "List budget spending", description = "Allowed roles: DEPARTMENT_MANAGER and MANAGING_DIRECTOR. Returns budgets with committed and remaining amounts, optionally filtered by department. Department managers can only access their own department.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Budget spending returned"),
         ApiResponse(responseCode = "400", description = "Invalid department filter", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
