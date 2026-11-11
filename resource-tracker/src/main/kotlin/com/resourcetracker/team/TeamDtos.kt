@@ -19,7 +19,13 @@ data class TeamRequest(
 
     val managerId: Int,
 
-    val projectIds: Set<Int> = emptySet()
+    val projectIds: Set<Int> = emptySet(),
+
+    @field:Schema(
+        description = "Optional usernames of existing active users to add to the team when it is created. Omit or send an empty list to create the team without members.",
+        example = "[\"jdoe\", \"asmith\"]",
+    )
+    val memberUsernames: Set<String> = emptySet(),
 )
 
 data class UpdateTeamRequest(
@@ -34,6 +40,13 @@ data class UpdateTeamRequest(
 
     @field:Schema(description = "Optional project IDs. Null or omitted preserves the current project assignments.")
     val projectIds: Set<Int>? = null,
+
+    @field:Schema(
+        description = "Optional usernames of existing active users to add to the team. Null or an empty list leaves membership unchanged; users omitted from this list are not removed.",
+        example = "[\"jdoe\", \"asmith\"]",
+        nullable = true,
+    )
+    val memberUsernames: Set<String>? = null,
 
     @field:Schema(
         description = "Set to false to deactivate the team, true to reactivate it. Omit to leave unchanged.",

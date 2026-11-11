@@ -62,7 +62,7 @@ class SecurityConfig {
         .exceptionHandling { it.authenticationEntryPoint(entryPoint) }
         .authorizeHttpRequests {
             it.requestMatchers(
-                "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/set-password",
+                "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/password",
                 "/api/v1/auth/forgot-password", "/api/v1/health", "/error",
                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
             ).permitAll()
@@ -145,7 +145,8 @@ class RestAuthenticationEntryPoint(private val mapper: ObjectMapper) : Authentic
                 message = "Authentication required",
                 path = request.requestURI,
                 correlationId = correlationId,
-                details = emptyList()
+                details = emptyList(),
+                action = "Sign in and try again.",
             )
         )
     }

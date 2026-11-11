@@ -127,7 +127,15 @@ data class ErrorResponse(
     val message: String,
     val path: String,
     val correlationId: String,
-    val details: List<String> = emptyList()
+    val details: List<String> = emptyList(),
+    val action: String,
+    val fieldErrors: List<FieldErrorResponse> = emptyList(),
+)
+
+data class FieldErrorResponse(
+    val field: String,
+    val message: String,
+    val action: String,
 )
 
 @RestControllerAdvice
@@ -140,14 +148,7 @@ class GlobalExceptionHandler {
         ex: ApiException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        val forbidden = ex as? ForbiddenRoleException
-
         val details = when {
-            forbidden != null -> listOf(
-                "Required role: ${forbidden.required.joinToString(" or ") { it.name }}",
-                "Actual role: ${forbidden.actual.name}"
-            )
-
             ex is WeakPasswordException -> ex.violations
 
             ex is AccountLockedException && ex.until != null ->
@@ -173,14 +174,21 @@ class GlobalExceptionHandler {
         val details = ex.bindingResult.allErrors.map { error ->
             val field = (error as? org.springframework.validation.FieldError)?.field
                 ?: error.objectName
-            "$field: ${error.defaultMessage ?: "Invalid value"}"
+            validationDetail(field, error.defaultMessage)
         }.distinct().sorted()
 
         return respond(
             status = HttpStatus.BAD_REQUEST,
             code = "VALIDATION_FAILED",
-            message = "Request validation failed",
+            message = "Please review the information you entered and correct the fields listed below.",
             details = details,
+            fieldErrors = ex.bindingResult.fieldErrors.map { error ->
+                FieldErrorResponse(
+                    field = error.field,
+                    message = validationMessage(error.defaultMessage),
+                    action = "Provide a valid value for ${fieldLabel(error.field)}.",
+                )
+            }.distinctBy { it.field to it.message }.sortedBy { it.field },
             request = request
         )
     }
@@ -193,11 +201,15 @@ class GlobalExceptionHandler {
         respond(
             status = HttpStatus.BAD_REQUEST,
             code = "VALIDATION_FAILED",
-            message = "Request validation failed",
+            message = "Please review the information you entered and correct the fields listed below.",
             details = ex.constraintViolations.map {
                 val field = it.propertyPath.lastOrNull()?.name
-                if (field.isNullOrBlank()) it.message else "$field: ${it.message}"
+                validationDetail(field, it.message)
             }.distinct().sorted(),
+            fieldErrors = ex.constraintViolations.mapNotNull {
+                val field = it.propertyPath.lastOrNull()?.name ?: return@mapNotNull null
+                FieldErrorResponse(field, validationMessage(it.message), "Provide a valid value for ${fieldLabel(field)}.")
+            }.distinctBy { it.field to it.message }.sortedBy { it.field },
             request = request
         )
 
@@ -234,7 +246,7 @@ class GlobalExceptionHandler {
         return respond(
             status = HttpStatus.INTERNAL_SERVER_ERROR,
             code = "INTERNAL_SERVER_ERROR",
-            message = "The server could not complete this request because of an unexpected application error. Retry shortly; if it continues, contact support with the reference ID.",
+            message = "We couldn't complete your request right now. Please try again. If the problem continues, contact support and provide the reference ID.",
             details = listOf("Reference ID: $correlationId"),
             request = request,
             correlationId = correlationId
@@ -354,7 +366,7 @@ class GlobalExceptionHandler {
         respond(
             status = HttpStatus.BAD_REQUEST,
             code = "INVALID_REQUEST",
-            message = ex.message ?: "Invalid request",
+            message = "Some information in your request is invalid. Check the accepted values and formats, then try again.",
             request = request
         )
 
@@ -364,6 +376,7 @@ class GlobalExceptionHandler {
         message: String,
         request: HttpServletRequest,
         details: List<String> = emptyList(),
+        fieldErrors: List<FieldErrorResponse> = emptyList(),
         correlationId: String = correlationId(request)
     ): ResponseEntity<ErrorResponse> {
         val body = ErrorResponse(
@@ -374,7 +387,9 @@ class GlobalExceptionHandler {
             message = message,
             path = request.requestURI,
             correlationId = correlationId,
-            details = details
+            details = details,
+            action = recommendedAction(status.value()),
+            fieldErrors = fieldErrors,
         )
 
         return ResponseEntity.status(status)
@@ -394,7 +409,7 @@ class GlobalExceptionHandler {
                 ?.lastOrNull()?.fieldName
                 ?: parameterName
                 ?: (missing as? JsonMappingException)?.pathReference
-            return listOf(if (field.isNullOrBlank()) "A required field is missing." else "$field: required field is missing.")
+            return listOf(if (field.isNullOrBlank()) "A required field is missing." else "${fieldLabel(field)} is required.")
         }
 
         val unknown = causes.filterIsInstance<UnrecognizedPropertyException>().firstOrNull()
@@ -402,8 +417,8 @@ class GlobalExceptionHandler {
             val known = unknown.knownPropertyIds.orEmpty().map { it.toString() }.sorted()
             val field = requestField(unknown)
             return listOfNotNull(
-                "${field?.let { "$it: "}.orEmpty()}unknown field '${unknown.propertyName}'.",
-                known.takeIf { it.isNotEmpty() }?.let { "Accepted fields: ${it.joinToString(", ")}." },
+                "${field?.let { "${fieldLabel(it)}: "}.orEmpty()}isn't recognized.",
+                known.takeIf { it.isNotEmpty() }?.let { "Use one of these field names: ${it.joinToString(", ")}." },
             )
         }
 
@@ -416,7 +431,7 @@ class GlobalExceptionHandler {
             } else {
                 "Expected ${friendlyType(type)}."
             }
-            return listOf("${field?.let { "$it: "}.orEmpty()}value has the wrong format. $expectation")
+            return listOf("${field?.let { "${fieldLabel(it)}: "}.orEmpty()}has an invalid value. $expectation")
         }
 
         val parse = causes.filterIsInstance<JsonParseException>().firstOrNull()
@@ -428,7 +443,7 @@ class GlobalExceptionHandler {
         val mismatch = causes.filterIsInstance<MismatchedInputException>().firstOrNull()
         if (mismatch != null) {
             val field = requestField(mismatch)
-            return listOf("${field?.let { "$it: "}.orEmpty()}value has the wrong type. Expected ${friendlyType(mismatch.targetType)}.")
+            return listOf("${field?.let { "${fieldLabel(it)}: "}.orEmpty()}must be ${friendlyType(mismatch.targetType)}.")
         }
 
         if (ex.message.orEmpty().contains("request body is missing", ignoreCase = true)) {
@@ -441,6 +456,56 @@ class GlobalExceptionHandler {
         .mapNotNull { reference -> reference.fieldName ?: reference.index.takeIf { it >= 0 }?.toString() }
         .joinToString(".")
         .takeIf { it.isNotBlank() }
+
+    private fun validationDetail(field: String?, message: String?): String {
+        val label = field?.takeIf { it.isNotBlank() }?.let(::fieldLabel)
+        val rule = message.orEmpty()
+        val friendly = when {
+            rule.contains("must not be blank", ignoreCase = true) ||
+                rule.contains("must not be empty", ignoreCase = true) ||
+                rule.contains("must not be null", ignoreCase = true) -> "is required."
+            rule.startsWith("must be a well-formed", ignoreCase = true) -> "must be in a valid format."
+            rule.startsWith("must be a valid", ignoreCase = true) -> "must be valid."
+            else -> {
+                val message = rule.ifBlank { "Please check this value." }
+                val normalized = if (label == null) {
+                    message.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                } else {
+                    message.replaceFirstChar { it.lowercase() }
+                }
+                if (normalized.endsWith('.')) normalized else "$normalized."
+            }
+        }
+        return if (label == null) friendly else "$label $friendly"
+    }
+
+    private fun validationMessage(message: String?): String {
+        val rule = message.orEmpty()
+        return when {
+            rule.contains("must not be blank", ignoreCase = true) ||
+                rule.contains("must not be empty", ignoreCase = true) ||
+                rule.contains("must not be null", ignoreCase = true) -> "This field is required."
+            rule.startsWith("must be a well-formed", ignoreCase = true) -> "Enter a value in a valid format."
+            rule.startsWith("must be a valid", ignoreCase = true) -> "Enter a valid value."
+            rule.isBlank() -> "Check this value."
+            else -> rule.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    private fun recommendedAction(status: Int): String = when (status) {
+        400, 422 -> "Review the request and correct the indicated values, then try again."
+        401 -> "Sign in and try again."
+        403 -> "Contact an administrator if you believe you need access to this action."
+        404 -> "Check the address or selected item and try again."
+        409 -> "Review the current record state, resolve the conflict, and try again."
+        429 -> "Wait briefly, then try again."
+        in 500..599 -> "Try again shortly. If the problem continues, contact support with the reference ID."
+        else -> "Review the request and try again."
+    }
+
+    private fun fieldLabel(field: String): String = field
+        .replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
     private fun friendlyType(type: Class<*>): String = when (type) {
         String::class.java -> "text"

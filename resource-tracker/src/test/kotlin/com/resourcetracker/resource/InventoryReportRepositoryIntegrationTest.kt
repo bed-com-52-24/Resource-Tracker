@@ -3,7 +3,9 @@ package com.resourcetracker.resource
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.repository.RequestHistoryRepository
 import com.resourcetracker.request.repository.RequestLineItemRepository
+import com.resourcetracker.request.repository.ResourceRequestRepository
 import com.resourcetracker.request.repository.StockIssueRepository
+import com.resourcetracker.request.repository.StockReservationRepository
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -21,6 +23,15 @@ class InventoryReportRepositoryIntegrationTest {
     private lateinit var issues: StockIssueRepository
 
     @Autowired
+    private lateinit var reservations: StockReservationRepository
+
+    @Autowired
+    private lateinit var requests: ResourceRequestRepository
+
+    @Autowired
+    private lateinit var resources: ResourceRepository
+
+    @Autowired
     private lateinit var lines: RequestLineItemRepository
 
     @Autowired
@@ -33,10 +44,17 @@ class InventoryReportRepositoryIntegrationTest {
     fun `report queries run against the migrated inventory schema`() {
         assertTrue(issues.summarizeResources(listOf(1), LocalDate.now()).isEmpty())
         assertTrue(issues.findExpectedReturns(listOf(1), LocalDate.now()).isEmpty())
+        assertTrue(issues.sumOutstandingByDepartmentId(null) == 0L)
+        assertTrue(reservations.sumActiveByDepartmentId(null) == 0L)
+        assertTrue(requests.summarizeStatusesByDepartment(null).isEmpty())
+        val stockTotals = resources.summarizeInternalStock(null)
+        assertTrue(stockTotals.getResourceCount() == 0L)
+        assertTrue(stockTotals.getOnHandQuantity() == 0L)
+        assertTrue(stockTotals.getUnavailableQuantity() == 0L)
         assertTrue(
             lines.findApprovedWaitlist(
                 ResourceType.INTERNAL,
-                RequestStatus.APPROVED,
+                listOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED),
                 null,
                 PageRequest.of(0, 20),
             ).isEmpty,

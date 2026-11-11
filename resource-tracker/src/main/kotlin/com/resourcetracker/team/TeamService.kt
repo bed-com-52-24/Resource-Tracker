@@ -19,9 +19,11 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.repository.findByIdOrNull
+import org.springframework.http.HttpStatus
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 
 @Service
@@ -38,22 +40,38 @@ class TeamService(
     @Transactional
     fun create(req: TeamRequest): TeamResponse {
         val dept = activeDepartment(req.departmentId)
+        val actor = currentActor()
+        requireDepartmentAccess(dept.id, actor)
         val name = req.name.trim()
         if (teams.existsByDepartmentIdAndNameIgnoreCase(dept.id, name))
             throw DuplicateResourceException("Team name already exists in this department")
         val manager = validManager(req.managerId)
         val teamProjects = activeProjects(req.projectIds)
+        val members = activeUsers(req.memberUsernames, dept.id)
 
         val saved = teams.save(
             Team(name = name, description = req.description?.trim()?.takeIf { it.isNotEmpty() }, department = dept, manager = manager, projects = teamProjects.toMutableSet())
         )
+        members.forEach { user ->
+            user.teams.add(saved)
+            memberHistory.save(
+                TeamMemberHistory(
+                    user = user,
+                    fromTeam = null,
+                    toTeam = saved,
+                    action = TeamMemberAction.ADDED,
+                    performedBy = actor,
+                ),
+            )
+        }
         audit.record(
             AuditRecord.currentActor(
                 AuditAction.TEAM_CREATED,
                 "TEAM",
                 saved.id.toString(),
                 newState = snapshot(saved),
-                changedFields = listOf("name", "description", "departmentId", "managerId", "projectIds", "isActive"),
+                changedFields = listOf("name", "description", "departmentId", "managerId", "projectIds", "isActive") +
+                    if (members.isNotEmpty()) listOf("memberUsernames") else emptyList(),
             ),
         )
         return saved.toResponse()
@@ -62,8 +80,11 @@ class TeamService(
     @Transactional
     fun update(id: Int, req: UpdateTeamRequest): TeamResponse {
         val team = teams.findByIdOrNull(id) ?: throw ResourceNotFoundException("Team not found")
+        val actor = currentActor()
+        requireDepartmentAccess(team.department.id, actor)
         val before = snapshot(team)
         val dept = req.departmentId?.let(::activeDepartment) ?: team.department
+        requireDepartmentAccess(dept.id, actor)
         req.name?.let {
             val name = it.trim()
             if (teams.existsByDepartmentIdAndNameIgnoreCaseAndIdNot(dept.id, name, id))
@@ -78,6 +99,7 @@ class TeamService(
             team.projects.addAll(teamProjects)
         }
         req.isActive?.let { applyActive(team, it) }
+        req.memberUsernames?.takeIf { it.isNotEmpty() }?.let { addMembers(id, it) }
         team.updatedAt = Instant.now()
         recordUpdate(team, before, snapshot(team))
         return team.toResponse()
@@ -134,10 +156,11 @@ class TeamService(
     @Transactional
     fun addMembers(teamId: Int, usernames: Set<String>): List<User> {
         val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
-        if (!team.isActive) throw BusinessRuleException("Team is inactive")
-        val members = usernames.map { username -> users.findByUsername(username) ?: throw ResourceNotFoundException("User not found: $username") }
-
         val actor = currentActor()
+        requireDepartmentAccess(team.department.id, actor)
+        if (!team.isActive) throw BusinessRuleException("Team is inactive")
+        val members = activeUsers(usernames, team.department.id)
+
         members.forEach { user ->
             if (!user.active) throw BusinessRuleException("User is inactive")
             if (user.teams.any { it.id == teamId }) throw BusinessRuleException("User is already a member of this team")
@@ -147,18 +170,29 @@ class TeamService(
         return members
     }
 
+    private fun activeUsers(usernames: Set<String>, departmentId: Int?): List<User> = usernames.map { username ->
+        val user = users.findByUsername(username) ?: throw ResourceNotFoundException("User not found: $username")
+        if (!user.active) throw BusinessRuleException("User is inactive")
+        if (user.department?.id != departmentId) {
+            throw BusinessRuleException("User must belong to the team's department")
+        }
+        user
+    }
+
     @Transactional
     fun transfer(teamId: Int, username: String, toTeamId: Int): User {
         if (teamId == toTeamId) throw BusinessRuleException("Transfer target must be different from the source team")
+        val actor = currentActor()
         val source = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
         val target = teams.findByIdOrNull(toTeamId) ?: throw ResourceNotFoundException("Team not found")
+        requireDepartmentAccess(source.department.id, actor)
+        requireDepartmentAccess(target.department.id, actor)
         if (!source.isActive || !target.isActive) throw BusinessRuleException("Teams must be active")
         val user = users.findByUsername(username) ?: throw ResourceNotFoundException("User not found")
         if (!user.active) throw BusinessRuleException("User is inactive")
         if (!user.teams.any { it.id == teamId }) throw BusinessRuleException("User is not a member of the source team")
         if (user.teams.any { it.id == toTeamId }) throw BusinessRuleException("User is already a member of the target team")
 
-        val actor = currentActor()
         user.teams.removeIf { it.id == teamId }
         user.teams.add(target)
         memberHistory.save(TeamMemberHistory(user = user, fromTeam = source, toTeam = target, action = TeamMemberAction.TRANSFERRED, performedBy = actor))
@@ -168,6 +202,8 @@ class TeamService(
     @Transactional
     fun removeMember(teamId: Int, username: String): User {
         val team = teams.findByIdOrNull(teamId) ?: throw ResourceNotFoundException("Team not found")
+        val actor = currentActor()
+        requireDepartmentAccess(team.department.id, actor)
         if (!team.isActive) throw BusinessRuleException("Team is inactive")
         val user = users.findByUsername(username) ?: throw ResourceNotFoundException("User not found")
         if (!user.active) throw BusinessRuleException("User is inactive")
@@ -176,7 +212,6 @@ class TeamService(
         if (user.role == Role.MEMBER && user.teams.size <= 1) throw BusinessRuleException("MEMBER users must retain at least one team")
 
         user.teams.removeIf { it.id == teamId }
-        val actor = currentActor()
         memberHistory.save(TeamMemberHistory(user = user, fromTeam = team, toTeam = null, action = TeamMemberAction.REMOVED, performedBy = actor))
         return user
     }
@@ -202,6 +237,12 @@ class TeamService(
         val principal = SecurityContextHolder.getContext().authentication?.principal as? AuthenticatedUser
             ?: throw BusinessRuleException("Authentication required")
         return users.findByIdOrNull(principal.id) ?: throw ResourceNotFoundException("Actor not found")
+    }
+
+    private fun requireDepartmentAccess(teamDepartmentId: Int?, actor: User) {
+        if (actor.role != Role.DEPARTMENT_MANAGER || actor.department?.id == null || actor.department?.id != teamDepartmentId) {
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "Department access is not permitted")
+        }
     }
 
     private fun applyActive(team: Team, active: Boolean) {

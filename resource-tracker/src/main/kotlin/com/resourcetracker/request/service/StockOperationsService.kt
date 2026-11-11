@@ -6,8 +6,10 @@ import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
+import com.resourcetracker.common.UserReference
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
+import jakarta.validation.constraints.Min
 import com.resourcetracker.team.TeamRepository
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -22,8 +24,20 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema
 
-data class StockIssueRequest(val lineItemId: Int, val quantity: Int)
-data class StockIssueResponse(val id: Int, val requestId: Int, val lineItemId: Int, val resourceId: Int, val quantity: Int, val returnedQuantity: Int, val expectedReturnDate: LocalDate?)
+data class StockIssueRequest(
+    @field:Min(1) val lineItemId: Int,
+    @field:Min(1) val quantity: Int,
+)
+data class StockIssueResponse(
+    val id: Int,
+    val requestId: Int,
+    val lineItemId: Int,
+    val resourceId: Int,
+    val quantity: Int,
+    val returnedQuantity: Int,
+    val receiver: UserReference,
+    val expectedReturnDate: LocalDate?
+)
 data class CreateReturnRequest(val quantity: Int, val note: String? = null)
 data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null)
 @Schema(description = """
@@ -160,9 +174,15 @@ class StockOperationsService(
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")
         requireAssignedManager(request, actor.id, actor.role)
-        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.WAITLISTED) {
+        if (request.status !in setOf(
+                RequestStatus.APPROVED,
+                RequestStatus.PARTIALLY_APPROVED,
+                RequestStatus.WAITLISTED,
+            )
+        ) {
             conflict("Request must be approved before issuing stock")
         }
+        val receiver = users.findById(request.requesterId).orElseThrow { notFound("Request receiver not found") }
         if (dto.quantity <= 0) badRequest("quantity must be positive")
         val line = lines.findById(dto.lineItemId).orElseThrow { notFound("Line item not found") }
         if (line.requestId != requestId) notFound("Line item not found")
@@ -206,7 +226,16 @@ class StockOperationsService(
         movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
         history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
         requestCompletion.completeIfFulfilled(requestId, actor.id)
-        return StockIssueResponse(issue.id, issue.requestId, issue.lineItemId, issue.resourceId, issue.quantity, issue.returnedQuantity, issue.expectedReturnDate)
+        return StockIssueResponse(
+            id = issue.id,
+            requestId = issue.requestId,
+            lineItemId = issue.lineItemId,
+            resourceId = issue.resourceId,
+            quantity = issue.quantity,
+            returnedQuantity = issue.returnedQuantity,
+            receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
+            expectedReturnDate = issue.expectedReturnDate,
+        )
     }
 
     @Transactional(readOnly = true)
@@ -527,11 +556,9 @@ class StockOperationsService(
     @Transactional
     fun correctResource(resourceId: Int, actorId: Int, dto: StockCorrectionRequest): StockMovement {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
-        if (actor.role != Role.DEPARTMENT_MANAGER) forbidden()
+        if (actor.role != Role.MANAGING_DIRECTOR) forbidden()
         if (dto.newQuantity < 0 || dto.reason.isBlank()) badRequest("newQuantity must be non-negative and reason is required")
         val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
-        val departmentId = actor.department?.id
-        if (departmentId == null || resource.department?.id != departmentId) notFound("Resource not found")
         if (resource.type != ResourceType.INTERNAL) badRequest("Only internal resources have physical stock")
         val current = resource.quantity ?: 0
         val difference = dto.newQuantity - current

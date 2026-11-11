@@ -34,12 +34,12 @@ class AuditServiceIntegrationTest {
         jdbc.execute(
             "CREATE TRIGGER IF NOT EXISTS audit_entry_no_update " +
                 "BEFORE UPDATE ON audit_entry FOR EACH ROW " +
-                "CALL 'com.resourcetracker.testsupport.ImmutableAuditEntryTrigger'",
+                "CALL 'com.resourcetracker.testsupport.AuditEntryImmutabilityTrigger'",
         )
         jdbc.execute(
             "CREATE TRIGGER IF NOT EXISTS audit_entry_no_delete " +
                 "BEFORE DELETE ON audit_entry FOR EACH ROW " +
-                "CALL 'com.resourcetracker.testsupport.ImmutableAuditEntryTrigger'",
+                "CALL 'com.resourcetracker.testsupport.AuditEntryImmutabilityTrigger'",
         )
     }
 
@@ -94,7 +94,8 @@ class AuditServiceIntegrationTest {
         }
 
         val states = jdbc.queryForMap(
-            "SELECT previous_state, new_state FROM audit_entry WHERE item_id = ?",
+            "SELECT CAST(previous_state AS VARCHAR) AS previous_state, " +
+                "CAST(new_state AS VARCHAR) AS new_state FROM audit_entry WHERE item_id = ?",
             itemId,
         )
         val previous = states["previous_state"].toString()

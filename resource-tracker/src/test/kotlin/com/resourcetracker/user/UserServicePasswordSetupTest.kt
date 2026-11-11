@@ -38,6 +38,8 @@ class UserServicePasswordSetupTest {
             id = 22,
             username = "jdoe",
             email = "jdoe@example.com",
+            firstName = "Jane",
+            lastName = "Doe",
             role = Role.ADMIN,
             department = department,
         )
@@ -48,6 +50,8 @@ class UserServicePasswordSetupTest {
             CreateUserRequest(
                 username = "jdoe",
                 email = "jdoe@example.com",
+                firstName = "Jane",
+                lastName = "Doe",
                 role = Role.ADMIN,
                 departmentId = 3,
             )
@@ -65,6 +69,8 @@ class UserServicePasswordSetupTest {
                 CreateUserRequest(
                     username = "member",
                     email = "member@example.com",
+                    firstName = "Member",
+                    lastName = "User",
                     role = Role.MEMBER,
                     departmentId = 3,
                 )

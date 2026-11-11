@@ -47,8 +47,6 @@ data class CreateResourceRequest(
     val reorderLevel: Int = 0,
 
     @field:Positive
-    val departmentId: Int? = null,
-    @field:Positive
     val preferredVendorId: Int? = null,
 )
 
@@ -56,27 +54,27 @@ data class CreateResourceRequest(
 data class UpdateResourceRequest(
     @field:NotBlank
     @field:Size(max = 120)
-    val name: String,
+    @field:Schema(description = "Optional resource name. Omit or send null to preserve the current name.")
+    val name: String? = null,
 
-    @field:NotNull
-    val type: ResourceType,
+    @field:Schema(description = "Optional confirmation of the existing type. Resource type cannot be changed.")
+    val type: ResourceType? = null,
 
-    @field:NotNull
     @field:Schema(
-        description = "Resource category",
+        description = "Optional category. If omitted, the current category remains unchanged.",
         allowableValues = ["CONSUMABLE", "EQUIPMENT", "SOFTWARE", "OTHER"],
         example = "EQUIPMENT",
     )
-    val category: ResourceCategory,
+    val category: ResourceCategory? = null,
 
     @field:NotBlank
     @field:Size(max = 50)
     @field:Schema(
-        description = "Unit label. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day).",
+        description = "Optional unit label. Omit to preserve the current value. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day).",
         allowableValues = ["unit", "dozen", "pair", "set", "pack", "box", "bottle", "cartridge", "roll", "ream", "gram", "kilogram", "milliliter", "liter", "meter", "centimeter", "license", "user", "seat", "month", "day"],
         example = "unit",
     )
-    val unitOfMeasure: String,
+    val unitOfMeasure: String? = null,
 
     @field:Size(max = 500)
     val description: String? = null,
@@ -86,7 +84,7 @@ data class UpdateResourceRequest(
     @field:Size(max = 120)
     val location: String? = null,
     @field:Min(0)
-    val reorderLevel: Int = 0,
+    val reorderLevel: Int? = null,
 
     @field:Positive
     val departmentId: Int? = null,

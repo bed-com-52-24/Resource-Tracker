@@ -2,6 +2,8 @@ package com.resourcetracker.budget
 
 import com.resourcetracker.department.Department
 import jakarta.persistence.*
+import org.hibernate.annotations.CreationTimestamp
+import org.hibernate.annotations.UpdateTimestamp
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -49,10 +51,12 @@ class Budget(
     @Column(name = "active", nullable = false)
     var active: Boolean = true,
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
 
-    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     var updatedAt: LocalDateTime? = null,
 ) {
     fun remaining(): BigDecimal = amount - committedAmount
@@ -88,6 +92,7 @@ class BudgetCommitment(
     @Column(name = "comment", length = 500)
     var comment: String? = null,
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime? = null,
 )

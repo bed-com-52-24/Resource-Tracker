@@ -22,8 +22,10 @@ import com.resourcetracker.request.service.CreateReservationRequest
 import com.resourcetracker.request.service.CreateReturnRequest
 import com.resourcetracker.request.service.ReservationService
 import com.resourcetracker.request.service.ResourceRequestService
+import com.resourcetracker.request.service.StockIssueRequest
 import com.resourcetracker.request.service.StockOperationsService
 import com.resourcetracker.request.service.VerifyReturnRequest
+import com.resourcetracker.common.UserReference
 import com.resourcetracker.resource.Resource
 import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.resource.ResourceRepository
@@ -179,8 +181,21 @@ class ConcurrencyIntegrityTest {
                 fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
                 unitOfMeasure = "unit",
                 approvedQuantity = 1,
+                requestedDurationDays = 30,
+                approvedDurationDays = 30,
             ),
         )
+    }
+
+    @Test
+    fun `issuing stock response identifies the request receiver`() {
+        val response = stockOperations.issue(
+            requireNotNull(request.requestId),
+            manager.id,
+            StockIssueRequest(requireNotNull(line.lineItemId), 1),
+        )
+
+        assertEquals(UserReference(manager.id, manager.username), response.receiver)
     }
 
     @AfterEach

@@ -59,14 +59,15 @@ class VendorService(
     fun update(id: Int, request: UpdateVendorRequest): VendorResponse {
         val vendor = findOrThrow(id)
         val before = snapshot(vendor)
-        val name = request.name.trim()
-        if (!vendor.name.equals(name, ignoreCase = true) &&
-            vendorRepository.existsByNameIgnoreCase(name)
-        ) {
-            throw ResponseStatusException(HttpStatus.CONFLICT, "A vendor with this name already exists")
+        request.name?.trim()?.let { name ->
+            if (!vendor.name.equals(name, ignoreCase = true) &&
+                vendorRepository.existsByNameIgnoreCase(name)
+            ) {
+                throw ResponseStatusException(HttpStatus.CONFLICT, "A vendor with this name already exists")
+            }
+            vendor.name = name
         }
-        vendor.name = name
-        vendor.contactInformation = request.contactInformation
+        request.contactInformation?.let { vendor.contactInformation = it }
         request.active?.let { vendor.status = if (it) "ACTIVE" else "INACTIVE" }
         val saved = vendorRepository.save(vendor)
         val after = snapshot(saved)

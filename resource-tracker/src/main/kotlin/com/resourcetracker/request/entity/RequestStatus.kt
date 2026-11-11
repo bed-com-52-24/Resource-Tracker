@@ -5,6 +5,7 @@ enum class RequestStatus {
     QUERIED,
     APPROVED,
     COMPLETED,
+    PARTIALLY_APPROVED,
     REJECTED,
     WAITLISTED,
     CANCELLED
@@ -31,6 +32,7 @@ object RequestTransitions {
         (RequestStatus.PENDING to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
         (RequestStatus.QUERIED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
         (RequestStatus.APPROVED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
+        (RequestStatus.PARTIALLY_APPROVED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
         (RequestStatus.WAITLISTED to RequestAction.CANCEL) to Rule(RequestStatus.CANCELLED, RequestActor.TEAM_LEAD),
     )
     private val initialRules = mapOf((RequestAction.SUBMIT to RequestActor.TEAM_LEAD) to RequestStatus.PENDING)
@@ -41,7 +43,9 @@ object RequestTransitions {
         rules[from to action]?.takeIf { it.actor == actor }?.to
 
     fun completionTarget(from: RequestStatus): RequestStatus? = when (from) {
-        RequestStatus.APPROVED, RequestStatus.WAITLISTED -> RequestStatus.COMPLETED
+        RequestStatus.APPROVED,
+        RequestStatus.PARTIALLY_APPROVED,
+        RequestStatus.WAITLISTED -> RequestStatus.COMPLETED
         else -> null
     }
 

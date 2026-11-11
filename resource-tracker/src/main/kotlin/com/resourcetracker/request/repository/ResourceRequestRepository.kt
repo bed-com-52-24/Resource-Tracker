@@ -14,6 +14,16 @@ import org.springframework.data.repository.query.Param
 interface ResourceRequestRepository :
     JpaRepository<ResourceRequest, Int>, JpaSpecificationExecutor<ResourceRequest> {
 
+    @Query(
+        """
+        select r.status as status, count(r) as requestCount
+        from ResourceRequest r
+        where (:departmentId is null or r.departmentId = :departmentId)
+        group by r.status
+        """,
+    )
+    fun summarizeStatusesByDepartment(@Param("departmentId") departmentId: Int?): List<RequestStatusTotal>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ResourceRequest r where r.requestId = :requestId")
     fun findForUpdateById(@Param("requestId") requestId: Int): ResourceRequest?
@@ -38,4 +48,9 @@ interface ResourceRequestRepository :
         projectId: Int,
         statuses: Collection<RequestStatus>
     ): Boolean
+}
+
+interface RequestStatusTotal {
+    fun getStatus(): RequestStatus
+    fun getRequestCount(): Long
 }

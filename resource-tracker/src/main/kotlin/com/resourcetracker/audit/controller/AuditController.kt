@@ -45,6 +45,7 @@ class AuditController(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Invalid date range or actor ID", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
             ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
@@ -73,6 +74,7 @@ class AuditController(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Unsupported item type or invalid item ID", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
             ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
@@ -92,6 +94,7 @@ class AuditController(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Missing actions or dates, or invalid date range", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
             ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )
@@ -115,6 +118,7 @@ class AuditController(
         value = [
             ApiResponse(responseCode = "200", description = "Matching audit entries"),
             ApiResponse(responseCode = "400", description = "Invalid filters or pagination", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+            ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
             ApiResponse(responseCode = "403", description = "Admin role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ],
     )

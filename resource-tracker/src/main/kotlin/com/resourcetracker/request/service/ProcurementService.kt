@@ -39,11 +39,14 @@ class ProcurementService(
 ) {
     @Transactional
     fun authorize(request: ResourceRequest, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
-        val externalLines = lineItems.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
+        val externalLines = lineItems.filter {
+            it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name &&
+                (it.approvedQuantity ?: it.quantity) > 0
+        }
         if (externalLines.isEmpty()) return
 
-        val vendorId = request.vendorId ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
         externalLines.forEach { line ->
+            val vendorId = line.vendorId ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
             val quantity = line.approvedQuantity ?: line.quantity
             val procurement = procurements.save(
                 Procurement(

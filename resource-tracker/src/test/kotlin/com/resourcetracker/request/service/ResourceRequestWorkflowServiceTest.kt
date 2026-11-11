@@ -8,7 +8,11 @@ import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.project.Project
 import com.resourcetracker.project.ProjectRepository
 import com.resourcetracker.request.dto.CreateResourceRequestDto
+import com.resourcetracker.request.dto.ApprovedQuantityDecision
+import com.resourcetracker.request.dto.Decision
 import com.resourcetracker.request.dto.RequestLineItemDto
+import com.resourcetracker.request.dto.RequestDecisionDto
+import com.resourcetracker.request.dto.UpdateRequestDto
 import com.resourcetracker.request.entity.*
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.resource.Resource
@@ -100,8 +104,134 @@ class ResourceRequestWorkflowServiceTest {
         projectId = project.id,
         justification = "Needed for field work",
         requiredDate = LocalDate.now(clock).plusDays(2),
-        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4)),
+        lineItems = listOf(RequestLineItemDto(description = "Safety cones", quantity = 4, requestedDurationDays = 30)),
     )
+
+    private fun priorityRequest() = ResourceRequest(
+        requestId = 101,
+        requestNumber = "REQ-2026-000101",
+        itemDescription = "Safety cones",
+        manufacturer = "N/A",
+        departmentId = department.id,
+        projectId = project.id,
+        teamId = team.id,
+        requesterId = 56,
+        status = RequestStatus.PENDING,
+    )
+
+    private fun manager(department: Department? = this.department) = User(
+        id = 56,
+        username = "manager",
+        email = "manager@example.test",
+        fullName = "Department Manager",
+        passwordHash = "hash",
+        role = Role.DEPARTMENT_MANAGER,
+        department = department,
+    )
+
+    private fun stubPriorityResponse(request: ResourceRequest) {
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findAllByRequestId(101)).thenReturn(emptyList())
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
+        whenever(users.findById(56)).thenReturn(Optional.of(manager()))
+    }
+
+    @Test
+    fun `same department manager can set request priority and history is recorded`() {
+        val request = priorityRequest()
+        stubPriorityResponse(request)
+
+        val response = service().updateRequest(101, manager(), UpdateRequestDto(priority = RequestPriority.CRITICAL))
+
+        assertEquals(RequestPriority.CRITICAL, request.priority)
+        assertEquals(RequestPriority.CRITICAL, response.priority)
+        val event = argumentCaptor<RequestHistory>()
+        verify(history).save(event.capture())
+        assertEquals("PRIORITY_UPDATED", event.firstValue.eventType)
+        assertEquals("Priority changed from MEDIUM to CRITICAL", event.firstValue.comment)
+    }
+
+    @Test
+    fun `manager cannot set priority for a request in another department`() {
+        val request = priorityRequest().apply { departmentId = 2 }
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+
+        val exception = assertThrows<ResponseStatusException> {
+            service().updateRequest(101, manager(), UpdateRequestDto(priority = RequestPriority.HIGH))
+        }
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
+        verify(requests, never()).saveAndFlush(any())
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `manager without a department cannot set request priority`() {
+        val request = priorityRequest()
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+
+        val exception = assertThrows<ResponseStatusException> {
+            service().updateRequest(101, manager(department = null), UpdateRequestDto(priority = RequestPriority.LOW))
+        }
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
+        verify(requests, never()).saveAndFlush(any())
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `team lead cannot set request priority`() {
+        val exception = assertThrows<ResponseStatusException> {
+            service().updateRequest(101, caller, UpdateRequestDto(priority = RequestPriority.HIGH))
+        }
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.statusCode)
+        verify(requests, never()).findForUpdateById(101)
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `setting the existing priority does not create an audit history event`() {
+        val request = priorityRequest()
+        stubPriorityResponse(request)
+
+        val response = service().updateRequest(101, manager(), UpdateRequestDto(priority = RequestPriority.MEDIUM))
+
+        assertEquals(RequestPriority.MEDIUM, response.priority)
+        verify(requests, never()).saveAndFlush(any())
+        verify(history, never()).save(any())
+    }
+
+    @Test
+    fun `external request line carries vendorId on the line item itself`() {
+        setup(emptyList())
+        val vendor = com.resourcetracker.vendor.Vendor(id = 5, name = "Northwind", status = "ACTIVE")
+        whenever(vendors.findById(5)).thenReturn(Optional.of(vendor))
+
+        val response = service().createRequest(
+            body().copy(
+                lineItems = listOf(
+                    RequestLineItemDto(
+                        description = "Safety cones",
+                        vendorId = 5,
+                        manufacturer = null,
+                        unitOfMeasure = null,
+                        quantity = 4,
+                        fulfillmentPreference = FulfillmentPreference.EXTERNAL,
+                        unitPrice = java.math.BigDecimal("12.50"),
+                    ),
+                ),
+            ),
+            caller.id,
+        )
+
+        assertEquals(1, response.lineItems.size)
+        assertEquals(5, response.lineItems.first().vendorId)
+        assertEquals(null, response.lineItems.first().manufacturer)
+        assertEquals(null, response.lineItems.first().unitOfMeasure)
+    }
 
     @Test
     fun `request without exactly one manager is saved flagged and admins notified`() {
@@ -201,6 +331,7 @@ class ResourceRequestWorkflowServiceTest {
             quantity = 2,
             resourceId = 4,
             fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
         )
         val resource = Resource(
             id = 4,
@@ -229,6 +360,83 @@ class ResourceRequestWorkflowServiceTest {
         )
 
         verify(reservations).reserveApprovedInternalLines(101, listOf(line), manager.id)
+    }
+
+    @Test
+    fun `approving some but not all requested quantities marks request partially approved`() {
+        val manager = User(
+            id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
+            passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
+        )
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Equipment",
+            manufacturer = "N/A",
+            departmentId = department.id,
+            projectId = project.id,
+            teamId = team.id,
+            requiredDate = LocalDate.now(clock).plusDays(3),
+            assignedManagerId = manager.id,
+            requesterId = caller.id,
+        )
+        val approvedLine = ResourceRequestLineItem(
+            lineItemId = 20,
+            requestId = 101,
+            description = "Projector",
+            manufacturer = "N/A",
+            quantity = 2,
+            resourceId = 4,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
+        )
+        val rejectedLine = ResourceRequestLineItem(
+            lineItemId = 21,
+            requestId = 101,
+            description = "Camera",
+            manufacturer = "N/A",
+            quantity = 1,
+            resourceId = 5,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
+        )
+        val resource = Resource(
+            id = 4,
+            code = "R-4",
+            name = "Projector",
+            type = ResourceType.INTERNAL,
+            category = ResourceCategory.EQUIPMENT,
+            unitOfMeasure = "unit",
+            quantity = 2,
+        )
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(approvedLine, rejectedLine))
+        whenever(resources.findForUpdateById(resource.id)).thenReturn(resource)
+        whenever(availability.availableQuantity(resource, lockReservations = true)).thenReturn(2)
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
+        whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
+        whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
+
+        val response = service().decide(
+            101,
+            manager,
+            RequestDecisionDto(
+                decision = Decision.APPROVE,
+                comment = "Only the projector is available.",
+                approvedQuantities = listOf(
+                    ApprovedQuantityDecision(lineItemId = approvedLine.lineItemId!!, quantity = 2),
+                    ApprovedQuantityDecision(lineItemId = rejectedLine.lineItemId!!, quantity = 0),
+                ),
+            ),
+        )
+
+        assertEquals(RequestStatus.PARTIALLY_APPROVED, response.status)
+        assertEquals(2, approvedLine.approvedQuantity)
+        assertEquals(0, rejectedLine.approvedQuantity)
+        verify(notifications).notify(eq(listOf(caller.id)), eq(NotificationType.PARTIALLY_APPROVED), any())
+        verify(reservations).reserveApprovedInternalLines(101, listOf(approvedLine, rejectedLine), manager.id)
     }
 
     @Test

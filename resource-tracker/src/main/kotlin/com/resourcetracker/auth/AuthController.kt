@@ -4,6 +4,8 @@ import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.user.UserRepository
 import com.resourcetracker.user.PasswordSetRequest
 import com.resourcetracker.user.ForgotPasswordRequest
+import com.resourcetracker.user.UpdateOwnProfileRequest
+import com.resourcetracker.user.ChangePasswordRequest
 import com.resourcetracker.common.DepartmentReference
 import com.resourcetracker.common.TeamReference
 import com.resourcetracker.common.UnauthenticatedException
@@ -22,6 +24,7 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -55,6 +58,8 @@ data class TokenPair(
 
 data class ProfileResponse(
     val id: Int, val username:String, val email: String, val fullName: String,
+    val firstName: String, val middleName: String?, val lastName: String,
+    val position: String?, val phone: String?, val address: String?, val title: String?,
     val role: String, val department: DepartmentReference?, val teams: List<TeamReference>, val active: Boolean,
 )
 
@@ -101,6 +106,7 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         val u = users.findById(caller.id).orElseThrow{ UnauthenticatedException() }
         return ProfileResponse(
             u.id, u.username, u.email, u.fullName ?: u.username,
+            u.firstName, u.middleName, u.lastName, u.position, u.phone, u.address, u.title,
             u.role.name,
             u.department?.let { DepartmentReference(it.id, it.name) },
             u.teams.map { TeamReference(it.id, it.name) }.sortedBy { it.name },
@@ -108,13 +114,31 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
         )
     }
 
-    @PostMapping("/set-password")
+    @PatchMapping("/me")
+    @Operation(summary = "Update current profile", description = "Updates the authenticated user's first, middle, or last name, position, phone, address, or title.", security = [SecurityRequirement(name = "bearerAuth")])
+    fun updateMe(@AuthenticationPrincipal caller: AuthenticatedUser, @Valid @RequestBody request: UpdateOwnProfileRequest): ProfileResponse {
+        auth.updateOwnProfile(caller, request)
+        return me(caller)
+    }
+
+    @PostMapping("/password")
     @ResponseStatus(HttpStatus.OK)
-    @Operation(summary = "Set or reset a password", description = "Consumes a single-use 8-digit password setup or reset code.")
-    fun setPassword(@Valid @RequestBody request: PasswordSetRequest) = auth.setPassword(request)
+    @Operation(summary = "Change, set, or reset a password", description = "Provide either the authenticated user's current password or a single-use 8-digit setup/reset code, together with the new password.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Password updated", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordSetResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid or expired code, or password does not meet policy", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
+    ])
+    fun updatePassword(
+        @AuthenticationPrincipal caller: AuthenticatedUser?,
+        @Valid @RequestBody request: ChangePasswordRequest,
+    ) = auth.updatePassword(caller, request)
 
     @PostMapping("/forgot-password")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    @Operation(summary = "Request a password reset", description = "Always returns the same response to protect account privacy.")
+    @Operation(summary = "Request a password reset", description = "Queues a one-time reset code for email delivery when an active account matches the address. Always returns the same response to protect account privacy.")
+    @ApiResponses(value = [
+        ApiResponse(responseCode = "202", description = "Reset request accepted", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordResetResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid email address", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
+    ])
     fun forgotPassword(@Valid @RequestBody request: ForgotPasswordRequest) = auth.forgotPassword(request)
 }

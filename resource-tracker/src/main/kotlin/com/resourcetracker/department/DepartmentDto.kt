@@ -28,6 +28,11 @@ data class DepartmentResponse(
     val manager: UserReference? = null,
 )
 
+data class DepartmentSummaryResponse(
+    val id: Int,
+    val name: String,
+)
+
 data class UpdateDepartmentRequest(
     @field:Schema(description = "Optional department name. Null or omitted preserves the current name.",
         nullable = true

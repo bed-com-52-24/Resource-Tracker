@@ -55,7 +55,7 @@ class ResourceController(
     @GetMapping
     @Operation(
         summary = "List resources",
-        description = "Returns a paginated resource list. Department managers and team leads see internal resources from their own department plus shared external resources; managing directors have read-only access across departments. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
+        description = "Returns a paginated resource list. Team leads and department managers see internal resources from their own department plus shared external resources; managing directors can view and manage inventory across departments. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resources returned"),
@@ -97,21 +97,21 @@ class ResourceController(
     ))
 
     @PostMapping
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Create a resource", description = "Creates a new active resource. INTERNAL resources require the caller's departmentId and quantity and cannot have a preferred vendor. EXTERNAL resources are shared catalog entries and cannot have departmentId or quantity.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Create a resource", description = "Managing directors create new active resources in the shared inventory. INTERNAL resources require an opening quantity and cannot have a preferred vendor. EXTERNAL resources cannot have a quantity; a preferred vendor may be supplied.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Resource created", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Department or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Preferred vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Generated resource code conflicts with an existing resource", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun create(
         @Valid @RequestBody request: CreateResourceRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ): ResponseEntity<ResourceResponse> {
-        val response = resources.create(request, caller.id, departmentScope(caller))
+        val response = resources.create(request, caller.id)
         val location = ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
             .buildAndExpand(response.id)
@@ -120,13 +120,13 @@ class ResourceController(
     }
 
     @PutMapping("/{id}")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Update a resource", description = "Updates an internal resource in the caller's department or a shared EXTERNAL catalog entry. Set active to true or false to change its state; omit it to leave the state unchanged.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Update a resource", description = "Managing directors can update any supplied resource fields; omitted or null fields remain unchanged. Resource type is immutable; physical quantity can only be changed through stock operations. Set active to true or false to change its state, or omit it to leave the state unchanged.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource updated", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Resource, department, or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Resource type cannot change or physical stock was included in the update", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
@@ -137,7 +137,7 @@ class ResourceController(
     ): ResourceResponse = resources.update(id, request, departmentScope(caller))
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get a resource", description = "Returns one resource, including its stock, availability, department, and preferred vendor identifiers.")
+    @Operation(summary = "Get a resource", description = "Returns one resource, including stock and availability for INTERNAL resources and any department or preferred vendor references.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource returned", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -156,6 +156,7 @@ class ResourceController(
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Movement history returned"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "The caller cannot view movement history for this resource"),
         ApiResponse(responseCode = "404", description = "Resource not found"),
     ])
@@ -165,13 +166,13 @@ class ResourceController(
     ) = stockOperations.resourceMovementHistory(id, caller.id)
 
     @PostMapping("/{id}/corrections")
-    @RequiresRoles(Role.DEPARTMENT_MANAGER)
-    @Operation(summary = "Correct resource stock", description = "Sets the resource quantity to the supplied value and records the reason.")
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Correct resource stock", description = "Managing directors can set an internal resource quantity and record the reason.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Stock corrected", content = [Content(schema = Schema(implementation = StockCorrectionResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid quantity or reason", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "403", description = "Department manager role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Stock correction is not allowed", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
