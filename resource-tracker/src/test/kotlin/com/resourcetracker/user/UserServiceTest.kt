@@ -30,6 +30,26 @@ class UserServiceTest {
     private val service = UserService(users, refreshTokens, departments, teams, audit, passwordTokens, passwordTokenService)
 
     @Test
+    fun `admin user can be created without a department`() {
+        val request = CreateUserRequest(
+            username = "nkhudzu",
+            email = "allannkhudzule@gmail.com",
+            role = Role.ADMIN,
+            departmentId = null,
+            teamIds = null,
+        )
+
+        whenever(users.existsByUsernameIgnoreCase("nkhudzu")).thenReturn(false)
+        whenever(users.existsByEmailIgnoreCase("allannkhudzule@gmail.com")).thenReturn(false)
+        whenever(users.saveAndFlush(any<User>())).thenAnswer { it.getArgument<User>(0) }
+
+        val response = service.create(request)
+
+        assertEquals(Role.ADMIN, response.role)
+        assertEquals(null, response.department)
+    }
+
+    @Test
     fun `role change audits safe user state without password data`() {
         val user = User(
             id = 11,

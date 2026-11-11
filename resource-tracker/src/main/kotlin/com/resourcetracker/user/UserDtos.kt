@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.media.Schema
 data class CreateUserRequest(
     @field:NotBlank @field:Size(min = 3, max = 50) @field:Schema(example = "jdoe") val username: String,
     @field:NotBlank @field:Email @field:Size(max = 150) @field:Schema(example = "jdoe@example.com") val email: String,
+    @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,
+    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD users; optional for ADMIN, DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
     @field:NotBlank @field:Size(max = 100) @field:Schema(example = "Jane") val firstName: String,
     @field:NotBlank @field:Size(max = 100) @field:Schema(example = "Doe") val lastName: String,
     @field:Size(max = 100) val middleName: String? = null,

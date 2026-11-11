@@ -52,11 +52,14 @@ class UserService(
             throw DuplicateResourceException("Email '$email' is already in use")
         }
 
-        if (request.role !in setOf(Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR) && request.departmentId == null) {
+        if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.teamIds.isNullOrEmpty()) {
+            throw BusinessRuleException("${request.role} users must be assigned to at least one team")
+        }
+        if (request.role in setOf(Role.MEMBER, Role.TEAM_LEAD) && request.departmentId == null) {
             throw BusinessRuleException("${request.role} users require a department")
         }
-        if (request.role == Role.MANAGING_DIRECTOR && request.teamIds?.isNotEmpty() == true) {
-            throw BusinessRuleException("Managing directors are not assigned to teams")
+        if (request.role in setOf(Role.ADMIN, Role.MANAGING_DIRECTOR) && request.teamIds?.isNotEmpty() == true) {
+            throw BusinessRuleException("Admin or Managing directors are not assigned to teams")
         }
 
         val department = if (request.role == Role.MANAGING_DIRECTOR) null else request.departmentId?.let(::activeDepartment)
