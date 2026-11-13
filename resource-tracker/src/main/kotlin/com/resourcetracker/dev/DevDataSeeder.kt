@@ -138,7 +138,7 @@ class DevDataSeeder(
         val firstName: String,
         val lastName: String,
         val role: Role,
-        val department: String,
+        val department: String?,
         val teams: List<String> = emptyList(),
     )
 
