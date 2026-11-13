@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import java.time.LocalDate
 
@@ -28,12 +29,20 @@ data class CreateProjectRequest(
 )
 
 data class UpdateProjectRequest(
+    @field:Size(min = 2, max = 100)
+    @field:Pattern(regexp = "^.*\\S.*$", message = "Name cannot be blank")
     @field:Schema(description = "Optional project name. Null or omitted preserves the current name.")
     val name: String? = null,
 
+    @field:Size(min = 2, max = 20)
+    @field:Pattern(
+        regexp = "^[A-Z0-9]{2,20}$",
+        message = "Code must be 2-20 uppercase letters or digits"
+    )
     @field:Schema(description = "Optional project code. Null or omitted preserves the current code.")
     val code: String? = null,
 
+    @field:Positive
     @field:Schema(description = "Optional department ID. Null or omitted preserves the current department.")
     val departmentId: Int? = null,
 

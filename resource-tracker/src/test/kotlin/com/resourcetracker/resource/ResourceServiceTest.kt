@@ -3,8 +3,6 @@ package com.resourcetracker.resource
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
-import com.resourcetracker.department.Department
-import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.BadRequestException
@@ -22,12 +20,11 @@ import java.util.Optional
 class ResourceServiceTest {
     private val resources = mock(ResourceRepository::class.java)
     private val codes = mock(ResourceCodeGenerator::class.java)
-    private val departments = mock(DepartmentRepository::class.java)
     private val vendors = mock(VendorRepository::class.java)
     private val audit = mock(AuditService::class.java)
     private val availability = mock(StockAvailabilityService::class.java)
     private val movements = mock(StockMovementRepository::class.java)
-    private val service = ResourceService(resources, codes, departments, vendors, audit, availability, movements)
+    private val service = ResourceService(resources, codes, vendors, audit, availability, movements)
 
     private fun resource(active: Boolean) = Resource(
         id = 1,
@@ -130,7 +127,6 @@ class ResourceServiceTest {
         val response = service.create(internalRequest(0), 1)
 
         assertEquals(ResourceStatus.OUT_OF_STOCK, response.status)
-        assertEquals(null, response.department)
     }
 
     @Test
@@ -145,7 +141,6 @@ class ResourceServiceTest {
             status = ResourceStatus.OUT_OF_STOCK,
         )
         `when`(resources.findById(resource.id)).thenReturn(Optional.of(resource))
-        `when`(departments.findById(1)).thenReturn(Optional.of(Department(id = 1, name = "Engineering")))
         `when`(resources.save(resource)).thenReturn(resource)
 
         assertThrows(BusinessRuleException::class.java) {
@@ -157,7 +152,6 @@ class ResourceServiceTest {
                     category = ResourceCategory.EQUIPMENT,
                     unitOfMeasure = "unit",
                     quantity = 5,
-                    departmentId = 1,
                 ),
             )
         }

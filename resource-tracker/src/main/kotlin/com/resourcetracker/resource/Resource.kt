@@ -1,6 +1,5 @@
 package com.resourcetracker.resource
 
-import com.resourcetracker.department.Department
 import com.resourcetracker.vendor.Vendor
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -23,7 +22,6 @@ import java.time.Instant
     name = "resources",
     indexes = [
         Index(name = "idx_resources_type_active", columnList = "type, is_active"),
-        Index(name = "idx_resources_department", columnList = "department_id")
     ]
 )
 class Resource(
@@ -69,10 +67,6 @@ class Resource(
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     var status: ResourceStatus? = null,
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id")
-    var department: Department? = null,
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vendor_id")

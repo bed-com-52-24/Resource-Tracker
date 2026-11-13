@@ -62,7 +62,6 @@ object TestDataBuilders {
         category = ResourceCategory.EQUIPMENT,
         unitOfMeasure = "unit",
         quantity = quantity,
-        department = department,
         status = if (quantity > 0) ResourceStatus.AVAILABLE else ResourceStatus.OUT_OF_STOCK,
     )
 

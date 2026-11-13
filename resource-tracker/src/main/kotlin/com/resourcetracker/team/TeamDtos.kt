@@ -5,13 +5,10 @@ import com.resourcetracker.common.ProjectReference
 import com.resourcetracker.common.UserReference
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 
 data class TeamRequest(
-    @field:Schema(description = "Optional description of the team", example = "Handles customer support operations", nullable = true)
-    @field:Size(max = 500)
-    val description: String? = null,
-
     @field:NotBlank @field:Size(min = 2, max = 100)
     val name: String,
 
@@ -21,6 +18,10 @@ data class TeamRequest(
 
     val projectIds: Set<Int> = emptySet(),
 
+    @field:Schema(description = "Optional description of the team", example = "Handles customer support operations", nullable = true)
+    @field:Size(max = 500)
+    val description: String? = null,
+
     @field:Schema(
         description = "Optional usernames of existing active users to add to the team when it is created. Omit or send an empty list to create the team without members.",
         example = "[\"jdoe\", \"asmith\"]",
@@ -29,6 +30,8 @@ data class TeamRequest(
 )
 
 data class UpdateTeamRequest(
+    @field:Size(min = 2, max = 100)
+    @field:Pattern(regexp = "^.*\\S.*$", message = "Team name cannot be blank")
     @field:Schema(description = "Optional team name. Null or omitted preserves the current name.")
     val name: String? = null,
 

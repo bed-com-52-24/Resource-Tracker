@@ -5,8 +5,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.mail.MailException
-import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
+import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.scheduling.annotation.Async
@@ -28,6 +28,8 @@ import java.util.concurrent.ThreadPoolExecutor
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import java.nio.charset.StandardCharsets
+import org.springframework.web.util.HtmlUtils
 
 interface MailService {
     fun sendPasswordCode(email: String, username: String, code: String)
@@ -39,26 +41,65 @@ class SmtpMailService(
     @Value("\${app.mail.from}") private val from: String,
 ) : MailService {
     override fun sendPasswordCode(email: String, username: String, code: String) {
-        val message = SimpleMailMessage()
-        message.setFrom(from)
-        message.setTo(email)
-        message.subject = "Resource Tracker | Password setup or reset code"
-        message.text = """Hello $username,
+        val message = sender.createMimeMessage()
+        val helper = MimeMessageHelper(message, false, StandardCharsets.UTF_8.name())
+        helper.setFrom(from)
+        helper.setTo(email)
+        helper.setSubject("Resource Tracker | Password setup or reset code")
+        helper.setText(plainText(username, code), htmlMessage(username, code))
+        sender.send(message)
+    }
+
+    private fun plainText(username: String, code: String) = """Hello $username,
 
 We received a request to set up or reset the password for your Resource Tracker account.
 
-Your verification code is:
+Your verification code: $code
 
-$code
-
-Enter this code in Resource Tracker App to continue. For your security, do not share this code with anyone. It can only be used once.
+Enter this code in the Resource Tracker app. For your security, do not share it with anyone. It can only be used once.
 
 If you did not request this, you can ignore this email. Your password will not be changed unless the code is used.
 
-Regards,
-Resource Tracker Support
-""".trimIndent()
-        sender.send(message)
+Resource Tracker Support""".trimIndent()
+
+    private fun htmlMessage(username: String, code: String): String {
+        val safeUsername = HtmlUtils.htmlEscape(username)
+        val safeCode = HtmlUtils.htmlEscape(code)
+        return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Password setup or reset code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#172033;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <tr><td style="background-color:#123b32;padding:24px 32px;">
+          <p style="margin:0;color:#b8e8d7;font-size:12px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;">Resource Tracker</p>
+          <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;line-height:1.3;font-weight:700;">Password security code</h1>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Hello $safeUsername,</p>
+          <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.7;">We received a request to set up or reset the password for your account. Use this one-time verification code to continue:</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;background-color:#f0f9f6;border:1px solid #cce9dd;border-radius:8px;">
+            <tr><td align="center" style="padding:20px 16px;">
+              <p style="margin:0 0 8px;color:#42645b;font-size:12px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;">Your verification code</p>
+              <p style="margin:0;color:#123b32;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:1.3;font-weight:bold;letter-spacing:8px;">$safeCode</p>
+            </td></tr>
+          </table>
+          <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.7;">Enter the code in the Resource Tracker app. It can only be used once. For your security, do not share it with anyone.</p>
+          <p style="margin:0;padding:16px;background-color:#f8fafc;border-left:3px solid #94a3b8;color:#64748b;font-size:13px;line-height:1.6;">If you did not request this, you can ignore this message. Your password will not change unless the code is used.</p>
+        </td></tr>
+        <tr><td style="padding:18px 32px;background-color:#f8fafc;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6;">Resource Tracker Support</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
     }
 }
 

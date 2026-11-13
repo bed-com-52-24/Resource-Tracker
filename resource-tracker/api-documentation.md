@@ -28,7 +28,7 @@ Response DTO fields (nullable fields may be `null`):
 - `BudgetResponseDto`: `id`, `departmentId`, `periodType`, `periodStart`, `periodEnd`, `amount`, `committedAmount`, `remaining`, `active`.
 - `DepartmentSummaryResponse` (ADMIN only): `id`, `name`. `DepartmentResponse` (other allowed roles): `id`, `name`, `description`, `status`, `manager` (`{id,name}` or null).
 - `ProjectResponse`: `id`, `name`, `code`, `department` (`{id,name}`), `startDate`, `endDate`, `active`.
-- `ResourceResponse`: `id`, `code`, `name`, `type`, `category`, `unitOfMeasure`, `description`, `quantity`, `availableQuantity`, `reservedQuantity`, `unavailableQuantity`, `location`, `reorderLevel`, `status`, `department`, `preferredVendor`, `active`.
+- `ResourceResponse`: `id`, `code`, `name`, `type`, `category`, `unitOfMeasure`, `description`, `quantity`, `availableQuantity`, `reservedQuantity`, `unavailableQuantity`, `location`, `reorderLevel`, `status`, `preferredVendor`, `active`.
 - `TeamResponse`: `id`, `name`, `description`, `department`, `manager`, `projects`, `isActive`.
 - `VendorResponse`: `id`, `name`, `contactInformation`, `status`.
 - `NotificationResponse`: `id`, `recipientId`, `type`, `requestId`, `message`, `status`, `readAt`, `createdAt`.
@@ -493,6 +493,7 @@ Response DTO fields (nullable fields may be `null`):
 ### 48. `GET /api/v1/resources`
 
 - **Access:** TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR
+- **Behavior:** Returns the shared resource catalog and inventory; there is no department filter.
 - **Request body:** None
 - **Response body:** `PagedResponse<ResourceResponse>`
 - **Source:** `src/main/kotlin/com/resourcetracker/resource/ResourceController.kt`
@@ -530,7 +531,6 @@ Response DTO fields (nullable fields may be `null`):
 - `quantity` (optional): `Int?`
 - `location` (optional): `String?`
 - `reorderLevel` (optional): `Int?`
-- `departmentId` (optional): `Int?`
 - `preferredVendorId` (optional): `Int?`
 - `active` (optional): `Boolean?`
 - **Response body:** `ResourceResponse`
@@ -546,6 +546,7 @@ Response DTO fields (nullable fields may be `null`):
 ### 52. `GET /api/v1/resources/{id}/movement-history`
 
 - **Access:** TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR
+- **Visibility:** Team leads see requests for their teams; department managers see requests in their department; managing directors see all history.
 - **Request body:** None
 - **Response body:** `List<ResourceMovementHistoryEntry>`
 - **Source:** `src/main/kotlin/com/resourcetracker/resource/ResourceController.kt`

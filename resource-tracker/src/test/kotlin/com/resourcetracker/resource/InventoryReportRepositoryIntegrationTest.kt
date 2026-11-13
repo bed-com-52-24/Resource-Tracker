@@ -47,7 +47,7 @@ class InventoryReportRepositoryIntegrationTest {
         assertTrue(issues.sumOutstandingByDepartmentId(null) == 0L)
         assertTrue(reservations.sumActiveByDepartmentId(null) == 0L)
         assertTrue(requests.summarizeStatusesByDepartment(null).isEmpty())
-        val stockTotals = resources.summarizeInternalStock(null)
+        val stockTotals = resources.summarizeInternalStock()
         assertTrue(stockTotals.getResourceCount() == 0L)
         assertTrue(stockTotals.getOnHandQuantity() == 0L)
         assertTrue(stockTotals.getUnavailableQuantity() == 0L)

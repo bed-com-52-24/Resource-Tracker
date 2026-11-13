@@ -40,7 +40,7 @@ interface RequestLineItemRepository :
           and resource.active = true
           and line.fulfillmentPreference = 'INTERNAL'
           and request.status in :requestStatuses
-          and ( :departmentId is null or resource.department.id = :departmentId )
+          and ( :departmentId is null or request.departmentId = :departmentId )
           and (coalesce(line.approvedQuantity, line.quantity) -
                coalesce((select sum(issue.quantity) from StockIssue issue where issue.lineItemId = line.lineItemId), 0) -
                coalesce((select sum(reserved.quantity) from StockReservation reserved
@@ -61,7 +61,7 @@ interface RequestLineItemRepository :
           and resource.active = true
           and line.fulfillmentPreference = 'INTERNAL'
           and request.status = :requestStatus
-          and ( :departmentId is null or resource.department.id = :departmentId )
+          and ( :departmentId is null or request.departmentId = :departmentId )
           and (coalesce(line.approvedQuantity, line.quantity) -
                coalesce((select sum(issue.quantity) from StockIssue issue where issue.lineItemId = line.lineItemId), 0) -
                coalesce((select sum(reserved.quantity) from StockReservation reserved

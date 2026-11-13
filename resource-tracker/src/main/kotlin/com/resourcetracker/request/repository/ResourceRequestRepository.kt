@@ -33,6 +33,8 @@ interface ResourceRequestRepository :
         pageable: Pageable
     ): Page<ResourceRequest>
 
+    fun findAllByDepartmentId(departmentId: Int): List<ResourceRequest>
+
     @Query(
         """
         SELECT r FROM ResourceRequest r

@@ -8,6 +8,8 @@ set -euo pipefail
 # Usage:
 #   ./start.sh development
 #   ./start.sh production
+#   ./start.sh build
+#   ./start.sh push
 #
 # Environment files:
 #   development -> .env
@@ -15,6 +17,34 @@ set -euo pipefail
 # ==============================================================================
 
 ENVIRONMENT="${1:-development}"
+IMAGE_NAME="jeckman/resource-tracker-backend:v9"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+# ----------------------------------------------------------------------------
+# Docker image actions
+# ----------------------------------------------------------------------------
+
+case "$ENVIRONMENT" in
+    build)
+        if ! command -v docker >/dev/null 2>&1; then
+            echo "ERROR: Docker is not installed or not available in PATH." >&2
+            exit 1
+        fi
+        echo "Building Docker image: $IMAGE_NAME"
+        cd "$SCRIPT_DIR"
+        docker build -t "$IMAGE_NAME" .
+        exit 0
+        ;;
+    push)
+        if ! command -v docker >/dev/null 2>&1; then
+            echo "ERROR: Docker is not installed or not available in PATH." >&2
+            exit 1
+        fi
+        echo "Pushing Docker image: $IMAGE_NAME"
+        docker push "$IMAGE_NAME"
+        exit 0
+        ;;
+esac
 
 # ------------------------------------------------------------------------------
 # Environment configuration
@@ -38,6 +68,8 @@ case "$ENVIRONMENT" in
         echo "Usage:"
         echo "  $0 development"
         echo "  $0 production"
+        echo "  $0 build"
+        echo "  $0 push"
         exit 1
         ;;
 

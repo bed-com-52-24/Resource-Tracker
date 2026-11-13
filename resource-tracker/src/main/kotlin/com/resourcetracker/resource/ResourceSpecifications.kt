@@ -1,8 +1,6 @@
 package com.resourcetracker.resource
 
 import jakarta.persistence.criteria.Predicate
-import jakarta.persistence.criteria.JoinType
-import com.resourcetracker.department.Department
 import org.springframework.data.jpa.domain.Specification
 
 object ResourceSpecifications {
@@ -12,9 +10,7 @@ object ResourceSpecifications {
         type: ResourceType?,
         category: ResourceCategory?,
         status: ResourceStatus?,
-        departmentId: Int?,
         keyword: String?,
-        scopeDepartmentId: Int? = null,
     ): Specification<Resource> = Specification { root, _, cb ->
         val predicates = mutableListOf<Predicate>()
 
@@ -22,18 +18,6 @@ object ResourceSpecifications {
         type?.let { predicates.add(cb.equal(root.get<ResourceType>("type"), it)) }
         category?.let { predicates.add(cb.equal(root.get<ResourceCategory>("category"), it)) }
         status?.let { predicates.add(cb.equal(root.get<ResourceStatus>("status"), it)) }
-        departmentId?.let { predicates.add(cb.equal(root.get<Int>("department").get<Int>("id"), it)) }
-        scopeDepartmentId?.let { scope ->
-            val department = root.join<Resource, Department>("department", JoinType.LEFT)
-            predicates.add(
-                cb.or(
-                    cb.equal(root.get<ResourceType>("type"), ResourceType.EXTERNAL),
-                    cb.equal(department.get<Int>("id"), scope),
-                    cb.isNull(department.get<Int>("id")),
-                ),
-            )
-        }
-
         keyword?.trim()?.takeIf { it.isNotEmpty() }?.let {
             val like = "%${it.lowercase()}%"
             predicates.add(

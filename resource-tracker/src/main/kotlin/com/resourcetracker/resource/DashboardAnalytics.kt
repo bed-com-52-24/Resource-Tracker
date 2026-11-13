@@ -41,7 +41,7 @@ class DashboardAnalyticsService(
     @Transactional(readOnly = true)
     fun analytics(caller: AuthenticatedUser, requestedDepartmentId: Int?): DashboardAnalytics {
         val departmentId = departmentScope(caller, requestedDepartmentId)
-        val resourceTotals = resources.summarizeInternalStock(departmentId)
+        val resourceTotals = resources.summarizeInternalStock()
         val onHand = resourceTotals.getOnHandQuantity()
         val reserved = reservations.sumActiveByDepartmentId(departmentId)
         val unavailable = resourceTotals.getUnavailableQuantity()

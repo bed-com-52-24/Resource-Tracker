@@ -16,11 +16,10 @@ interface StockReservationRepository : JpaRepository<StockReservation, Int> {
     @Query(
         """
         select coalesce(sum(reservation.quantity), 0)
-        from StockReservation reservation, Resource resource
-        where reservation.resourceId = resource.id
+        from StockReservation reservation, ResourceRequest request
+        where reservation.requestId = request.requestId
           and reservation.status = com.resourcetracker.request.entity.ReservationStatus.ACTIVE
-          and resource.type = com.resourcetracker.resource.ResourceType.INTERNAL
-          and (:departmentId is null or resource.department.id = :departmentId)
+          and (:departmentId is null or request.departmentId = :departmentId)
         """,
     )
     fun sumActiveByDepartmentId(@Param("departmentId") departmentId: Int?): Long
@@ -55,10 +54,9 @@ interface StockIssueRepository : JpaRepository<StockIssue, Int> {
     @Query(
         """
         select coalesce(sum(issue.quantity - issue.returnedQuantity), 0)
-        from StockIssue issue, Resource resource
-        where issue.resourceId = resource.id
-          and resource.type = com.resourcetracker.resource.ResourceType.INTERNAL
-          and (:departmentId is null or resource.department.id = :departmentId)
+        from StockIssue issue, ResourceRequest request
+        where issue.requestId = request.requestId
+          and (:departmentId is null or request.departmentId = :departmentId)
         """,
     )
     fun sumOutstandingByDepartmentId(@Param("departmentId") departmentId: Int?): Long

@@ -4,11 +4,9 @@ import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.common.BadRequestException
-import com.resourcetracker.common.DepartmentReference
 import com.resourcetracker.common.VendorReference
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
-import com.resourcetracker.department.DepartmentRepository
 import com.resourcetracker.vendor.VendorRepository
 import com.resourcetracker.request.service.StockAvailabilityService
 import com.resourcetracker.request.entity.MovementType
@@ -25,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional
 class ResourceService(
     private val resourceRepository: ResourceRepository,
     private val resourceCodeGenerator: ResourceCodeGenerator,
-    private val departmentRepository: DepartmentRepository,
     private val vendorRepository: VendorRepository,
     private val audit: AuditService,
     private val availability: StockAvailabilityService,
@@ -33,7 +30,7 @@ class ResourceService(
 ) {
     @Transactional
     fun create(request: CreateResourceRequest, actorId: Int): ResourceResponse {
-        validateTypeRules(request.type, null, request.preferredVendorId, request.quantity, requireInternalDepartment = false)
+        validateTypeRules(request.type, request.preferredVendorId, request.quantity)
         val unitOfMeasure = ResourceUnits.normalize(request.category, request.unitOfMeasure)
         val resource = Resource(
             code = resourceCodeGenerator.next(),
@@ -42,7 +39,6 @@ class ResourceService(
             category = request.category,
             unitOfMeasure = unitOfMeasure,
             description = request.description,
-            department = null,
             preferredVendor = request.preferredVendorId?.let(::findVendor),
             quantity = request.quantity,
             location = request.location,
@@ -56,7 +52,7 @@ class ResourceService(
                 if (saved.type == ResourceType.INTERNAL) "INVENTORY_ITEM" else "RESOURCE",
                 saved.id.toString(),
                 newState = snapshot(saved),
-                changedFields = listOf("code", "name", "type", "category", "departmentId", "unitOfMeasure", "quantity", "location", "reorderLevel"),
+                changedFields = listOf("code", "name", "type", "category", "unitOfMeasure", "quantity", "location", "reorderLevel"),
             ),
         )
         if (saved.type == ResourceType.INTERNAL && (saved.quantity ?: 0) > 0) {
@@ -66,27 +62,16 @@ class ResourceService(
     }
 
     @Transactional
-    fun update(id: Int, request: UpdateResourceRequest, scopeDepartmentId: Int? = null): ResourceResponse {
+    fun update(id: Int, request: UpdateResourceRequest): ResourceResponse {
         val resource = resourceRepository.findById(id)
             .orElseThrow { ResourceNotFoundException("Resource not found with id $id") }
-        requireInScope(resource, scopeDepartmentId)
         if (request.type != null && request.type != resource.type) {
             throw BusinessRuleException("Resource type cannot be changed; create a new resource")
         }
 
-        if (scopeDepartmentId != null && request.departmentId != null && request.departmentId != scopeDepartmentId) {
-            throw ResourceNotFoundException("Resource not found")
-        }
-        val effectiveDepartmentId = request.departmentId ?: resource.department?.id
         val effectiveVendorId = request.preferredVendorId ?: resource.preferredVendor?.id
         val effectiveQuantity = request.quantity ?: resource.quantity
-        validateTypeRules(
-            resource.type,
-            effectiveDepartmentId,
-            effectiveVendorId,
-            effectiveQuantity,
-            requireInternalDepartment = false,
-        )
+        validateTypeRules(resource.type, effectiveVendorId, effectiveQuantity)
         val before = snapshot(resource)
         val category = request.category ?: resource.category
         val unitOfMeasure = request.unitOfMeasure?.let { ResourceUnits.normalize(category, it) }
@@ -97,7 +82,6 @@ class ResourceService(
         resource.category = category
         resource.unitOfMeasure = unitOfMeasure
         request.description?.let { resource.description = it }
-        request.departmentId?.let { resource.department = findDepartment(it) }
         request.preferredVendorId?.let { resource.preferredVendor = findVendor(it) }
         if (request.quantity != null && request.quantity != resource.quantity) {
             throw BusinessRuleException("Physical quantity can only change through stock operations")
@@ -140,20 +124,15 @@ class ResourceService(
         type: ResourceType?,
         category: ResourceCategory?,
         status: ResourceStatus?,
-        departmentId: Int?,
         availableOnly: Boolean,
         keyword: String?,
         pageable: Pageable,
-        scopeDepartmentId: Int? = null,
     ): Page<ResourceResponse> {
         if (keyword != null && keyword.length > 200) {
             throw BadRequestException("Keyword must not exceed 200 characters")
         }
 
-        if (scopeDepartmentId != null && departmentId != null && departmentId != scopeDepartmentId) {
-            return Page.empty(pageable)
-        }
-        val specification = ResourceSpecifications.filter(active, type, category, status, departmentId, keyword, scopeDepartmentId)
+        val specification = ResourceSpecifications.filter(active, type, category, status, keyword)
         if (availableOnly) return listAvailable(specification, pageable)
 
         val page = resourceRepository.findAll(specification, pageable)
@@ -166,10 +145,9 @@ class ResourceService(
     }
 
     @Transactional(readOnly = true)
-    fun get(id: Int, scopeDepartmentId: Int? = null): ResourceResponse {
+    fun get(id: Int): ResourceResponse {
         val resource = resourceRepository.findWithRelationsById(id)
             ?: throw ResourceNotFoundException("Resource not found with id $id")
-        requireInScope(resource, scopeDepartmentId)
         val reserved = if (resource.type == ResourceType.INTERNAL) availability.reservedQuantity(resource.id) else 0
         return resource.toResponse(reserved)
     }
@@ -203,30 +181,17 @@ class ResourceService(
         return PageImpl(selected.map { (resource, reserved) -> resource.toResponse(reserved) }, pageable, availableCount)
     }
 
-    private fun requireInScope(resource: Resource, scopeDepartmentId: Int?) {
-        if (scopeDepartmentId != null && resource.type == ResourceType.INTERNAL &&
-            resource.department?.id != null && resource.department?.id != scopeDepartmentId
-        ) {
-            throw ResourceNotFoundException("Resource not found")
-        }
-    }
-
     private fun applyActive(resource: Resource, active: Boolean) {
         resource.active = active
     }
 
     private fun validateTypeRules(
         type: ResourceType,
-        departmentId: Int?,
         vendorId: Int?,
         quantity: Int?,
-        requireInternalDepartment: Boolean = true,
     ) {
         when (type) {
             ResourceType.INTERNAL -> {
-                if (requireInternalDepartment && departmentId == null) {
-                    throw BadRequestException("departmentId is required for INTERNAL resources")
-                }
                 if (vendorId != null) {
                     throw BadRequestException("preferredVendorId is not allowed for INTERNAL resources")
                 }
@@ -235,19 +200,12 @@ class ResourceService(
                 }
             }
             ResourceType.EXTERNAL -> {
-                if (departmentId != null) {
-                    throw BadRequestException("departmentId is not allowed for EXTERNAL resources")
-                }
                 if (quantity != null) {
                     throw BadRequestException("quantity is not allowed for EXTERNAL resources")
                 }
             }
         }
     }
-
-    private fun findDepartment(id: Int) =
-        departmentRepository.findById(id)
-            .orElseThrow { ResourceNotFoundException("Department not found with id $id") }
 
     private fun findVendor(id: Int) =
         vendorRepository.findById(id)
@@ -268,7 +226,6 @@ class ResourceService(
             location = location,
             reorderLevel = reorderLevel,
             status = status,
-            department = department?.let { DepartmentReference(requireNotNull(it.id), it.name) },
             preferredVendor = preferredVendor?.let { VendorReference(it.id, it.name) },
             reservedQuantity = reserved,
             unavailableQuantity = if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
@@ -282,7 +239,6 @@ class ResourceService(
         "type" to resource.type.name,
         "category" to resource.category.name,
         "description" to resource.description,
-        "departmentId" to resource.department?.id,
         "preferredVendorId" to resource.preferredVendor?.id,
         "unitOfMeasure" to resource.unitOfMeasure,
         "quantity" to resource.quantity,

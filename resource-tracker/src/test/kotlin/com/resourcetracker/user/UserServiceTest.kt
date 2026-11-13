@@ -34,6 +34,8 @@ class UserServiceTest {
         val request = CreateUserRequest(
             username = "nkhudzu",
             email = "allannkhudzule@gmail.com",
+            firstName = "Allan",
+            lastName = "Nkhudzu",
             role = Role.ADMIN,
             departmentId = null,
             teamIds = null,

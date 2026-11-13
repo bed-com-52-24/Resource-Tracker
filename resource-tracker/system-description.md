@@ -75,12 +75,12 @@ The API includes explicit exceptions. For example, some reporting is open to Adm
 
 **Purpose:** Describe resources consistently and track physical stock where applicable.
 
-- Users with permitted roles can search and filter resources by name, type, category, status, department, and availability.
+- Users with permitted roles can search and filter the shared resource catalog by name, type, category, status, and availability. Resources are independent of departments; requests retain department ownership for routing, access checks, and budgets.
 - Managing Directors create and update catalogue records and perform stock corrections.
 - Resources are classified as `INTERNAL` or `EXTERNAL`, and by categories such as consumables, equipment, software, or other.
 - Internal resources have physical quantities, availability status, location, unit of measure, unavailable quantities, and reorder levels.
 - External resources do not represent on-hand stock and may reference a preferred vendor.
-- Stock movement history records openings, issues, usable returns, unavailable returns, and corrections.
+- Stock movement history records openings, issues, usable returns, unavailable returns, and corrections. Team leads see history for their teams, department managers see requests from their department, and Managing Directors see all history.
 - Reconciliation records compare a physical count with recorded stock and keep a reason for adjustments.
 
 **Design rationale:** The internal/external distinction prevents the system from presenting supplier-purchased items as stock already on the shelf. Separate movement, reservation, and issue records make stock changes explainable and help avoid double allocation. Resource units are checked against the category so quantities such as software seats and consumable boxes are not mixed arbitrarily. Stock corrections and reconciliation are restricted and reasoned because they change the organisation's inventory record.

@@ -56,7 +56,6 @@ class InventoryReportingServiceTest {
 
     private fun internalResource(
         id: Int = 1,
-        department: Department = Department(id = 3, name = "Operations"),
         quantity: Int = 4,
         unavailable: Int = 1,
     ) = Resource(
@@ -68,7 +67,6 @@ class InventoryReportingServiceTest {
         unitOfMeasure = "unit",
         quantity = quantity,
         unavailableQuantity = unavailable,
-        department = department,
     )
 
     @Test

@@ -29,7 +29,7 @@ class DashboardAnalyticsServiceTest {
         whenever(totals.getResourceCount()).thenReturn(2L)
         whenever(totals.getOnHandQuantity()).thenReturn(20L)
         whenever(totals.getUnavailableQuantity()).thenReturn(2L)
-        whenever(resources.summarizeInternalStock(3)).thenReturn(totals)
+        whenever(resources.summarizeInternalStock()).thenReturn(totals)
         whenever(reservations.sumActiveByDepartmentId(3)).thenReturn(4L)
         whenever(issues.sumOutstandingByDepartmentId(3)).thenReturn(4L)
         val pending = mock<RequestStatusTotal>()

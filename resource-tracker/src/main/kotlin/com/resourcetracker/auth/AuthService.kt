@@ -241,6 +241,7 @@ class AuthService(
         return PasswordSetResponse(passwordSet = true)
     }
 
+    @Transactional
     fun updatePassword(caller: AuthenticatedUser?, request: ChangePasswordRequest): PasswordSetResponse {
         val hasCode = !request.code.isNullOrBlank()
         val hasCurrentPassword = !request.currentPassword.isNullOrBlank()

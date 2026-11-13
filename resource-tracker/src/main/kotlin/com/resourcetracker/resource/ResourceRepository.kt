@@ -20,24 +20,14 @@ interface ResourceRepository : JpaRepository<Resource, Int>, JpaSpecificationExe
 
     fun existsByCode(code: String): Boolean
 
-    fun existsByNameIgnoreCaseAndDepartmentId(name: String, departmentId: Int): Boolean
-
-    fun existsByNameIgnoreCaseAndDepartmentIdAndIdNot(
-        name: String,
-        departmentId: Int,
-        id: Int
-    ): Boolean
-
     fun findByIdAndActiveTrue(id: Int): Resource?
 
     fun findAllByTypeAndActiveTrue(type: ResourceType, pageable: Pageable): Page<Resource>
 
     fun findAllByIdInAndActiveTrue(ids: Collection<Int>): List<Resource>
 
-    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = ["department", "preferredVendor"])
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = ["preferredVendor"])
     fun findWithRelationsById(id: Int): Resource?
-
-    fun existsByDepartmentIdAndActiveTrue(departmentId: Int): Boolean
 
     fun existsByPreferredVendorIdAndActiveTrue(vendorId: Int): Boolean
 
@@ -48,10 +38,9 @@ interface ResourceRepository : JpaRepository<Resource, Int>, JpaSpecificationExe
                coalesce(sum(r.unavailableQuantity), 0) as unavailableQuantity
         from Resource r
         where r.type = com.resourcetracker.resource.ResourceType.INTERNAL
-          and (:departmentId is null or r.department.id = :departmentId)
         """,
     )
-    fun summarizeInternalStock(@Param("departmentId") departmentId: Int?): InternalStockTotals
+    fun summarizeInternalStock(): InternalStockTotals
 
 }
 

@@ -4,6 +4,7 @@ import com.resourcetracker.common.DepartmentReference
 import com.resourcetracker.common.TeamReference
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema
 
@@ -12,7 +13,6 @@ data class CreateUserRequest(
     @field:NotBlank @field:Size(min = 3, max = 50) @field:Schema(example = "jdoe") val username: String,
     @field:NotBlank @field:Email @field:Size(max = 150) @field:Schema(example = "jdoe@example.com") val email: String,
     @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,
-    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD users; optional for ADMIN, DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
     @field:NotBlank @field:Size(max = 100) @field:Schema(example = "Jane") val firstName: String,
     @field:NotBlank @field:Size(max = 100) @field:Schema(example = "Doe") val lastName: String,
     @field:Size(max = 100) val middleName: String? = null,
@@ -20,7 +20,7 @@ data class CreateUserRequest(
     @field:Size(max = 30) val phone: String? = null,
     @field:Size(max = 500) val address: String? = null,
     @field:Size(max = 50) val title: String? = null,
-    @field:Schema(example = "MANAGING_DIRECTOR", allowableValues = ["MEMBER", "TEAM_LEAD", "DEPARTMENT_MANAGER", "ADMIN", "MANAGING_DIRECTOR"]) val role: Role,    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD, and ADMIN users; optional for DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
+    @field:Schema(description = "Existing active department ID. Required for MEMBER, TEAM_LEAD, and ADMIN users; optional for DEPARTMENT_MANAGER and MANAGING_DIRECTOR users.", example = "1", nullable = true)
     val departmentId: Int? = null,
     @field:Schema(
         description = "Optional existing active team IDs. Omit or send an empty set to create the user without team assignment; a department manager can assign the user later. " +
@@ -33,7 +33,9 @@ data class CreateUserRequest(
 
 @Schema(description = "Profile, role, and account status fields that an administrator may update")
 data class UpdateUserRequest(
+    @field:Pattern(regexp = "^.*\\S.*$", message = "First name cannot be blank")
     @field:Size(max = 100) val firstName: String? = null,
+    @field:Pattern(regexp = "^.*\\S.*$", message = "Last name cannot be blank")
     @field:Size(max = 100) val lastName: String? = null,
     @field:Size(max = 100) val middleName: String? = null,
     @field:Size(max = 150) val position: String? = null,
@@ -48,7 +50,9 @@ data class UpdateUserRequest(
 
 @Schema(description = "Profile fields the authenticated user may update")
 data class UpdateOwnProfileRequest(
+    @field:Pattern(regexp = "^.*\\S.*$", message = "First name cannot be blank")
     @field:Size(max = 100) val firstName: String? = null,
+    @field:Pattern(regexp = "^.*\\S.*$", message = "Last name cannot be blank")
     @field:Size(max = 100) val lastName: String? = null,
     @field:Size(max = 100) val middleName: String? = null,
     @field:Size(max = 150) val position: String? = null,

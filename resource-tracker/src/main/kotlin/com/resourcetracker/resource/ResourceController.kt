@@ -3,8 +3,8 @@ package com.resourcetracker.resource
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.common.ListQuery
-import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.request.service.AvailabilityService
 import com.resourcetracker.request.service.CreateReservationRequest
 import com.resourcetracker.request.service.ReservationService
@@ -13,7 +13,6 @@ import com.resourcetracker.request.service.StockIssueRequest
 import com.resourcetracker.request.service.StockOperationsService
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.user.Role
-import com.resourcetracker.user.UserRepository
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -49,13 +48,12 @@ import org.springframework.web.bind.annotation.RestController
 class ResourceController(
     private val resources: ResourceService,
     private val stockOperations: StockOperationsService,
-    private val users: UserRepository,
 ) {
 
     @GetMapping
     @Operation(
         summary = "List resources",
-        description = "Returns a paginated resource list. Team leads and department managers see internal resources from their own department plus shared external resources; managing directors can view and manage inventory across departments. Search matches resource names and codes; active state, type, category, status, availability, and department are optional filters. Page size is capped at 100."
+        description = "Returns the shared resource catalog and inventory to authorized callers. Search matches resource names and codes; active state, type, category, status, and availability are optional filters. Page size is capped at 100."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resources returned"),
@@ -82,18 +80,14 @@ class ResourceController(
         ) @RequestParam(required = false) category: ResourceCategory?,
         @Parameter(description = "Filter by inventory status (internal resources)") @RequestParam(required = false) status: ResourceStatus?,
         @Parameter(description = "Only return resources with available quantity greater than zero", example = "false") @RequestParam(defaultValue = "false") availableOnly: Boolean,
-        @Parameter(description = "Filter by owning department ID") @RequestParam(required = false) departmentId: Int?,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
     ): PagedResponse<ResourceResponse> = PagedResponse.from(resources.list(
         active = active,
         type = type,
         category = category,
         status = status,
-        departmentId = departmentId,
         availableOnly = availableOnly,
         keyword = search,
         pageable = ListQuery.pageable(page, size, sort, direction, ALLOWED_SORT_FIELDS, "name"),
-        scopeDepartmentId = departmentScope(caller),
     ))
 
     @PostMapping
@@ -127,17 +121,16 @@ class ResourceController(
         ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
-        ApiResponse(responseCode = "404", description = "Resource, department, or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "404", description = "Resource or vendor not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Resource type cannot change or physical stock was included in the update", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
     fun update(
         @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
         @Valid @RequestBody request: UpdateResourceRequest,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): ResourceResponse = resources.update(id, request, departmentScope(caller))
+    ): ResourceResponse = resources.update(id, request)
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get a resource", description = "Returns one resource, including stock and availability for INTERNAL resources and any department or preferred vendor references.")
+    @Operation(summary = "Get a resource", description = "Returns one shared resource, including stock and availability for INTERNAL resources and any preferred vendor reference.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource returned", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -146,13 +139,12 @@ class ResourceController(
     ])
     fun get(
         @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
-        @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): ResourceResponse = resources.get(id, departmentScope(caller))
+    ): ResourceResponse = resources.get(id)
 
     @GetMapping("/{id}/movement-history")
     @Operation(
         summary = "Get a resource's issue and return movement history",
-        description = "Returns chronological stock movements for a resource, including the team and request for issues, submitted/verified returns, return condition and dates, and current issued/returned/outstanding quantities. For each issue, fulfillmentStatus indicates whether the line is partially issued, issued, partially returned, or returned. Team leads and department managers may view resources in their department; managing directors may view all resources.",
+        description = "Returns chronological stock movements for a resource, including the team and request for issues, submitted/verified returns, return condition and dates, and current issued/returned/outstanding quantities. For each issue, fulfillmentStatus indicates whether the line is partially issued, issued, partially returned, or returned. Team leads see requests for their teams, department managers see requests in their department, and managing directors see all history.",
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Movement history returned"),
@@ -189,10 +181,6 @@ class ResourceController(
             reason = movement.reason,
         )
     }
-
-    private fun departmentScope(caller: AuthenticatedUser): Int? =
-        if (caller.role == Role.MANAGING_DIRECTOR) null
-        else users.findById(caller.id).orElseThrow { ResourceNotFoundException("User not found") }.department?.id
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

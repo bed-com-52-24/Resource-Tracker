@@ -271,15 +271,22 @@ class StockOperationsService(
     fun resourceMovementHistory(resourceId: Int, actorId: Int): List<ResourceMovementHistoryEntry> {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val resource = resources.findById(resourceId).orElseThrow { notFound("Resource not found") }
-        val allowed = when (actor.role) {
-            Role.MANAGING_DIRECTOR -> true
-            Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER -> {
-                val departmentId = actor.department?.id
-                departmentId != null && resource.department?.id == departmentId
+        val visibleRequestIds: Set<Int>? = when (actor.role) {
+            Role.MANAGING_DIRECTOR -> null
+            Role.DEPARTMENT_MANAGER -> {
+                val departmentId = actor.department?.id ?: forbidden("Department manager must belong to a department")
+                requests.findAllByDepartmentId(departmentId).mapNotNull { it.requestId }.toSet()
             }
-            else -> false
+            Role.TEAM_LEAD -> {
+                val teamIds = actor.teams.map { it.id }.toSet()
+                if (teamIds.isEmpty()) forbidden("Team lead must belong to a team")
+                issues.findAllByResourceId(resourceId)
+                    .filter { it.teamId in teamIds }
+                    .map { it.requestId }
+                    .toSet()
+            }
+            else -> forbidden()
         }
-        if (!allowed) forbidden()
 
         val issueById = issues.findAllByResourceId(resourceId).associateBy { it.id }
         val requestCache = mutableMapOf<Int, ResourceRequest?>()
@@ -363,7 +370,9 @@ class StockOperationsService(
                 )
             }
         }
-        return entries.sortedBy { it.movementDate }
+        return entries
+            .filter { visibleRequestIds == null || it.requestId in visibleRequestIds }
+            .sortedBy { it.movementDate }
     }
 
     private fun currentIssueFulfillment(issue: StockIssue, lineIssued: Int, lineApproved: Int?): String = when {
@@ -577,7 +586,8 @@ class StockOperationsService(
         if (role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != actorId) forbidden()
     }
     private fun StockReturnExtension.toResponse() = ReturnExtensionResponse(id, issueId, requestedReturnDate, reason, status, decisionComment, requestedBy, decidedBy, createdAt, decidedAt)
-    private fun forbidden(): Nothing = throw ResponseStatusException(HttpStatus.FORBIDDEN, "Action is not permitted")
+    private fun forbidden(message: String = "Action is not permitted"): Nothing =
+        throw ResponseStatusException(HttpStatus.FORBIDDEN, message)
     private fun conflict(message: String): Nothing = throw ResponseStatusException(HttpStatus.CONFLICT, message)
     private fun badRequest(message: String): Nothing = throw ResponseStatusException(HttpStatus.BAD_REQUEST, message)
     private fun notFound(message: String): Nothing = throw ResponseStatusException(HttpStatus.NOT_FOUND, message)

@@ -148,7 +148,6 @@ class ConcurrencyIntegrityTest {
             category = ResourceCategory.EQUIPMENT,
             unitOfMeasure = "unit",
             quantity = 1,
-            department = department,
         ).also { it.create() }.let(resources::save)
         request = requests.save(
             ResourceRequest(

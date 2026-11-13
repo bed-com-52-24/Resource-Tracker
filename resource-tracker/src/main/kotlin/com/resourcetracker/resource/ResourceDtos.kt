@@ -87,8 +87,6 @@ data class UpdateResourceRequest(
     val reorderLevel: Int? = null,
 
     @field:Positive
-    val departmentId: Int? = null,
-    @field:Positive
     val preferredVendorId: Int? = null,
     val active: Boolean? = null,
 )
@@ -106,7 +104,6 @@ data class ResourceResponse(
     val location: String?,
     val reorderLevel: Int,
     val status: ResourceStatus?,
-    val department: DepartmentReference?,
     val preferredVendor: VendorReference?,
     val reservedQuantity: Int = 0,
     val unavailableQuantity: Int = 0,

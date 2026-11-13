@@ -4,6 +4,7 @@ import com.resourcetracker.common.UserReference
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Pattern
 import io.swagger.v3.oas.annotations.media.Schema
 
 data class DepartmentRequest(
@@ -37,7 +38,7 @@ data class UpdateDepartmentRequest(
     @field:Schema(description = "Optional department name. Null or omitted preserves the current name.",
         nullable = true
     )
-    //@field:NotBlank(message = "Department name is required")
+    @field:Pattern(regexp = "^.*\\S.*$", message = "Department name cannot be blank")
     @field:Size(min = 2, max = 100, message = "Department name must be 2 to 100 characters")
     val name: String? = null,
 
