@@ -17,7 +17,7 @@ set -euo pipefail
 # ==============================================================================
 
 ENVIRONMENT="${1:-development}"
-IMAGE_NAME="jeckman/resource-tracker-backend:v9"
+IMAGE_NAME="jeckman/resource-tracker-backend:v10"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # ----------------------------------------------------------------------------
@@ -278,22 +278,6 @@ if [[ "$ENVIRONMENT" == "development" ]]; then
     # Ensure Maven wrapper is executable.
     chmod +x ./mvnw
 
-    if [[ "$DB_NAME" ]]; then
-        # Drop database and its tables
-        echo
-        echo "Dropping all tables from '$DB_NAME'"
-        echo
-
-        ./mvnw flyway:clean \
-                -Dflyway.cleanDisabled='false' \
-                -Dflyway.url="$DB_CONNECTION_URL" \
-                -Dflyway.user="$SPRING_DATASOURCE_USERNAME" \
-                -Dflyway.password="$DATASOURCE_PASSWORD"
-
-        echo
-        echo "Tables dropped from '$DB_NAME' successfully"
-    fi
-
     # Spring Boot runs Flyway with the application classpath, including the
     # Kotlin-based V22 integer ID migration.
     echo
@@ -374,7 +358,7 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
     # Now bring up the remaining services.
     echo
     echo "Starting remaining services..."
-    docker compose --env-file "$ENV_FILE" up -d --build
+    docker compose --env-file "$ENV_FILE" up -d --pull always
 
     echo
     echo "============================================================"

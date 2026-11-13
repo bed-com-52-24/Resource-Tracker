@@ -51,17 +51,9 @@ docker compose up -d
 ```
 
 The MySQL data is stored in the `mysql_data` named volume. Flyway runs the
-database migrations when the backend starts. If a previous database volume was
-created from a backup or an older migration set, it can contain application
-tables without the corresponding Flyway history. In that case, reset the
-development database before starting again:
-
-```bash
-docker compose down
-docker volume rm resource-tracker_mysql_data
-docker compose up -d
-```
-
-Only remove the volume when its data is disposable. For a database that must be
-preserved, restore a backup whose `flyway_schema_history` matches the migration
-files instead of deleting the volume.
+database migrations when the backend starts. Keep this volume when restarting,
+updating, or recreating the containers; `docker compose down` preserves it, but
+`docker compose down -v` and `docker volume rm` delete it. If the database has
+application tables without matching Flyway history, stop deployment and inspect
+the schema and migration state before taking any action. Back up the volume
+before recovery or one-time Flyway onboarding; do not reset it as a repair step.

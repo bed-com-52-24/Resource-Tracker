@@ -67,7 +67,6 @@ data class UpdateResourceRequest(
     )
     val category: ResourceCategory? = null,
 
-    @field:NotBlank
     @field:Size(max = 50)
     @field:Schema(
         description = "Optional unit label. Omit to preserve the current value. Allowed values depend on category: CONSUMABLE (unit, dozen, pack, box, bottle, cartridge, roll, ream, gram, kilogram, milliliter, liter); EQUIPMENT (unit, dozen, pair, set); SOFTWARE (license, user, seat, month); OTHER (unit, dozen, pair, set, pack, box, gram, kilogram, milliliter, liter, meter, centimeter, day).",

@@ -148,16 +148,17 @@ class ResourceRequestController(
     @Operation(
         summary = "Submit or decide an issued-item return or due-date extension",
         description = """
-            One role-scoped workflow for an issue belonging to the request in {id}. Select one action and send only its fields:
+            Use one action per call and include only the fields listed for that action:
 
-            | action | caller | required fields | effect/status transition |
-            | SUBMIT_RETURN | TEAM_LEAD belonging to the issue's team | issueId, quantity; optional note | creates a PENDING return; inventory is unchanged |
-            | VERIFY_RETURN | department manager assigned to the request | issueId, returnId, condition; optional quantity/note | PENDING return becomes VERIFIED; accepted quantity updates inventory according to condition |
-            | REQUEST_EXTENSION | TEAM_LEAD belonging to the issue's team | issueId, newExpectedReturnDate, reason | creates a PENDING extension |
-            | DECIDE_EXTENSION | department manager assigned to the request | issueId, extensionId, decision; REJECT requires comment | PENDING extension becomes APPROVED or REJECTED; approval updates the issue due date |
+            - **SUBMIT_RETURN** — Team Lead belonging to the issue's team. Required: `issueId`, `quantity`. Optional: `note`. Creates a `PENDING` return; inventory is unchanged until verification.
+            - **VERIFY_RETURN** — Department Manager assigned to the request. Required: `issueId`, `returnId`, `condition`. Optional: `quantity`, `note`. Moves the return from `PENDING` to `VERIFIED` and updates inventory according to the accepted quantity and condition.
+            - **REQUEST_EXTENSION** — Team Lead belonging to the issue's team. Required: `issueId`, `newExpectedReturnDate`, `reason`. Creates a `PENDING` extension.
+            - **DECIDE_EXTENSION** — Department Manager assigned to the request. Required: `issueId`, `extensionId`, `decision`. A `REJECT` decision also requires `comment`. Moves the extension from `PENDING` to `APPROVED` or `REJECTED`; approval updates the issue due date.
 
-            Do not send a status value: the server controls these transitions. Issue fulfillment status is derived as NOT_STARTED, RESERVED, PARTIALLY_ISSUED, ISSUED, PARTIALLY_RETURNED, or RETURNED from reservation, issue, and verified return quantities. Use GET /api/v1/requests/{id}/issues to review issue, return, and extension records and obtain their IDs before calling this endpoint.
-        """,
+            Do not send a status value; the server controls these transitions. Issue fulfillment status is derived from reservation, issue, and verified return quantities. Possible values are `NOT_STARTED`, `RESERVED`, `PARTIALLY_ISSUED`, `ISSUED`, `PARTIALLY_RETURNED`, and `RETURNED`.
+
+            First use `GET /api/v1/requests/{id}/issues` to review issue, return, and extension records and obtain their IDs.
+        """.trimIndent(),
         requestBody = OpenApiRequestBody(
             required = true,
             content = [Content(mediaType = "application/json", schema = Schema(implementation = IssueWorkflowRequest::class), examples = [
