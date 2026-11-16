@@ -42,7 +42,7 @@ class SmtpMailService(
 ) : MailService {
     override fun sendPasswordCode(email: String, username: String, code: String) {
         val message = sender.createMimeMessage()
-        val helper = MimeMessageHelper(message, false, StandardCharsets.UTF_8.name())
+        val helper = MimeMessageHelper(message, true, StandardCharsets.UTF_8.name())
         helper.setFrom(from)
         helper.setTo(email)
         helper.setSubject("Resource Tracker | Password setup or reset code")

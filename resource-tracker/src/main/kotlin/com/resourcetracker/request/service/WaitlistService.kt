@@ -41,10 +41,11 @@ class WaitlistService(
         expectedDates: Map<Int, LocalDate?> = emptyMap(),
         defaultExpectedDate: LocalDate? = null,
     ) {
-        val entries = lines.map { line ->
+        val entries = lines.mapNotNull { line ->
             val lineId = requireNotNull(line.lineItemId)
             val resourceId = requireNotNull(line.resourceId)
             val approvedQuantity = requireNotNull(line.approvedQuantity)
+            if (approvedQuantity <= 0) return@mapNotNull null
             WaitlistEntry(
                 requestId = requestId,
                 lineItemId = lineId,
@@ -53,6 +54,7 @@ class WaitlistService(
                 expectedFulfillmentDate = expectedDates[lineId] ?: defaultExpectedDate,
             ) to line
         }
+        if (entries.isEmpty()) return
         waitlist.saveAll(entries.map { it.first })
         entries.forEach { (entry, line) ->
             history.save(
@@ -93,13 +95,23 @@ class WaitlistService(
             val shortfall = backorderedQuantities[lineId] ?: return@mapNotNull null
             if (shortfall <= 0) return@mapNotNull null
             val resourceId = line.resourceId ?: return@mapNotNull null
-            WaitlistEntry(
-                requestId = requestId,
-                lineItemId = lineId,
-                resourceId = resourceId,
-                quantity = shortfall,
-                expectedFulfillmentDate = expectedDates[lineId] ?: defaultExpectedDate,
-            ) to line
+            val existing = waitlist.findFirstOpenByLineItemIdForUpdate(lineId, openStatuses)
+            val entry = if (existing != null) {
+                existing.quantity += shortfall
+                (expectedDates[lineId] ?: defaultExpectedDate)?.let { existing.expectedFulfillmentDate = it }
+                waitlist.save(existing)
+            } else {
+                waitlist.save(
+                    WaitlistEntry(
+                        requestId = requestId,
+                        lineItemId = lineId,
+                        resourceId = resourceId,
+                        quantity = shortfall,
+                        expectedFulfillmentDate = expectedDates[lineId] ?: defaultExpectedDate,
+                    ),
+                )
+            }
+            entry to line
         }
         if (entries.isEmpty()) return
         waitlist.saveAll(entries.map { it.first })
@@ -144,7 +156,7 @@ class WaitlistService(
     /** Reduce a backordered (not yet reserved) quantity when part of it is waived/no longer required. */
     @Transactional
     fun updateExpectedFulfillmentDate(requestId: Int, lineItemId: Int, date: LocalDate, actorId: Int) {
-        val entry = waitlist.findByLineItemIdForUpdate(lineItemId)
+        val entry = waitlist.findFirstOpenByLineItemIdForUpdate(lineItemId, openStatuses)
             ?: notFound("Waitlist entry not found")
         if (entry.requestId != requestId) notFound("Waitlist entry not found")
         entry.expectedFulfillmentDate = date
@@ -155,11 +167,9 @@ class WaitlistService(
     @Transactional(propagation = Propagation.MANDATORY)
     fun reduceBackorderedQuantity(lineItemId: Int, quantity: Int, actorId: Int, reason: String): Int? {
         if (quantity <= 0) return null
-        val snapshot = waitlist.findByLineItemId(lineItemId) ?: return null
-        if (snapshot.status == WaitlistStatus.FULFILLED || snapshot.status == WaitlistStatus.CANCELLED || snapshot.status == WaitlistStatus.WAIVED) return null
+        val snapshot = waitlist.findFirstByLineItemIdAndStatusInOrderByIdAsc(lineItemId, openStatuses) ?: return null
         resources.findForUpdateById(snapshot.resourceId) ?: notFound("Resource not found")
-        val entry = waitlist.findByLineItemIdForUpdate(lineItemId) ?: return null
-        if (entry.status == WaitlistStatus.FULFILLED || entry.status == WaitlistStatus.CANCELLED || entry.status == WaitlistStatus.WAIVED) return null
+        val entry = waitlist.findFirstOpenByLineItemIdForUpdate(lineItemId, openStatuses) ?: return null
         val outstanding = (entry.quantity - entry.issuedQuantity).coerceAtLeast(0)
         val reduction = minOf(quantity, outstanding)
         if (reduction == 0) return null
@@ -190,7 +200,7 @@ class WaitlistService(
     @Transactional(propagation = Propagation.MANDATORY)
     fun recordIssued(lineItemId: Int, quantity: Int, actorId: Int) {
         require(quantity > 0) { "Issued quantity must be positive" }
-        val entry = waitlist.findByLineItemIdForUpdate(lineItemId) ?: return
+        val entry = waitlist.findFirstOpenByLineItemIdForUpdate(lineItemId, openStatuses) ?: return
         if (entry.status != WaitlistStatus.FULFILLABLE) return
         check(entry.issuedQuantity + quantity <= entry.reservedQuantity) {
             "Cannot issue more than reserved for waitlist entry ${entry.id}"
@@ -217,7 +227,11 @@ class WaitlistService(
     /** A line still waiting for its first reservation cannot bypass older queue entries. */
     @Transactional(readOnly = true)
     fun isWaiting(lineItemId: Int): Boolean =
-        waitlist.findByLineItemId(lineItemId)?.status == WaitlistStatus.WAITING
+        waitlist.findFirstByLineItemIdAndStatusInOrderByIdAsc(lineItemId, setOf(WaitlistStatus.WAITING)) != null
+
+    @Transactional(readOnly = true)
+    fun hasOpenEntry(lineItemId: Int): Boolean =
+        waitlist.findFirstByLineItemIdAndStatusInOrderByIdAsc(lineItemId, openStatuses) != null
 
     /**
      * Called whenever usable stock becomes free. The caller must already be in a transaction.

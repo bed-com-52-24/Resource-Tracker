@@ -243,7 +243,15 @@ class ResourceRequestService(
             lines.forEach { line ->
                 val lineId = requireNotNull(line.lineItemId)
                 val approvedDecision = approvedByLine[lineId]
-                val approved = approvedDecision?.quantity ?: line.quantity
+                // An explicit quantity list is a staged approval: omitted lines remain unapproved.
+                // An empty list retains the convenient "approve all" behavior.
+                val approved = approvedDecision?.quantity ?: if (
+                    dto.decision == Decision.APPROVE && dto.approvedQuantities.isNotEmpty()
+                ) {
+                    0
+                } else {
+                    line.quantity
+                }
                 if (approved !in 0..line.quantity) {
                     badRequest("Approved quantity must be between 0 and requested quantity")
                 }
@@ -269,6 +277,9 @@ class ResourceRequestService(
                     if (comment == null) badRequest("A comment is required when reducing an approved quantity")
                     historyRepository.save(RequestHistory(requestId = requestId, eventType = "QUANTITY_ADJUSTED", fromStatus = request.status.name, toStatus = request.status.name, actorId = caller.id, lineItemId = lineId, quantity = approved, comment = "Requested ${line.quantity}; approved $approved. $comment"))
                 }
+            }
+            if (dto.decision == Decision.WAITLIST && lines.none { (it.approvedQuantity ?: 0) > 0 }) {
+                badRequest("At least one resource line must be waitlisted")
             }
             lineItemRepository.saveAll(lines)
             lines.filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }.forEach { line ->
@@ -320,7 +331,7 @@ class ResourceRequestService(
                 }
                 waitlistService.backorder(
                     requestId,
-                    lines,
+                    backorderedLines,
                     backorderedByLine,
                     caller.id,
                     from,
@@ -368,26 +379,37 @@ class ResourceRequestService(
                 if (dto.status == null && dto.approvedQuantities.isEmpty()) {
                     current.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
                 } else {
-                if (current.status in setOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED, RequestStatus.WAITLISTED) && dto.status == current.status) {
+                val approvedRequest = current.status in setOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED)
+                val quantityUpdateStatus = dto.status == current.status ||
+                    (current.status == RequestStatus.PARTIALLY_APPROVED && dto.status == RequestStatus.APPROVED)
+                val waivingWaitlisted = current.status == RequestStatus.WAITLISTED && dto.status == current.status
+                val approvingWaitlisted = current.status == RequestStatus.WAITLISTED && dto.status == RequestStatus.APPROVED
+                if (((approvedRequest && quantityUpdateStatus) || waivingWaitlisted || approvingWaitlisted) && dto.approvedQuantities.isNotEmpty()) {
                     val hasQuantityChanges = dto.approvedQuantities.isNotEmpty()
                     val reason = dto.commentApproval?.trim()?.takeIf(String::isNotEmpty)
                     if (hasQuantityChanges && reason == null) badRequest("A commentApproval reason is required when adjusting quantities")
                     var result = current.toResponse(lineItemRepository.findAllByRequestId(requestId), includeStock = true)
                     dto.approvedQuantities.forEach { quantity ->
-                        if (current.status == RequestStatus.APPROVED || current.status == RequestStatus.PARTIALLY_APPROVED) {
+                        if (!waivingWaitlisted) {
                             result = adjustApprovedQuantity(requestId, quantity.lineItemId, caller,
                                 ApprovedQuantityUpdateRequest(quantity.quantity, requireNotNull(reason)))
+                            quantity.approvedDurationDays?.let { duration ->
+                                val line = lineItemRepository.findById(quantity.lineItemId)
+                                    .orElseThrow { ResourceNotFoundException("Line item not found") }
+                                if (line.requestId != requestId) throw ResourceNotFoundException("Line item not found")
+                                if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name) {
+                                    line.approvedDurationDays = duration
+                                    lineItemRepository.save(line)
+                                }
+                            }
                         } else {
                             result = waiveLineBalance(requestId, quantity.lineItemId, caller,
                                 WaiveLineBalanceRequest(quantity.quantity, requireNotNull(reason)))
                         }
-                        quantity.expectedFulfillmentDate?.let { date ->
+                        quantity.expectedFulfillmentDate?.takeIf { waitlistService.hasOpenEntry(quantity.lineItemId) }?.let { date ->
                             result = updateExpectedFulfillmentDate(requestId, quantity.lineItemId, caller,
                                 UpdateExpectedFulfillmentDateRequest(date))
                         }
-                    }
-                    if (dto.approvedQuantities.isEmpty()) {
-                        badRequest("Provide an approved quantity, waived quantity, or expected fulfillment date")
                     }
                     result
                 } else {
@@ -441,6 +463,7 @@ class ResourceRequestService(
             ) {
                 conflict("An approved request with issued stock cannot be cancelled; use the return process")
             }
+            procurementService.cancelForRequest(requestId, caller.id, comment)
             // Lock order: request (locked above) -> resources -> waitlist entries -> reservations.
             val waitlistedResourceIds = waitlistService.cancelForRequest(requestId)
             val releasedResourceIds = reservations.releaseAllFor(requestId, caller.id, comment)
@@ -449,7 +472,8 @@ class ResourceRequestService(
                 val externalCost = lineItemRepository.findAllByRequestId(requestId)
                     .filter { it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name }
                     .fold(BigDecimal.ZERO) { sum, line ->
-                        sum + line.unitPrice.multiply(BigDecimal.valueOf((line.approvedQuantity ?: line.quantity).toLong()))
+                        val outstanding = ((line.approvedQuantity ?: line.quantity) - line.waivedQuantity).coerceAtLeast(0)
+                        sum + line.unitPrice.multiply(BigDecimal.valueOf(outstanding.toLong()))
                     }
                 if (externalCost > BigDecimal.ZERO) {
                     budget?.release(request.departmentId, request.requiredDate ?: LocalDate.now(clock), externalCost)
@@ -489,19 +513,17 @@ class ResourceRequestService(
     fun adjustApprovedQuantity(requestId: Int, lineItemId: Int, caller: User, dto: ApprovedQuantityUpdateRequest): ResourceRequestResponseDto {
         val request = requestRepository.findForUpdateById(requestId) ?: throw ResourceNotFoundException("Request not found")
         if (caller.role != Role.DEPARTMENT_MANAGER || request.assignedManagerId != caller.id) forbidden()
-        if (request.status != RequestStatus.APPROVED && request.status != RequestStatus.PARTIALLY_APPROVED) conflict("Approved quantities can only change on approved requests")
+        if (request.status !in setOf(RequestStatus.APPROVED, RequestStatus.PARTIALLY_APPROVED, RequestStatus.WAITLISTED)) conflict("Approved quantities can only change on approved or waitlisted requests")
         val line = lineItemRepository.findById(lineItemId).orElseThrow { ResourceNotFoundException("Line item not found") }
         if (line.requestId != requestId) throw ResourceNotFoundException("Line item not found")
         if (dto.quantity !in 1..line.quantity) badRequest("Approved quantity must be between 1 and requested quantity")
         val previous = line.approvedQuantity ?: line.quantity
         val issued = issueRepository.findAllByRequestIdAndLineItemId(requestId, lineItemId).sumOf { it.quantity }
         if (dto.quantity < issued) conflict("Approved quantity cannot be lower than issued quantity")
-        if (dto.quantity > previous && line.resourceId != null) {
-            val resource = resources.findForUpdateById(line.resourceId!!) ?: throw ResourceNotFoundException("Resource not found")
-            val increase = dto.quantity - previous
-            if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name && increase > availability.availableQuantity(resource, lockReservations = true)) {
-                conflict("Insufficient available stock; available ${availability.availableQuantity(resource, lockReservations = true)}")
-            }
+        val previousStatus = request.status
+        val increase = dto.quantity - previous
+        if (increase < 0 && line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
+            procurementService.reduceAuthorizedQuantity(requestId, line, dto.quantity - line.waivedQuantity, caller.id, dto.reason)
         }
         line.approvedQuantity = dto.quantity
         lineItemRepository.save(line)
@@ -511,15 +533,81 @@ class ResourceRequestService(
         } else {
             RequestStatus.APPROVED
         }
-        val previousStatus = request.status
         request.status = updatedStatus
+        request.decidedBy = caller.id
+        request.decidedAt = LocalDateTime.now(clock)
+        request.decisionReason = dto.reason
         requestRepository.saveAndFlush(request)
+        if (increase > 0 && line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name && line.resourceId != null) {
+            val shortfall = if (waitlistService.hasOpenEntry(lineItemId)) {
+                increase
+            } else {
+                reservations.reserveApprovedIncrease(requestId, line, increase, caller.id)
+            }
+            if (shortfall > 0) {
+                waitlistService.backorder(
+                    requestId,
+                    listOf(line),
+                    mapOf(lineItemId to shortfall),
+                    caller.id,
+                    previousStatus,
+                    dto.reason,
+                )
+            }
+        } else if (increase > 0 && line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
+            externalApprovalHandler.handle(
+                LineDecision(
+                    requestId = requestId,
+                    actorId = caller.id,
+                    line = line,
+                    approved = true,
+                    comment = dto.reason,
+                    budgetCost = line.unitPrice.multiply(BigDecimal.valueOf(increase.toLong())),
+                ),
+            )
+            procurementService.authorizeIncrease(request, line, increase, caller.id)
+        }
+        if (increase < 0 && line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
+            budget?.release(
+                request.departmentId,
+                request.requiredDate ?: LocalDate.now(clock),
+                line.unitPrice.multiply(BigDecimal.valueOf((-increase).toLong())),
+            )
+        }
         if (dto.quantity < previous) {
+            val backorderResource = waitlistService.reduceBackorderedQuantity(
+                lineItemId,
+                previous - dto.quantity,
+                caller.id,
+                dto.reason,
+            )
             reservations.releaseExcessForLine(requestId, lineItemId, dto.quantity, line.waivedQuantity, caller.id, dto.reason)
                 .sorted()
                 .forEach(waitlistService::onStockReturned)
+            backorderResource?.let(waitlistService::onStockReturned)
         }
         historyRepository.save(RequestHistory(requestId = requestId, eventType = "QUANTITY_ADJUSTED", fromStatus = previousStatus.name, toStatus = updatedStatus.name, actorId = caller.id, lineItemId = lineItemId, quantity = dto.quantity, comment = "Approved quantity changed from $previous to ${dto.quantity}. ${dto.reason}"))
+        if (previousStatus != updatedStatus || increase != 0) {
+            val notification = if (updatedStatus == RequestStatus.APPROVED) {
+                NotificationType.APPROVED
+            } else {
+                NotificationType.PARTIALLY_APPROVED
+            }
+            notifications.notify(
+                listOf(request.requesterId),
+                notification,
+                mapOf(
+                    "requestId" to requestId,
+                    "requestNumber" to request.requestNumber,
+                    "lineItemId" to lineItemId,
+                    "approvedQuantity" to dto.quantity,
+                    "status" to updatedStatus.name,
+                ),
+            )
+        }
+        if (updatedStatus == RequestStatus.APPROVED) {
+            requestCompletionService?.completeIfFulfilled(requestId, caller.id)
+        }
         return request.toResponse(requestLines, includeStock = true)
     }
 
@@ -535,10 +623,24 @@ class ResourceRequestService(
         if (line.requestId != requestId) throw ResourceNotFoundException("Line item not found")
         val approved = line.approvedQuantity ?: line.quantity
         val issued = issueRepository.findAllByRequestIdAndLineItemId(requestId, lineItemId).sumOf { it.quantity }
-        val received = procurementService.acceptedQuantity(requestId, lineItemId)
+        val received = procurementService.receivedQuantity(requestId, lineItemId)
         val fulfilled = if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) received else issued
         val outstanding = (approved - fulfilled - line.waivedQuantity).coerceAtLeast(0)
         if (dto.quantity > outstanding) badRequest("Waived quantity exceeds the outstanding balance of $outstanding")
+        if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
+            procurementService.reduceAuthorizedQuantity(
+                requestId,
+                line,
+                approved - line.waivedQuantity - dto.quantity,
+                caller.id,
+                dto.reason.trim(),
+            )
+            budget?.release(
+                request.departmentId,
+                request.requiredDate ?: LocalDate.now(clock),
+                line.unitPrice.multiply(BigDecimal.valueOf(dto.quantity.toLong())),
+            )
+        }
         line.waivedQuantity += dto.quantity
         lineItemRepository.save(line)
         val backorderResource = if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name) {

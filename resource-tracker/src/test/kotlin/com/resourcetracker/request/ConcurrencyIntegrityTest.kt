@@ -11,19 +11,24 @@ import com.resourcetracker.request.entity.RequestCategory
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.entity.ResourceRequest
 import com.resourcetracker.request.entity.ResourceRequestLineItem
+import com.resourcetracker.request.entity.WaitlistEntry
+import com.resourcetracker.request.entity.WaitlistStatus
 import com.resourcetracker.request.entity.ReturnCondition
 import com.resourcetracker.request.entity.StockIssue
 import com.resourcetracker.request.entity.StockReturn
 import com.resourcetracker.request.repository.RequestLineItemRepository
 import com.resourcetracker.request.repository.ResourceRequestRepository
 import com.resourcetracker.request.repository.StockIssueRepository
+import com.resourcetracker.request.repository.StockReservationRepository
 import com.resourcetracker.request.repository.StockReturnRepository
+import com.resourcetracker.request.repository.WaitlistEntryRepository
 import com.resourcetracker.request.service.CreateReservationRequest
 import com.resourcetracker.request.service.CreateReturnRequest
 import com.resourcetracker.request.service.ReservationService
 import com.resourcetracker.request.service.ResourceRequestService
 import com.resourcetracker.request.service.StockIssueRequest
 import com.resourcetracker.request.service.StockOperationsService
+import com.resourcetracker.request.service.WaitlistService
 import com.resourcetracker.request.service.VerifyReturnRequest
 import com.resourcetracker.common.UserReference
 import com.resourcetracker.resource.Resource
@@ -57,6 +62,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.transaction.annotation.Transactional
 
 @ActiveProfiles("test")
 @SpringBootTest(
@@ -97,6 +103,15 @@ class ConcurrencyIntegrityTest {
     private lateinit var returns: StockReturnRepository
 
     @Autowired
+    private lateinit var waitlistEntries: WaitlistEntryRepository
+
+    @Autowired
+    private lateinit var waitlistService: WaitlistService
+
+    @Autowired
+    private lateinit var reservationRows: StockReservationRepository
+
+    @Autowired
     private lateinit var reservations: ReservationService
 
     @Autowired
@@ -112,6 +127,7 @@ class ConcurrencyIntegrityTest {
     private lateinit var resource: Resource
     private lateinit var request: ResourceRequest
     private lateinit var line: ResourceRequestLineItem
+    private var additionalRequestId: Int? = null
 
     @BeforeEach
     fun createFixture() {
@@ -200,7 +216,7 @@ class ConcurrencyIntegrityTest {
     @AfterEach
     fun cleanUp() {
         jdbc.execute("DROP TRIGGER IF EXISTS fail_stock_movement")
-        request.requestId?.let { requestId ->
+        (listOfNotNull(request.requestId) + listOfNotNull(additionalRequestId)).forEach { requestId ->
             jdbc.update("DELETE FROM notifications WHERE request_id = ?", requestId)
             jdbc.update("DELETE FROM stock_movements WHERE request_id = ?", requestId)
             jdbc.update(
@@ -209,6 +225,7 @@ class ConcurrencyIntegrityTest {
             )
             jdbc.update("DELETE FROM stock_issues WHERE request_id = ?", requestId)
             jdbc.update("DELETE FROM stock_reservations WHERE request_id = ?", requestId)
+            jdbc.update("DELETE FROM waitlist_entries WHERE request_id = ?", requestId)
             jdbc.update("DELETE FROM request_history WHERE request_id = ?", requestId)
             jdbc.update("DELETE FROM resource_request_line_items WHERE request_id = ?", requestId)
             jdbc.update("DELETE FROM resource_requests WHERE request_id = ?", requestId)
@@ -220,6 +237,85 @@ class ConcurrencyIntegrityTest {
         jdbc.update("DELETE FROM users WHERE user_id = ?", manager.id)
         jdbc.update("DELETE FROM resources WHERE id = ?", resource.id)
         jdbc.update("DELETE FROM departments WHERE department_id = ?", department.id)
+    }
+
+    @Test
+    @Transactional
+    fun `database waitlist allocation honors FIFO when only part of the oldest entry can be reserved`() {
+        val suffix = UUID.randomUUID().toString()
+        request.status = RequestStatus.WAITLISTED
+        requests.save(request)
+        val laterRequest = requests.save(
+            ResourceRequest(
+                requestNumber = "W-${suffix.take(18)}",
+                itemDescription = resource.name,
+                manufacturer = "Test",
+                unitPrice = BigDecimal.ONE,
+                quantity = 1,
+                departmentId = department.id,
+                projectId = project.id,
+                teamId = team.id,
+                requesterId = manager.id,
+                assignedManagerId = manager.id,
+                requiredDate = LocalDate.now(),
+                uniqueKey = suffix,
+                status = RequestStatus.WAITLISTED,
+                justification = "FIFO integration test",
+                totalAmount = BigDecimal.ONE,
+            ),
+        )
+        additionalRequestId = requireNotNull(laterRequest.requestId)
+        val laterLine = lines.save(
+            ResourceRequestLineItem(
+                requestId = requireNotNull(laterRequest.requestId),
+                description = resource.name,
+                manufacturer = "Test",
+                unitPrice = BigDecimal.ONE,
+                quantity = 1,
+                category = RequestCategory.OTHER,
+                resourceId = resource.id,
+                fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+                unitOfMeasure = "unit",
+                approvedQuantity = 1,
+                requestedDurationDays = 30,
+                approvedDurationDays = 30,
+            ),
+        )
+        val firstEntry = waitlistEntries.save(
+            WaitlistEntry(
+                requestId = requireNotNull(request.requestId),
+                lineItemId = requireNotNull(line.lineItemId),
+                resourceId = resource.id,
+                quantity = 2,
+            ),
+        )
+        val secondEntry = waitlistEntries.save(
+            WaitlistEntry(
+                requestId = requireNotNull(laterRequest.requestId),
+                lineItemId = requireNotNull(laterLine.lineItemId),
+                resourceId = resource.id,
+                quantity = 1,
+            ),
+        )
+
+        waitlistService.onStockReturned(resource.id)
+
+        val storedFirst = waitlistEntries.findById(firstEntry.id).orElseThrow()
+        val storedSecond = waitlistEntries.findById(secondEntry.id).orElseThrow()
+        assertEquals(1, storedFirst.reservedQuantity)
+        assertEquals(WaitlistStatus.FULFILLABLE, storedFirst.status)
+        assertEquals(0, storedSecond.reservedQuantity)
+        assertEquals(WaitlistStatus.WAITING, storedSecond.status)
+        assertEquals(1, reservationRows.findAllByRequestIdAndLineItemIdAndStatus(
+            requireNotNull(request.requestId),
+            requireNotNull(line.lineItemId),
+            com.resourcetracker.request.entity.ReservationStatus.ACTIVE,
+        ).sumOf { it.quantity })
+        assertTrue(reservationRows.findAllByRequestIdAndLineItemIdAndStatus(
+            requireNotNull(laterRequest.requestId),
+            requireNotNull(laterLine.lineItemId),
+            com.resourcetracker.request.entity.ReservationStatus.ACTIVE,
+        ).isEmpty())
     }
 
     @Test

@@ -25,9 +25,21 @@ interface WaitlistEntryRepository : JpaRepository<WaitlistEntry, Int> {
 
     fun findByLineItemId(lineItemId: Int): WaitlistEntry?
 
+    fun findFirstByLineItemIdAndStatusInOrderByIdAsc(
+        lineItemId: Int,
+        statuses: Collection<WaitlistStatus>,
+    ): WaitlistEntry?
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select entry from WaitlistEntry entry where entry.lineItemId = :lineItemId")
     fun findByLineItemIdForUpdate(@Param("lineItemId") lineItemId: Int): WaitlistEntry?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select entry from WaitlistEntry entry where entry.lineItemId = :lineItemId and entry.status in :statuses order by entry.id asc")
+    fun findFirstOpenByLineItemIdForUpdate(
+        @Param("lineItemId") lineItemId: Int,
+        @Param("statuses") statuses: Collection<WaitlistStatus>,
+    ): WaitlistEntry?
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(

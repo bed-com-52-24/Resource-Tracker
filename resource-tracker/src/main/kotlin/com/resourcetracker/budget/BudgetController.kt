@@ -63,7 +63,7 @@ class BudgetController(
     @PostMapping
     @RequiresRoles(Role.MANAGING_DIRECTOR)
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Create a budget", description = "Create a department budget for a period(ANNUAL,MONTHLY,QUARTERY). The budget is active by default. Action is done by the MANAGING DIRECTOR only.")
+    @Operation(summary = "Create a budget", description = "Create a department budget for a period (MONTHLY, QUARTERLY, or ANNUAL). The budget is active by default. Only Managing Directors can create budgets.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Budget created", content = [Content(schema = Schema(implementation = BudgetResponseDto::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request or overlapping active budget", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),

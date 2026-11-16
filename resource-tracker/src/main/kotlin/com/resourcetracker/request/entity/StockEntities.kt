@@ -107,6 +107,7 @@ class Procurement(
     @Column(name = "request_id", nullable = false) var requestId: Int,
     @Column(name = "line_item_id", nullable = false) var lineItemId: Int,
     @Column(name = "vendor_id", nullable = false) var vendorId: Int,
+    @Column(name = "authorized_quantity", nullable = false) var authorizedQuantity: Int = 1,
     @Column(name = "estimated_cost", precision = 12, scale = 2) var estimatedCost: java.math.BigDecimal? = null,
     @Column(name = "expected_delivery") var expectedDelivery: LocalDate? = null,
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 12) var status: ProcurementStatus = ProcurementStatus.AUTHORISED,
