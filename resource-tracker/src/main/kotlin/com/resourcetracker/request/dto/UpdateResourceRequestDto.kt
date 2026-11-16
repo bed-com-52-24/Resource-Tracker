@@ -11,7 +11,7 @@ enum class RequesterUpdateStatus { PENDING, CANCELLED }
 
 /** Shared PUT body. Fields are role-scoped by ResourceRequestService. */
 data class UpdateRequestDto(
-    @field:Schema(description = "TEAM_LEAD: PENDING to clarify or CANCELLED to cancel. DEPARTMENT_MANAGER: QUERIED, APPROVED, REJECTED, or WAITLISTED. PARTIALLY_APPROVED is calculated when approved quantities are reduced.", example = "APPROVED")
+    @field:Schema(description = "TEAM_LEAD: PENDING to clarify or CANCELLED to cancel. DEPARTMENT_MANAGER: QUERIED, APPROVED, REJECTED, or WAITLISTED. APPROVED may finish a PARTIALLY_APPROVED request or move a WAITLISTED request into normal approval; the server recalculates the resulting status from approved quantities.", example = "APPROVED")
     val status: com.resourcetracker.request.entity.RequestStatus? = null,
     @field:Schema(description = "TEAM_LEAD clarification/cancellation comment. Do not send for manager actions.", example = "Updated quantities as requested")
     @field:Size(max = 1000) val comment: String? = null,
@@ -19,7 +19,7 @@ data class UpdateRequestDto(
     @field:Valid val lineItems: List<RequestLineItemDto>? = null,
     @field:Schema(description = "DEPARTMENT_MANAGER only. Decision comment; required for QUERY and REJECT, and required for quantity adjustments or waivers.", example = "Approved for the project")
     @field:Size(max = 1000) val commentApproval: String? = null,
-    @field:Schema(description = "DEPARTMENT_MANAGER only. Required quantities for initial APPROVED/WAITLISTED decisions. On an already APPROVED request these adjust approved amounts; on an already WAITLISTED request they waive outstanding amounts. expectedFulfillmentDate may be provided per entry.")
+    @field:Schema(description = "DEPARTMENT_MANAGER only. For an initial APPROVED decision, list the line items being approved; omitted lines remain unapproved (quantity 0). For WAITLISTED, omitted lines use their full requested quantity. On APPROVED or PARTIALLY_APPROVED requests, listed quantities update those lines and the request status is recalculated. On WAITLISTED requests they waive outstanding amounts. expectedFulfillmentDate may be provided per entry.")
     @field:Valid val approvedQuantities: List<ApprovedQuantityDecision> = emptyList(),
     @field:Schema(description = "DEPARTMENT_MANAGER only. Set request priority within your department.", example = "HIGH")
     val priority: RequestPriority? = null,
@@ -43,12 +43,12 @@ data class ApprovedQuantityDecision(
     val approvedDurationDays: Int? = null,
 )
 
-@Schema(description = "Approved quantities per request line item. Omit an entry to approve the full requested quantity. Use quantity 0 to reject a line item; approving fewer than requested sets the request status to PARTIALLY_APPROVED.")
+@Schema(description = "Approved quantities per request line item. For a partial approval, include only the lines being approved; omitted lines remain unapproved. Use quantity 0 to explicitly leave a line unapproved. The request remains PARTIALLY_APPROVED until every line reaches its requested quantity; later manager updates can approve the remaining quantities.")
 data class RequestDecisionDto(
     @field:Schema(allowableValues = ["QUERY", "APPROVE", "REJECT", "WAITLIST"], example = "APPROVE")
     val decision: Decision,
     @field:Size(max = 1000) val comment: String? = null,
-    @field:Schema(description = "Approved quantities per request line item. Omit or leave empty to approve full requested quantities.", example = "[{\"lineItemId\": 1, \"quantity\": 4}]")
+    @field:Schema(description = "For APPROVE, list the line items being approved; omitted lines remain unapproved. An empty list approves all lines. For WAITLIST, omitted lines use their full requested quantities.", example = "[{\"lineItemId\": 1, \"quantity\": 4}]")
     @field:Valid val approvedQuantities: List<ApprovedQuantityDecision> = emptyList(),
 )
 

@@ -102,6 +102,28 @@ class ReservationService(
         return backorders
     }
 
+    /** Reserve the newly approved increment only; any shortfall remains eligible for FIFO backorder. */
+    @Transactional
+    fun reserveApprovedIncrease(
+        requestId: Int,
+        line: ResourceRequestLineItem,
+        increase: Int,
+        actorId: Int,
+    ): Int {
+        if (increase <= 0) return 0
+        val resourceId = line.resourceId ?: return 0
+        val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
+        if (resource.type != ResourceType.INTERNAL || !resource.active) {
+            conflict("Resource is unavailable for reservation")
+        }
+        val available = availability.availableQuantity(resource, lockReservations = true)
+        val reserveQuantity = minOf(increase, available)
+        if (reserveQuantity > 0) {
+            reserve(requestId, actorId, CreateReservationRequest(requireNotNull(line.lineItemId), reserveQuantity))
+        }
+        return increase - reserveQuantity
+    }
+
     @Transactional
     fun reserve(requestId: Int, actorId: Int, command: CreateReservationRequest): ReservationResponse {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }

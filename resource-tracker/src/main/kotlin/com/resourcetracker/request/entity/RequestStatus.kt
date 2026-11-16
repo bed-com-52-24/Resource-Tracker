@@ -44,7 +44,6 @@ object RequestTransitions {
 
     fun completionTarget(from: RequestStatus): RequestStatus? = when (from) {
         RequestStatus.APPROVED,
-        RequestStatus.PARTIALLY_APPROVED,
         RequestStatus.WAITLISTED -> RequestStatus.COMPLETED
         else -> null
     }

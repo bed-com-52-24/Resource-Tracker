@@ -22,7 +22,7 @@ class ExternalBudgetHandler(
         val before = budget.status(departmentId, date)
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Department $departmentId has no budget set up")
         val lineId = requireNotNull(decision.line.lineItemId)
-        val cost = budget.lineCost(lineId)
+        val cost = decision.budgetCost ?: budget.lineCost(lineId)
         val overrideComment = decision.comment?.trim().orEmpty()
 
         if (budget.tryCommit(departmentId, date, cost)) {

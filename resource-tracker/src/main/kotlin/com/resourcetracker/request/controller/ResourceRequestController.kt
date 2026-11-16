@@ -158,7 +158,7 @@ class ResourceRequestController(
             Do not send a status value; the server controls these transitions. Issue fulfillment status is derived from reservation, issue, and verified return quantities. Possible values are `NOT_STARTED`, `RESERVED`, `PARTIALLY_ISSUED`, `ISSUED`, `PARTIALLY_RETURNED`, and `RETURNED`.
 
             First use `GET /api/v1/requests/{id}/issues` to review issue, return, and extension records and obtain their IDs.
-        """.trimIndent(),
+        """,
         requestBody = OpenApiRequestBody(
             required = true,
             content = [Content(mediaType = "application/json", schema = Schema(implementation = IssueWorkflowRequest::class), examples = [

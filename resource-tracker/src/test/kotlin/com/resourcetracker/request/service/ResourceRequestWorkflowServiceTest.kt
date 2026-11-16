@@ -34,12 +34,14 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
 import java.time.LocalDate
+import java.math.BigDecimal
 import java.util.Optional
 
 class ResourceRequestWorkflowServiceTest {
@@ -363,7 +365,7 @@ class ResourceRequestWorkflowServiceTest {
     }
 
     @Test
-    fun `approving some but not all requested quantities marks request partially approved`() {
+    fun `approving selected lines leaves omitted lines unapproved`() {
         val manager = User(
             id = 55, username = "manager", email = "manager@example.test", fullName = "Manager",
             passwordHash = "hash", role = Role.DEPARTMENT_MANAGER, department = department,
@@ -418,6 +420,8 @@ class ResourceRequestWorkflowServiceTest {
         whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
         whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
         whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
+        whenever(reservations.reserveApprovedInternalLines(101, listOf(approvedLine, rejectedLine), manager.id))
+            .thenReturn(listOf(approvedLine.lineItemId!! to 1))
 
         val response = service().decide(
             101,
@@ -427,7 +431,6 @@ class ResourceRequestWorkflowServiceTest {
                 comment = "Only the projector is available.",
                 approvedQuantities = listOf(
                     ApprovedQuantityDecision(lineItemId = approvedLine.lineItemId!!, quantity = 2),
-                    ApprovedQuantityDecision(lineItemId = rejectedLine.lineItemId!!, quantity = 0),
                 ),
             ),
         )
@@ -437,6 +440,193 @@ class ResourceRequestWorkflowServiceTest {
         assertEquals(0, rejectedLine.approvedQuantity)
         verify(notifications).notify(eq(listOf(caller.id)), eq(NotificationType.PARTIALLY_APPROVED), any())
         verify(reservations).reserveApprovedInternalLines(101, listOf(approvedLine, rejectedLine), manager.id)
+        verify(waitlistService).backorder(
+            eq(101),
+            eq(listOf(approvedLine)),
+            eq(mapOf(approvedLine.lineItemId!! to 1)),
+            eq(manager.id),
+            eq(RequestStatus.PENDING),
+            eq("Only the projector is available."),
+            any(),
+            any(),
+        )
+    }
+
+    @Test
+    fun `manager can approve remaining lines on a partially approved request`() {
+        val manager = manager()
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Equipment",
+            manufacturer = "N/A",
+            departmentId = department.id,
+            projectId = project.id,
+            teamId = team.id,
+            requiredDate = LocalDate.now(clock).plusDays(3),
+            assignedManagerId = manager.id,
+            requesterId = caller.id,
+            status = RequestStatus.PARTIALLY_APPROVED,
+        )
+        val previouslyApproved = ResourceRequestLineItem(
+            lineItemId = 20,
+            requestId = 101,
+            description = "Projector",
+            manufacturer = "N/A",
+            quantity = 2,
+            approvedQuantity = 2,
+            resourceId = 4,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
+        )
+        val remaining = ResourceRequestLineItem(
+            lineItemId = 21,
+            requestId = 101,
+            description = "Camera",
+            manufacturer = "N/A",
+            quantity = 1,
+            approvedQuantity = 0,
+            resourceId = 5,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
+        )
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findById(remaining.lineItemId!!)).thenReturn(Optional.of(remaining))
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(previouslyApproved, remaining))
+        whenever(reservations.reserveApprovedIncrease(101, remaining, 1, manager.id)).thenReturn(1)
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
+        whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
+        whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
+
+        val response = service().updateRequest(
+            101,
+            manager,
+            UpdateRequestDto(
+                status = RequestStatus.APPROVED,
+                commentApproval = "Approving the remaining line",
+                approvedQuantities = listOf(ApprovedQuantityDecision(
+                    lineItemId = remaining.lineItemId!!,
+                    quantity = 1,
+                    expectedFulfillmentDate = LocalDate.now(clock).plusDays(7),
+                )),
+            ),
+        )
+
+        assertEquals(RequestStatus.APPROVED, response.status)
+        assertEquals(1, remaining.approvedQuantity)
+        assertEquals(manager.id, request.decidedBy)
+        verify(reservations).reserveApprovedIncrease(101, remaining, 1, manager.id)
+        verify(notifications).notify(eq(listOf(caller.id)), eq(NotificationType.APPROVED), any())
+        verify(waitlistService, never()).updateExpectedFulfillmentDate(eq(101), eq(remaining.lineItemId!!), any(), eq(manager.id))
+        verify(waitlistService).backorder(
+            eq(101),
+            eq(listOf(remaining)),
+            eq(mapOf(remaining.lineItemId!! to 1)),
+            eq(manager.id),
+            eq(RequestStatus.PARTIALLY_APPROVED),
+            eq("Approving the remaining line"),
+            any(),
+            isNull(),
+        )
+    }
+
+    @Test
+    fun `increasing an external line rechecks budget for only the added quantity`() {
+        val manager = manager()
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Printer paper",
+            departmentId = department.id,
+            projectId = project.id,
+            teamId = team.id,
+            requesterId = caller.id,
+            assignedManagerId = manager.id,
+            requiredDate = LocalDate.now(clock).plusDays(3),
+            status = RequestStatus.PARTIALLY_APPROVED,
+        )
+        val line = ResourceRequestLineItem(
+            lineItemId = 30,
+            requestId = 101,
+            description = "Printer paper",
+            unitPrice = BigDecimal("10.00"),
+            quantity = 5,
+            approvedQuantity = 2,
+            vendorId = 9,
+            fulfillmentPreference = FulfillmentPreference.EXTERNAL.name,
+        )
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findById(line.lineItemId!!)).thenReturn(Optional.of(line))
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
+        whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
+        whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
+
+        val result = service().adjustApprovedQuantity(
+            101,
+            line.lineItemId!!,
+            manager,
+            com.resourcetracker.request.dto.ApprovedQuantityUpdateRequest(4, "Additional paper approved"),
+        )
+
+        assertEquals(RequestStatus.PARTIALLY_APPROVED, result.status)
+        val decision = argumentCaptor<LineDecision>()
+        verify(externalApprovalHandler).handle(decision.capture())
+        assertEquals(BigDecimal("20.00"), decision.firstValue.budgetCost)
+        verify(procurements).authorizeIncrease(request, line, 2, manager.id)
+    }
+
+    @Test
+    fun `manager can move a waitlisted request into normal approval`() {
+        val manager = manager()
+        val request = ResourceRequest(
+            requestId = 101,
+            requestNumber = "REQ-2026-000001",
+            itemDescription = "Projector",
+            departmentId = department.id,
+            projectId = project.id,
+            teamId = team.id,
+            requesterId = caller.id,
+            assignedManagerId = manager.id,
+            requiredDate = LocalDate.now(clock).plusDays(3),
+            status = RequestStatus.WAITLISTED,
+        )
+        val line = ResourceRequestLineItem(
+            lineItemId = 31,
+            requestId = 101,
+            description = "Projector",
+            quantity = 1,
+            approvedQuantity = 1,
+            resourceId = 4,
+            fulfillmentPreference = FulfillmentPreference.INTERNAL.name,
+            requestedDurationDays = 30,
+            approvedDurationDays = 30,
+        )
+        whenever(requests.findForUpdateById(101)).thenReturn(request)
+        whenever(requests.saveAndFlush(any())).thenAnswer { it.getArgument<ResourceRequest>(0) }
+        whenever(lines.findById(line.lineItemId!!)).thenReturn(Optional.of(line))
+        whenever(lines.findAllByRequestId(101)).thenReturn(listOf(line))
+        whenever(teams.findById(team.id)).thenReturn(Optional.of(team))
+        whenever(projects.findById(project.id)).thenReturn(Optional.of(project))
+        whenever(users.findById(caller.id)).thenReturn(Optional.of(caller))
+        whenever(users.findById(manager.id)).thenReturn(Optional.of(manager))
+
+        val response = service().updateRequest(
+            101,
+            manager,
+            UpdateRequestDto(
+                status = RequestStatus.APPROVED,
+                commentApproval = "Removing this line from the waitlist",
+                approvedQuantities = listOf(ApprovedQuantityDecision(lineItemId = line.lineItemId!!, quantity = 1)),
+            ),
+        )
+
+        assertEquals(RequestStatus.APPROVED, response.status)
+        verify(reservations, never()).reserveApprovedIncrease(any(), any(), any(), any())
     }
 
     @Test
