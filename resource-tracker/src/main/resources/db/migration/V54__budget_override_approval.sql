@@ -1,0 +1,23 @@
+CREATE TABLE budget_overrides (
+    override_id INT NOT NULL AUTO_INCREMENT,
+    request_id INT NOT NULL,
+    line_item_id INT NOT NULL,
+    department_id INT NOT NULL,
+    requested_by INT NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    requested_quantity INT NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    status VARCHAR(12) NOT NULL DEFAULT 'PENDING',
+    decided_by INT NULL,
+    decision_comment VARCHAR(500) NULL,
+    decided_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (override_id),
+    INDEX idx_budget_override_status_created (status, created_at),
+    INDEX idx_budget_override_line_latest (line_item_id, override_id),
+    CONSTRAINT fk_budget_override_request FOREIGN KEY (request_id) REFERENCES resource_requests(request_id),
+    CONSTRAINT fk_budget_override_line FOREIGN KEY (line_item_id) REFERENCES resource_request_line_items(line_item_id),
+    CONSTRAINT fk_budget_override_department FOREIGN KEY (department_id) REFERENCES departments(department_id),
+    CONSTRAINT fk_budget_override_requester FOREIGN KEY (requested_by) REFERENCES users(user_id),
+    CONSTRAINT fk_budget_override_decider FOREIGN KEY (decided_by) REFERENCES users(user_id)
+);

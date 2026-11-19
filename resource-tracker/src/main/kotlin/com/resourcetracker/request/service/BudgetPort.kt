@@ -14,6 +14,7 @@ interface BudgetPort {
     fun lineCost(lineId: Int): BigDecimal
     fun departmentOfRequest(requestId: Int): Int?
     fun requestDateOfRequest(requestId: Int): LocalDate?
+    fun requestNumberOfRequest(requestId: Int): String?
     fun status(departmentId: Int, date: LocalDate): BudgetStatus?
     fun tryCommit(departmentId: Int, date: LocalDate, amount: BigDecimal): Boolean
     fun forceCommit(departmentId: Int, date: LocalDate, amount: BigDecimal)
@@ -45,6 +46,13 @@ class JdbcBudgetPort(private val jdbc: JdbcTemplate) : BudgetPort {
         jdbc.query(
             "SELECT required_date FROM resource_requests WHERE request_id = ?",
             RowMapper<LocalDate?> { rs, _ -> rs.getDate(1)?.toLocalDate() },
+            requestId,
+        ).firstOrNull()
+
+    override fun requestNumberOfRequest(requestId: Int): String? =
+        jdbc.query(
+            "SELECT request_number FROM resource_requests WHERE request_id = ?",
+            RowMapper<String> { rs, _ -> rs.getString(1) },
             requestId,
         ).firstOrNull()
 

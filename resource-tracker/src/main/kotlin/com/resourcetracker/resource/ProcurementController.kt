@@ -50,13 +50,16 @@ class ProcurementController(private val procurements: ProcurementService) {
         @RequestParam(defaultValue = "id") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "desc")
         @RequestParam(defaultValue = "desc") direction: String,
-        @Parameter(description = "Filter by procurement status", example = "ORDERED")
+        @Parameter(description = "Filter by status: AUTHORISED, ORDERED, RECEIVED, ACCEPTED, or CANCELLED.", example = "ORDERED")
         @RequestParam(required = false) status: com.resourcetracker.request.entity.ProcurementStatus?,
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ): PagedResponse<com.resourcetracker.request.service.ProcurementResponse> = PagedResponse.from(procurements.list(caller.id, status, search, page, size, sort, direction))
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a procurement", description = "Updates the procurement status, expected delivery date, or received quantity according to the valid procurement workflow. Department managers may update only procurements for requests assigned to them.")
+    @Operation(
+        summary = "Update a procurement",
+        description = "Department Managers can update procurements for requests assigned to them. Send only the next status in this order: AUTHORISED, ORDERED, RECEIVED, ACCEPTED. When sending RECEIVED, include receivedQuantity from 1 through the authorized quantity. The total received across orders cannot exceed the approved line quantity. CANCELLED is set by the system and cannot be sent here.",
+    )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Procurement updated"),
         ApiResponse(responseCode = "400", description = "Invalid request body", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),

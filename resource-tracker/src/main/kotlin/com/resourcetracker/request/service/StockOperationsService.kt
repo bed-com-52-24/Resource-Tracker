@@ -25,33 +25,30 @@ import jakarta.validation.constraints.Size
 import io.swagger.v3.oas.annotations.media.Schema
 
 data class StockIssueRequest(
+    @field:Schema(description = "Request line to hand over. For INTERNAL lines, the resource must be reserved or available. For EXTERNAL lines, vendor-delivered quantity must be marked RECEIVED or ACCEPTED.", example = "12")
     @field:Min(1) val lineItemId: Int,
+    @field:Schema(description = "Quantity to hand over. Cannot exceed the approved balance or (for external items) the quantity received from the vendor and not yet handed over.", example = "2")
     @field:Min(1) val quantity: Int,
 )
+@Schema(description = "Recorded handoff. resourceId is null for external purchases; returnTrackingEnabled indicates whether returns and due dates apply.")
 data class StockIssueResponse(
     val id: Int,
     val requestId: Int,
     val lineItemId: Int,
-    val resourceId: Int,
+    val resourceId: Int?,
+    val resourceDescription: String,
+    val fulfillmentPreference: FulfillmentPreference,
     val quantity: Int,
     val returnedQuantity: Int,
+    val returnTrackingEnabled: Boolean,
     val receiver: UserReference,
     val expectedReturnDate: LocalDate?
 )
 data class CreateReturnRequest(val quantity: Int, val note: String? = null)
 data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null)
-@Schema(description = """
-    Select exactly one action. The required body fields depend on the action and caller role:
-    | action | permitted role | required fields |
-    | SUBMIT_RETURN | TEAM_LEAD on the issue's team | issueId, quantity; optional note |
-    | VERIFY_RETURN | assigned DEPARTMENT_MANAGER | issueId, returnId, condition; optional quantity and note |
-    | REQUEST_EXTENSION | TEAM_LEAD on the issue's team | issueId, newExpectedReturnDate, reason |
-    | DECIDE_EXTENSION | assigned DEPARTMENT_MANAGER | issueId, extensionId, decision; REJECT also requires comment |
-
-    Do not send fields for other actions. There is no caller-set status field. A submitted return moves PENDING to VERIFIED after manager verification. An extension moves PENDING to APPROVED or REJECTED after the manager decision. Issue fulfillment status is computed from issued and verified returned quantities: NOT_STARTED, RESERVED, PARTIALLY_ISSUED, ISSUED, PARTIALLY_RETURNED, or RETURNED. These states are produced by issue/return actions and cannot be set directly.
-""")
+@Schema(description = "Select one action per call. SUBMIT_RETURN requires issueId and quantity and is available to the Team Lead on that team. VERIFY_RETURN requires issueId, returnId, and condition and is available to the assigned Department Manager. REQUEST_EXTENSION requires issueId, newExpectedReturnDate, and reason and is available to the Team Lead. DECIDE_EXTENSION requires issueId, extensionId, and decision and is available to the assigned Department Manager; rejection also requires comment. Do not send fields for other actions or set a status. Return and extension statuses are set by the server. External handoffs do not support return or due-date actions.")
 enum class IssueWorkflowAction { SUBMIT_RETURN, VERIFY_RETURN, REQUEST_EXTENSION, DECIDE_EXTENSION }
-@Schema(description = "Role-scoped issue action. Use the action table above and provide only fields for that action.")
+@Schema(description = "Choose one action per call. Each action requires different fields and is available to specific roles. Return and due-date actions apply only to internal stock issues.")
 data class IssueWorkflowRequest(
     @field:Schema(description = "Action to perform. TEAM_LEAD: SUBMIT_RETURN or REQUEST_EXTENSION. Assigned DEPARTMENT_MANAGER: VERIFY_RETURN or DECIDE_EXTENSION.", allowableValues = ["SUBMIT_RETURN", "VERIFY_RETURN", "REQUEST_EXTENSION", "DECIDE_EXTENSION"], example = "SUBMIT_RETURN")
     val action: IssueWorkflowAction,
@@ -109,17 +106,21 @@ data class StockReturnReviewResponse(
     val verifiedAt: LocalDateTime?,
     val note: String?,
 )
+@Schema(description = "Issue or external handoff record. External handoffs have no internal resource ID, due date, or return tracking.")
 data class StockIssueProgressResponse(
     val issueId: Int,
     val requestId: Int,
     val requestNumber: String,
     val lineItemId: Int,
-    val resourceId: Int,
+    val resourceId: Int?,
+    val resourceDescription: String,
+    val fulfillmentPreference: FulfillmentPreference,
     val teamId: Int,
     val teamName: String,
     val quantity: Int,
     val returnedQuantity: Int,
     val outstandingQuantity: Int,
+    val returnTrackingEnabled: Boolean,
     val expectedReturnDate: LocalDate?,
     val returns: List<StockReturnReviewResponse>,
     val extensions: List<ReturnExtensionResponse>,
@@ -168,71 +169,105 @@ class StockOperationsService(
     private val extensions: StockReturnExtensionRepository,
     private val notifications: NotificationService,
     private val teams: TeamRepository,
+    private val procurements: ProcurementRepository,
 ) {
     @Transactional
     fun issue(requestId: Int, actorId: Int, dto: StockIssueRequest): StockIssueResponse {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val request = requests.findForUpdateById(requestId) ?: notFound("Request not found")
         requireAssignedManager(request, actor.id, actor.role)
-        if (request.status !in setOf(
-                RequestStatus.APPROVED,
-                RequestStatus.PARTIALLY_APPROVED,
-                RequestStatus.WAITLISTED,
-            )
-        ) {
-            conflict("Request must be approved before issuing stock")
-        }
         val receiver = users.findById(request.requesterId).orElseThrow { notFound("Request receiver not found") }
         if (dto.quantity <= 0) badRequest("quantity must be positive")
         val line = lines.findById(dto.lineItemId).orElseThrow { notFound("Line item not found") }
         if (line.requestId != requestId) notFound("Line item not found")
-        if (line.fulfillmentPreference != FulfillmentPreference.INTERNAL.name || line.resourceId == null) badRequest("Only internal resource lines can be issued")
-        val resource = resources.findForUpdateById(line.resourceId!!) ?: notFound("Resource not found")
-        if (resource.type != ResourceType.INTERNAL) conflict("Only internal resources can be issued")
-        if (waitlistService.isWaiting(dto.lineItemId)) conflict("Line item is on the waitlist and has no reserved stock yet")
+        val externalLine = line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name
+        val requestCanBeIssued = request.status in setOf(
+            RequestStatus.APPROVED,
+            RequestStatus.PARTIALLY_APPROVED,
+            RequestStatus.WAITLISTED,
+        ) || (request.status == RequestStatus.COMPLETED && externalLine)
+        if (!requestCanBeIssued) conflict("Request must be approved before items can be handed over")
         val issuedSoFar = issues.findByRequestIdAndLineItemIdForUpdate(requestId, dto.lineItemId).sumOf { it.quantity }
-        val approved = line.approvedQuantity ?: 0
+        val approved = ((line.approvedQuantity ?: 0) - line.waivedQuantity).coerceAtLeast(0)
         if (dto.quantity > approved - issuedSoFar) conflict("Issue exceeds approved quantity remaining")
-        val activeReservations = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, dto.lineItemId, ReservationStatus.ACTIVE)
-        val reserved = activeReservations.sumOf { it.quantity }
-        var waitlistReservedToIssue = 0
-        if (reserved > 0) {
-            if (dto.quantity > reserved) conflict("Issue exceeds reserved quantity")
-            var toConsume = dto.quantity
-            activeReservations.forEach { reservation ->
-                if (toConsume > 0) {
-                    val consumed = minOf(toConsume, reservation.quantity)
-                    toConsume -= consumed
-                    if (reservation.waitlistEntryId != null) waitlistReservedToIssue += consumed
-                    if (consumed == reservation.quantity) {
-                        reservation.status = ReservationStatus.CONSUMED
-                        reservation.closedAt = LocalDateTime.now(clock)
-                        reservation.closeReason = "Stock issued"
-                    } else reservation.quantity -= consumed
-                    reservations.save(reservation)
+        val issue = when (line.fulfillmentPreference) {
+            FulfillmentPreference.INTERNAL.name -> {
+                val resourceId = line.resourceId ?: badRequest("Internal resource line has no catalogue resource")
+                val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
+                if (resource.type != ResourceType.INTERNAL) conflict("Only internal resources can use stock issuance")
+                if (waitlistService.isWaiting(dto.lineItemId)) conflict("Line item is on the waitlist and has no reserved stock yet")
+                val activeReservations = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, dto.lineItemId, ReservationStatus.ACTIVE)
+                val reserved = activeReservations.sumOf { it.quantity }
+                var waitlistReservedToIssue = 0
+                if (reserved > 0) {
+                    if (dto.quantity > reserved) conflict("Issue exceeds reserved quantity")
+                    var toConsume = dto.quantity
+                    activeReservations.forEach { reservation ->
+                        if (toConsume > 0) {
+                            val consumed = minOf(toConsume, reservation.quantity)
+                            toConsume -= consumed
+                            if (reservation.waitlistEntryId != null) waitlistReservedToIssue += consumed
+                            if (consumed == reservation.quantity) {
+                                reservation.status = ReservationStatus.CONSUMED
+                                reservation.closedAt = LocalDateTime.now(clock)
+                                reservation.closeReason = "Stock issued"
+                            } else reservation.quantity -= consumed
+                            reservations.save(reservation)
+                        }
+                    }
+                } else {
+                    val available = availability.availableQuantity(resource, lockReservations = true)
+                    if (dto.quantity > available) conflict("Insufficient available stock; available $available")
                 }
+                resource.quantity = (resource.quantity ?: 0) - dto.quantity
+                resource.recomputeStatus()
+                resources.save(resource)
+                val durationDays = line.approvedDurationDays ?: conflict("The assigned manager must approve a return duration before stock can be issued")
+                val expectedReturnDate = LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))).plusDays(durationDays.toLong())
+                val saved = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id, expectedReturnDate = expectedReturnDate))
+                if (waitlistReservedToIssue > 0) waitlistService.recordIssued(dto.lineItemId, waitlistReservedToIssue, actor.id)
+                movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = saved.id, actorId = actor.id))
+                saved
             }
-        } else {
-            val available = availability.availableQuantity(resource, lockReservations = true)
-            if (dto.quantity > available) conflict("Insufficient available stock; available $available")
+            FulfillmentPreference.EXTERNAL.name -> {
+                val delivered = procurements.findAllByLineItemIdForUpdate(dto.lineItemId)
+                    .filter { it.status == ProcurementStatus.RECEIVED || it.status == ProcurementStatus.ACCEPTED }
+                    .sumOf { it.receivedQuantity ?: 0 }
+                val unhandedOff = (delivered - issuedSoFar).coerceAtLeast(0)
+                if (dto.quantity > unhandedOff) {
+                    conflict("Only $unhandedOff externally purchased units have been received and are available to hand over")
+                }
+                issues.save(
+                    StockIssue(
+                        requestId = requestId,
+                        lineItemId = dto.lineItemId,
+                        resourceId = null,
+                        teamId = request.teamId,
+                        quantity = dto.quantity,
+                        issuedBy = actor.id,
+                    ),
+                )
+            }
+            else -> badRequest("Unsupported resource fulfillment type")
         }
-        resource.quantity = (resource.quantity ?: 0) - dto.quantity
-        resource.recomputeStatus()
-        resources.save(resource)
-        val durationDays = line.approvedDurationDays ?: conflict("The assigned manager must approve a return duration before stock can be issued")
-        val expectedReturnDate = LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))).plusDays(durationDays.toLong())
-        val issue = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id, expectedReturnDate = expectedReturnDate))
-        if (waitlistReservedToIssue > 0) waitlistService.recordIssued(dto.lineItemId, waitlistReservedToIssue, actor.id)
-        movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = issue.id, actorId = actor.id))
-        history.save(RequestHistory(requestId = requestId, eventType = "ISSUED", fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
+        val event = if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) "EXTERNAL_ISSUED" else "ISSUED"
+        history.save(RequestHistory(requestId = requestId, eventType = event, fromStatus = request.status.name, toStatus = request.status.name, actorId = actor.id, lineItemId = dto.lineItemId, quantity = dto.quantity))
+        notifications.notify(
+            listOf(request.requesterId),
+            NotificationType.RESOURCE_ISSUED,
+            mapOf("requestId" to requestId, "requestNumber" to request.requestNumber),
+        )
         requestCompletion.completeIfFulfilled(requestId, actor.id)
         return StockIssueResponse(
             id = issue.id,
             requestId = issue.requestId,
             lineItemId = issue.lineItemId,
             resourceId = issue.resourceId,
+            resourceDescription = line.description,
+            fulfillmentPreference = FulfillmentPreference.valueOf(line.fulfillmentPreference),
             quantity = issue.quantity,
             returnedQuantity = issue.returnedQuantity,
+            returnTrackingEnabled = line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name,
             receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
             expectedReturnDate = issue.expectedReturnDate,
         )
@@ -382,6 +417,13 @@ class StockOperationsService(
         else -> "ISSUED"
     }
 
+    private fun requireInternalIssue(issue: StockIssue) {
+        val line = lines.findById(issue.lineItemId).orElseThrow { notFound("Request line not found") }
+        if (line.fulfillmentPreference != FulfillmentPreference.INTERNAL.name || issue.resourceId == null) {
+            conflict("Returns and due-date extensions are only available for internal stock issues")
+        }
+    }
+
     @Transactional
     fun processIssueWorkflow(requestId: Int, actorId: Int, dto: IssueWorkflowRequest): Any {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
@@ -425,17 +467,25 @@ class StockOperationsService(
 
     private fun StockIssue.toProgressResponse(request: ResourceRequest): StockIssueProgressResponse {
         val team = teams.findById(teamId).orElseThrow { notFound("Team not found") }
+        val line = lines.findById(lineItemId).orElseThrow { notFound("Request line not found") }
         return StockIssueProgressResponse(
             issueId = id,
             requestId = requestId,
             requestNumber = request.requestNumber,
             lineItemId = lineItemId,
             resourceId = resourceId,
+            resourceDescription = line.description,
+            fulfillmentPreference = FulfillmentPreference.valueOf(line.fulfillmentPreference),
             teamId = teamId,
             teamName = team.name,
             quantity = quantity,
             returnedQuantity = returnedQuantity,
-            outstandingQuantity = (quantity - returnedQuantity).coerceAtLeast(0),
+            outstandingQuantity = if (line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name) {
+                (quantity - returnedQuantity).coerceAtLeast(0)
+            } else {
+                0
+            },
+            returnTrackingEnabled = line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name,
             expectedReturnDate = expectedReturnDate,
             returns = returns.findAllByIssueId(id).sortedByDescending { it.returnedAt }.map {
                 StockReturnReviewResponse(it.id, it.quantity, it.condition, it.status, it.returnedBy, it.returnedAt,
@@ -449,6 +499,7 @@ class StockOperationsService(
     fun requestReturnExtension(issueId: Int, actorId: Int, dto: RequestReturnExtension): ReturnExtensionResponse {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val issue = issues.findForUpdateById(issueId) ?: notFound("Issue not found")
+        requireInternalIssue(issue)
         val request = requests.findById(issue.requestId).orElseThrow { notFound("Request not found") }
         if (actor.role != Role.TEAM_LEAD || actor.teams.none { it.id == issue.teamId }) forbidden()
         val currentDueDate = issue.expectedReturnDate ?: conflict("This issue has no expected return date")
@@ -474,6 +525,7 @@ class StockOperationsService(
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val extension = extensions.findForUpdateById(extensionId) ?: notFound("Return extension not found")
         val issue = issues.findForUpdateById(extension.issueId) ?: notFound("Issue not found")
+        requireInternalIssue(issue)
         val request = requests.findForUpdateById(issue.requestId) ?: notFound("Request not found")
         requireAssignedManager(request, actor.id, actor.role)
         if (extension.status != ReturnExtensionStatus.PENDING) conflict("Return extension has already been decided")
@@ -507,6 +559,7 @@ class StockOperationsService(
     fun requestReturn(issueId: Int, actorId: Int, dto: CreateReturnRequest): StockReturn {
         val actor = users.findById(actorId).orElseThrow { notFound("User not found") }
         val issue = issues.findForUpdateById(issueId) ?: notFound("Issue not found")
+        requireInternalIssue(issue)
         val request = requests.findById(issue.requestId).orElseThrow { notFound("Request not found") }
         val isOwner = actor.role == Role.TEAM_LEAD && actor.teams.any { it.id == issue.teamId }
         val isManager = actor.role == Role.DEPARTMENT_MANAGER && request.assignedManagerId == actor.id
@@ -525,13 +578,15 @@ class StockOperationsService(
         val issueId = returns.findIssueIdById(returnId) ?: notFound("Return not found")
         val issue = issues.findForUpdateById(issueId) ?: notFound("Issue not found")
         val stockReturn = returns.findForUpdateById(returnId) ?: notFound("Return not found")
+        requireInternalIssue(issue)
         val request = requests.findById(issue.requestId).orElseThrow { notFound("Request not found") }
         requireAssignedManager(request, actor.id, actor.role)
         if (stockReturn.status != ReturnStatus.PENDING) conflict("Return has already been processed")
         val requestedQuantity = stockReturn.quantity
         val quantity = dto.quantity ?: requestedQuantity
         if (quantity !in 1..requestedQuantity) badRequest("Verified quantity must be between 1 and requested return quantity")
-        val resource = resources.findForUpdateById(issue.resourceId) ?: notFound("Resource not found")
+        val resourceId = issue.resourceId ?: conflict("This issue does not represent internal stock")
+        val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
         stockReturn.quantity = quantity
         stockReturn.condition = dto.condition
         stockReturn.status = ReturnStatus.VERIFIED

@@ -1,5 +1,8 @@
 package com.resourcetracker.request.entity
 
+import io.swagger.v3.oas.annotations.media.Schema
+
+@Schema(description = "Request lifecycle status. The assigned Department Manager can query, approve, reject, or waitlist PENDING requests. A Team Lead clarifies QUERIED requests, returning them to PENDING. Partial quantities produce PARTIALLY_APPROVED. Requests become COMPLETED when all approved quantities are issued, handed over, or waived. Team Leads may cancel PENDING, QUERIED, APPROVED, PARTIALLY_APPROVED, or WAITLISTED requests before stock is issued. REJECTED and CANCELLED are terminal.")
 enum class RequestStatus {
     PENDING,
     QUERIED,

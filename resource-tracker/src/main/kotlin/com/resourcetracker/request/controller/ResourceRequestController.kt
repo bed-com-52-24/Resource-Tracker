@@ -114,7 +114,10 @@ class ResourceRequestController(
     @PostMapping("/api/v1/requests/{id}/issues")
     @RequiresRoles(Role.DEPARTMENT_MANAGER)
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Issue reserved stock for a request line")
+    @Operation(
+        summary = "Issue reserved stock or hand over received external items",
+        description = "The assigned Department Manager records the handover to the Team Lead who submitted the request. Internal items require reserved or available stock and an approved return duration. External items can be handed over only up to the quantity marked RECEIVED or ACCEPTED on procurement records, less previous handoffs and waived amounts. External handoffs do not change internal stock and do not use return-date tracking. Requests must normally be APPROVED, PARTIALLY_APPROVED, or WAITLISTED. A previously completed request can still record a remaining external handoff. The request is completed when all approved quantities are handed over or waived.",
+    )
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Stock issued"),
         ApiResponse(responseCode = "400", description = "Invalid issue quantity or non-internal line"),
@@ -131,7 +134,7 @@ class ResourceRequestController(
 
     @GetMapping("/api/v1/requests/{id}/issues")
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
-    @Operation(summary = "List issued stock, due dates, and extension history for a request", description = "Allowed roles: TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. Returns issued quantities, due dates, returns, and extension decisions for a request visible to the caller.")
+    @Operation(summary = "List issued items and handoffs for a request", description = "Allowed roles: TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. Returns issued quantities and item descriptions for visible requests. Internal stock issues include due dates and return history; external handoffs have no catalogue stock ID or return-date tracking.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Issue and return records returned"),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -147,18 +150,7 @@ class ResourceRequestController(
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
     @Operation(
         summary = "Submit or decide an issued-item return or due-date extension",
-        description = """
-            Use one action per call and include only the fields listed for that action:
-
-            - **SUBMIT_RETURN** — Team Lead belonging to the issue's team. Required: `issueId`, `quantity`. Optional: `note`. Creates a `PENDING` return; inventory is unchanged until verification.
-            - **VERIFY_RETURN** — Department Manager assigned to the request. Required: `issueId`, `returnId`, `condition`. Optional: `quantity`, `note`. Moves the return from `PENDING` to `VERIFIED` and updates inventory according to the accepted quantity and condition.
-            - **REQUEST_EXTENSION** — Team Lead belonging to the issue's team. Required: `issueId`, `newExpectedReturnDate`, `reason`. Creates a `PENDING` extension.
-            - **DECIDE_EXTENSION** — Department Manager assigned to the request. Required: `issueId`, `extensionId`, `decision`. A `REJECT` decision also requires `comment`. Moves the extension from `PENDING` to `APPROVED` or `REJECTED`; approval updates the issue due date.
-
-            Do not send a status value; the server controls these transitions. Issue fulfillment status is derived from reservation, issue, and verified return quantities. Possible values are `NOT_STARTED`, `RESERVED`, `PARTIALLY_ISSUED`, `ISSUED`, `PARTIALLY_RETURNED`, and `RETURNED`.
-
-            First use `GET /api/v1/requests/{id}/issues` to review issue, return, and extension records and obtain their IDs.
-        """,
+        description = "Use one action per call. SUBMIT_RETURN is for a Team Lead on the issue’s team and requires issueId and quantity; note is optional. VERIFY_RETURN is for the assigned Department Manager and requires issueId, returnId, and condition; quantity and note are optional. REQUEST_EXTENSION is for a Team Lead on the issue’s team and requires issueId, newExpectedReturnDate, and reason. DECIDE_EXTENSION is for the assigned Department Manager and requires issueId, extensionId, and decision; a rejection also requires a comment. Returns move from PENDING to VERIFIED after manager review. Extensions move from PENDING to APPROVED or REJECTED. Do not send a status; the server sets it. Return and due-date actions apply only to internal stock issues. External handoffs do not support returns or due dates. Use GET /api/v1/requests/{id}/issues to find the issue and extension IDs.",
         requestBody = OpenApiRequestBody(
             required = true,
             content = [Content(mediaType = "application/json", schema = Schema(implementation = IssueWorkflowRequest::class), examples = [
@@ -195,7 +187,7 @@ class ResourceRequestController(
     @RequiresRoles(Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER)
     @Operation(
         summary = "Edit a request or make its manager decision",
-        description = "TEAM_LEAD may clarify or cancel requests. DEPARTMENT_MANAGER may set priority (CRITICAL, HIGH, MEDIUM, LOW) only for requests in their department, and may make decisions or adjust quantities as allowed by the request status.",
+        description = "Request status flow: from PENDING, the assigned Department Manager can query, approve, reject, or waitlist the request. A Team Lead clarifies a QUERIED request by sending PENDING; the manager may reject a queried request. Approval may result in PARTIALLY_APPROVED when some quantities remain unapproved. Managers can later adjust approved quantities or waive balances. Team Leads can cancel PENDING, QUERIED, APPROVED, PARTIALLY_APPROVED, or WAITLISTED requests before any stock is issued. The server sets COMPLETED after all approved quantities are handed over or waived. Do not send PARTIALLY_APPROVED or COMPLETED as a decision. Priority values are CRITICAL, HIGH, MEDIUM, and LOW.",
         requestBody = OpenApiRequestBody(
             required = true,
             content = [Content(mediaType = "application/json", schema = Schema(implementation = UpdateRequestDto::class), examples = [
@@ -251,6 +243,7 @@ class ResourceRequestController(
         @RequestParam(defaultValue = "createdAt") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "desc")
         @RequestParam(defaultValue = "desc") direction: String,
+        @Parameter(description = "Filter by lifecycle status: PENDING, QUERIED, APPROVED, PARTIALLY_APPROVED, REJECTED, WAITLISTED, COMPLETED, or CANCELLED.", example = "PENDING")
         @RequestParam(required = false) status: RequestStatus?,
         @RequestParam(required = false) @Min(1) teamId: Int?,
         @RequestParam(required = false) @Min(1) projectId: Int?,

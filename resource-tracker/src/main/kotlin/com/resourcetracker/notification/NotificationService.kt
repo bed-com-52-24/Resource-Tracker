@@ -8,6 +8,9 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Service
 class NotificationService(
@@ -76,33 +79,53 @@ class NotificationService(
         notifications.countByRecipientIdAndStatus(userId, NotificationStatus.UNREAD)
 
     private fun buildMessage(type: NotificationType, payload: Map<String, Any?>): String {
-        val requestId = payload["requestId"]?.toString()
-        val resource = payload["resource"]?.toString()
+        val requestNumber = payload["requestNumber"]?.toString()?.takeIf { it.isNotBlank() }
+        val request = requestNumber?.let { "request $it" } ?: "this request"
+        val reference = requestNumber?.let { " (reference: $it)" }.orEmpty()
+        val resource = payload["resource"]?.toString()?.takeIf { it.isNotBlank() }
+        val dueDate = friendlyDate(payload["expectedReturnDate"])
+        val requestedDate = friendlyDate(payload["requestedReturnDate"], "a later date")
         return when (type) {
-            NotificationType.SUBMITTED -> "Request ${requestId ?: "unknown"} has been submitted."
-            NotificationType.QUERIED -> "Request ${requestId ?: "unknown"} requires additional information."
-            NotificationType.APPROVED -> "Request ${requestId ?: "unknown"} was approved."
-            NotificationType.WAITLISTED -> "Request ${requestId ?: "unknown"} was added to the waitlist."
-            NotificationType.WAITLIST_FULFILLABLE -> "Waitlisted items for request ${requestId ?: "unknown"} are ready for fulfilment."
-            NotificationType.BACKORDER_OVERDUE -> "The expected fulfillment date has passed for line ${payload["lineItemId"] ?: "unknown"} on request ${requestId ?: "unknown"}."
-            NotificationType.BACKORDER_DATE_UPDATED -> "The expected fulfillment date was updated for line ${payload["lineItemId"] ?: "unknown"} on request ${requestId ?: "unknown"}."
-            NotificationType.REJECTED -> "Request ${requestId ?: "unknown"} was rejected."
-            NotificationType.PARTIALLY_APPROVED -> "Request ${requestId ?: "unknown"} was partially approved."
-            NotificationType.RESUBMITTED -> "Request ${requestId ?: "unknown"} was resubmitted."
-            NotificationType.OVERDUE_RETURN -> "An overdue return needs attention${if (resource != null) " for $resource" else ""}."
-            NotificationType.RETURN_DUE_7_DAYS -> "A resource issued for request ${payload["requestNumber"] ?: requestId ?: "unknown"} is due in 7 days (${payload["expectedReturnDate"] ?: "date unknown"})."
-            NotificationType.RETURN_DUE_2_DAYS -> "A resource issued for request ${payload["requestNumber"] ?: requestId ?: "unknown"} is due in 2 days (${payload["expectedReturnDate"] ?: "date unknown"})."
-            NotificationType.RETURN_DUE_TODAY -> "A resource issued for request ${payload["requestNumber"] ?: requestId ?: "unknown"} is due today (${payload["expectedReturnDate"] ?: "date unknown"})."
-            NotificationType.RETURN_EXTENSION_REQUESTED -> "A return-date extension to ${payload["requestedReturnDate"] ?: "an unspecified date"} was requested for issue ${payload["issueId"] ?: "unknown"} on request ${payload["requestNumber"] ?: requestId ?: "unknown"}."
-            NotificationType.RETURN_EXTENSION_APPROVED -> "The return-date extension to ${payload["requestedReturnDate"] ?: "the requested date"} for issue ${payload["issueId"] ?: "unknown"} on request ${payload["requestNumber"] ?: requestId ?: "unknown"} was approved."
-            NotificationType.RETURN_EXTENSION_REJECTED -> "The return-date extension for issue ${payload["issueId"] ?: "unknown"} on request ${payload["requestNumber"] ?: requestId ?: "unknown"} was rejected."
-            NotificationType.PROCUREMENT -> "Procurement activity was recorded${if (requestId != null) " for request $requestId" else ""}."
-            NotificationType.REASSIGNMENT_REQUIRED -> payload["message"]?.toString()
-                ?: "Request ${requestId ?: "unknown"} needs manager reassignment."
-            NotificationType.REASSIGNED -> "Request ${requestId ?: "unknown"} has a new assigned manager."
-            NotificationType.CANCELLED -> "Request ${requestId ?: "unknown"} was cancelled."
-            NotificationType.COMPLETED -> "Request ${requestId ?: "unknown"} has been fulfilled."
+            NotificationType.SUBMITTED -> "A new resource request$reference is ready for your review."
+            NotificationType.QUERIED -> "The manager has a question about $request. Open it to see what information is needed."
+            NotificationType.APPROVED -> "Good news: $request has been approved."
+            NotificationType.WAITLISTED -> "Some items in $request are not available yet. We’ll let you know when they’re ready."
+            NotificationType.WAITLIST_FULFILLABLE -> "Items from $request are now available and ready to be issued."
+            NotificationType.BACKORDER_OVERDUE -> "Some items from $request are taking longer than expected. Open it to see the latest details."
+            NotificationType.BACKORDER_DATE_UPDATED -> "The expected date for items from $request has changed to ${friendlyDate(payload["expectedFulfillmentDate"], "a later date")}."
+            NotificationType.REJECTED -> "$request was not approved. Open it to read the manager’s comments."
+            NotificationType.PARTIALLY_APPROVED -> "Some items or quantities in $request were approved. Open it to see what was approved."
+            NotificationType.RESUBMITTED -> "An updated resource request$reference is ready for your review."
+            NotificationType.OVERDUE_RETURN -> "${resource?.let { "The borrowed item “$it”" } ?: "A borrowed item"} is overdue. Please arrange its return as soon as possible."
+            NotificationType.RETURN_DUE_7_DAYS -> "A borrowed item from $request is due in 7 days, on $dueDate."
+            NotificationType.RETURN_DUE_2_DAYS -> "A borrowed item from $request is due in 2 days, on $dueDate."
+            NotificationType.RETURN_DUE_TODAY -> "A borrowed item from $request is due today ($dueDate). Please arrange its return."
+            NotificationType.RETURN_EXTENSION_REQUESTED -> "A team member has asked to keep the borrowed items from $request until $requestedDate. Please review the request."
+            NotificationType.RETURN_EXTENSION_APPROVED -> "The return date for items from $request has been extended to $requestedDate."
+            NotificationType.RETURN_EXTENSION_REJECTED -> "The request to extend the return date for $request was not approved. Please follow the current due date."
+            NotificationType.PROCUREMENT -> "There’s an update on a purchase for $request. Open it to see the latest details."
+            NotificationType.RESOURCE_ISSUED -> "Items from $request have been handed over to your team. Open the request to see the quantities."
+            NotificationType.BUDGET_OVERRIDE_REQUIRED -> "A resource request$reference is above the department’s available budget. Please review whether extra budget can be approved. The purchase is on hold until you decide."
+            NotificationType.BUDGET_OVERRIDE_DECIDED -> if (payload["decision"]?.toString() == "APPROVED") {
+                "The request for extra budget for $request was approved. The purchase can now proceed."
+            } else {
+                "The request for extra budget for $request was not approved, so the purchase cannot proceed. Contact your manager if you have questions."
+            }
+            NotificationType.REASSIGNMENT_REQUIRED -> "A resource request$reference needs a department manager before it can be reviewed. Please assign a manager."
+            NotificationType.REASSIGNED -> "A new manager has been assigned to $request."
+            NotificationType.CANCELLED -> "The requester has cancelled $request."
+            NotificationType.COMPLETED -> "Your request$reference has been completed."
         }
+    }
+
+    private fun friendlyDate(value: Any?, fallback: String = "a date not available"): String {
+        val date = when (value) {
+            is LocalDate -> value
+            null -> null
+            else -> runCatching { LocalDate.parse(value.toString()) }.getOrNull()
+        }
+        return date?.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+            ?: fallback
     }
 
     fun streamForUser(userId: Int): SseEmitter {

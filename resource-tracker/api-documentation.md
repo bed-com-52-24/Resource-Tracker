@@ -1,7 +1,7 @@
 # API Documentation
 
 Base path: `/api/v1`. Endpoints use bearer access tokens unless marked public. Request and response type references point to Kotlin DTOs; collection responses are paged where noted.
-**Endpoint count: 70.**
+**Endpoint count: 71.**
 
 The repository currently declares this many HTTP operations. Fields, required values, and validation constraints are specified by each request/response DTO. Query and path parameters follow the controller method signature. `ADMIN`, `MEMBER`, `TEAM_LEAD`, `DEPARTMENT_MANAGER`, and `MANAGING_DIRECTOR` are application roles. Authentication endpoints that allow anonymous access are identified by their controller security configuration.
 
@@ -33,9 +33,11 @@ Response DTO fields (nullable fields may be `null`):
 - `VendorResponse`: `id`, `name`, `contactInformation`, `status`.
 - `NotificationResponse`: `id`, `recipientId`, `type`, `requestId`, `message`, `status`, `readAt`, `createdAt`.
 - `NotificationUpdateResponse`: `updatedCount`.
+- `BudgetOverrideResponse`: `id`, `requestId`, `lineItemId`, `departmentId`, `requestedBy`, `amount`, `requestedQuantity`, `reason`, `status`, `createdAt`, `decidedBy`, `decisionComment`, `decidedAt`.
 - `AuditEntryResponse`: `id`, `occurredAt`, `actorId`, `actorRole`, `action`, `itemType`, `itemId`, `previousState`, `newState`, `comment`, `ipAddress`, `userAgent`, `changedFields`, `correlationId`.
 - `PasswordSetResponse`: `passwordSet`; `PasswordResetResponse`: `message`.
 - `StockCorrectionResponse`: `movementId`, `resourceId`, `quantityChange`, `reason`.
+- `StockIssueResponse` and `StockIssueProgressResponse`: include the request line description, `fulfillmentPreference`, and `returnTrackingEnabled`; `resourceId` is nullable for externally procured items, which do not change catalogue stock.
 - `ProcurementResponse`, request, report, dashboard, issue, return, reconciliation, and history responses are returned in the DTO shapes described by their field names below or by the endpoint-specific response type. JSON dates use ISO-8601 (`YYYY-MM-DD`); timestamps use ISO-8601 date-time strings; enums are serialized as strings.
 
 ## Authorization and implementation decisions
@@ -158,7 +160,7 @@ Response DTO fields (nullable fields may be `null`):
 ### 13. `POST /api/v1/budgets`
 
 - **Access:** MANAGING_DIRECTOR
-- **Request body:** `CreateBudgetRequestDto`
+- **Request body:** Choose `CreateBudgetRequestDto` to create a budget or `DecideBudgetOverrideRequest` to decide a pending override.
 
 **Request fields (`CreateBudgetRequestDto`):**
 - `departmentId` (required): `Int`
@@ -168,7 +170,12 @@ Response DTO fields (nullable fields may be `null`):
 - `amount` (required): `BigDecimal`
 - `active` (optional): `Boolean`
 
-- **Response body:** `BudgetResponseDto`
+**Override decision fields (`DecideBudgetOverrideRequest`):**
+- `overrideId` (required, validation: Min 1): `Int`
+- `decision` (required): `APPROVED` or `REJECTED`
+- `comment` (required, validation: NotBlank,Size min 10 max 500): `String`
+
+- **Response body:** `BudgetResponseDto` (budget creation) or `BudgetOverrideResponse` (override decision)
 - **Source:** `src/main/kotlin/com/resourcetracker/budget/BudgetController.kt`
 
 ### 14. `GET /api/v1/budgets/{id}`
@@ -344,6 +351,8 @@ Response DTO fields (nullable fields may be `null`):
 **Request fields (`StockIssueRequest`):**
 - `lineItemId` (required, validation: Min): `Int`
 - `quantity` (required, validation: Min): `Int`
+- **Behavior:** INTERNAL lines use reserved/available stock. EXTERNAL lines can be handed over only up to quantities recorded as RECEIVED or ACCEPTED on their procurement records, less prior handoffs and waived amounts. The endpoint records the handoff to the requesting Team Lead without changing internal stock. A previously completed request can still record an external delivery that has not yet been handed over.
+- **Response:** `returnTrackingEnabled` is false for external handoffs; their `resourceId` and `expectedReturnDate` are null.
 - **Response body:** `StockIssueResponse`
 - **Source:** `src/main/kotlin/com/resourcetracker/request/controller/ResourceRequestController.kt`
 
@@ -432,6 +441,7 @@ Response DTO fields (nullable fields may be `null`):
 **Request fields (`UpdateProcurementRequest`):**
 - `status` (required): `ProcurementStatus`
 - `receivedQuantity` (optional): `Int?`
+- **Status sequence:** `AUTHORISED` → `ORDERED` → `RECEIVED` → `ACCEPTED`. Send only the next status; `receivedQuantity` is required for `RECEIVED`. `CANCELLED` is system-recorded and cannot be sent.
 
 - **Response body:** `ProcurementResponse`
 - **Source:** `src/main/kotlin/com/resourcetracker/resource/ProcurementController.kt`
@@ -750,3 +760,11 @@ Use `memberUsernames` to add existing users from the team's department. Omit it 
 
 - **Response body:** `VendorResponse`
 - **Source:** `src/main/kotlin/com/resourcetracker/vendor/VendorController.kt`
+
+### 71. `GET /api/v1/budgets/overrides/pending`
+
+- **Access:** MANAGING_DIRECTOR
+- **Request body:** None
+- **Response body:** `List<BudgetOverrideResponse>`
+- **Behavior:** Lists external request line costs awaiting an over-budget decision. The Department Manager's request approval remains in place; procurement for the line is held.
+- **Source:** `src/main/kotlin/com/resourcetracker/budget/BudgetController.kt`

@@ -8,9 +8,7 @@ import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.request.entity.FulfillmentPreference
 import com.resourcetracker.request.entity.RequestHistory
 import com.resourcetracker.request.entity.RequestStatus
-import com.resourcetracker.request.entity.ProcurementStatus
 import com.resourcetracker.request.entity.RequestTransitions
-import com.resourcetracker.request.repository.ProcurementRepository
 import com.resourcetracker.request.repository.RequestHistoryRepository
 import com.resourcetracker.request.repository.RequestLineItemRepository
 import com.resourcetracker.request.repository.ResourceRequestRepository
@@ -24,7 +22,6 @@ class RequestCompletionService(
     private val requests: ResourceRequestRepository,
     private val lines: RequestLineItemRepository,
     private val issues: StockIssueRepository,
-    private val procurements: ProcurementRepository,
     private val history: RequestHistoryRepository,
     private val audit: AuditService,
     private val notifications: NotificationService,
@@ -39,17 +36,12 @@ class RequestCompletionService(
         val issuesByLine = issues.findAllByRequestId(requestId)
             .groupBy { it.lineItemId }
             .mapValues { (_, lineIssues) -> lineIssues.sumOf { it.quantity.toLong() } }
-        val procurementsByLine = procurements.findAllByRequestId(requestId)
-            .groupBy { it.lineItemId }
-
         val fulfilled = requestLines.all { line ->
             val lineId = requireNotNull(line.lineItemId)
             val approvedQuantity = (line.approvedQuantity ?: line.quantity).toLong()
             val waivedQuantity = line.waivedQuantity.toLong()
             if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
-                procurementsByLine[lineId].orEmpty()
-                    .filter { it.status == ProcurementStatus.ACCEPTED }
-                    .sumOf { (it.receivedQuantity ?: 0).toLong() } + waivedQuantity >= approvedQuantity
+                (issuesByLine[lineId] ?: 0L) + waivedQuantity >= approvedQuantity
             } else {
                 (issuesByLine[lineId] ?: 0L) + waivedQuantity >= approvedQuantity
             }

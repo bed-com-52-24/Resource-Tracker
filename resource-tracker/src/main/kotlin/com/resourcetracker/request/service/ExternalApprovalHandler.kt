@@ -10,6 +10,7 @@ data class LineDecision(
     val approved: Boolean,
     val comment: String?,
     val budgetCost: BigDecimal? = null,
+    val quantity: Int? = null,
 )
 
 interface ExternalApprovalHandler {
