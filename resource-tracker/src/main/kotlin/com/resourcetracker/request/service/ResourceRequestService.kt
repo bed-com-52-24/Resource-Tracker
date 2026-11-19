@@ -137,9 +137,9 @@ class ResourceRequestService(
             notifications.notify(listOf(managerId), NotificationType.SUBMITTED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber))
         }
         if (needsReassignment) {
-            val reason = if (managers.isEmpty()) "No active Department Manager exists for department ${team.department.id}." else "Multiple active Department Managers exist for department ${team.department.id}."
+            val reason = if (managers.isEmpty()) "No active Department Manager is available." else "More than one active Department Manager is assigned."
             historyRepository.save(RequestHistory(requestId = id, eventType = "ASSIGNED", toStatus = RequestStatus.PENDING.name, actorId = caller.id, comment = reason))
-            notifications.notify(users.findActiveByRole(Role.ADMIN).map { it.id }, NotificationType.REASSIGNMENT_REQUIRED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber, "message" to reason))
+            notifications.notify(users.findActiveByRole(Role.ADMIN).map { it.id }, NotificationType.REASSIGNMENT_REQUIRED, mapOf("requestId" to id, "requestNumber" to saved.requestNumber))
         }
         return saved.toResponse(lineEntities, lowStock.map { "${it.description}: requested ${it.dto.quantity}, physical stock ${it.resource?.quantity ?: 0}" })
     }
@@ -522,8 +522,9 @@ class ResourceRequestService(
         if (dto.quantity < issued) conflict("Approved quantity cannot be lower than issued quantity")
         val previousStatus = request.status
         val increase = dto.quantity - previous
+        var releasedExternalQuantity = 0
         if (increase < 0 && line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
-            procurementService.reduceAuthorizedQuantity(requestId, line, dto.quantity - line.waivedQuantity, caller.id, dto.reason)
+            releasedExternalQuantity = procurementService.reduceAuthorizedQuantity(requestId, line, dto.quantity - line.waivedQuantity, caller.id, dto.reason)
         }
         line.approvedQuantity = dto.quantity
         lineItemRepository.save(line)
@@ -563,6 +564,7 @@ class ResourceRequestService(
                     approved = true,
                     comment = dto.reason,
                     budgetCost = line.unitPrice.multiply(BigDecimal.valueOf(increase.toLong())),
+                    quantity = increase,
                 ),
             )
             procurementService.authorizeIncrease(request, line, increase, caller.id)
@@ -571,7 +573,7 @@ class ResourceRequestService(
             budget?.release(
                 request.departmentId,
                 request.requiredDate ?: LocalDate.now(clock),
-                line.unitPrice.multiply(BigDecimal.valueOf((-increase).toLong())),
+                line.unitPrice.multiply(BigDecimal.valueOf(releasedExternalQuantity.toLong())),
             )
         }
         if (dto.quantity < previous) {
@@ -623,23 +625,24 @@ class ResourceRequestService(
         if (line.requestId != requestId) throw ResourceNotFoundException("Line item not found")
         val approved = line.approvedQuantity ?: line.quantity
         val issued = issueRepository.findAllByRequestIdAndLineItemId(requestId, lineItemId).sumOf { it.quantity }
-        val received = procurementService.receivedQuantity(requestId, lineItemId)
-        val fulfilled = if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) received else issued
+        val fulfilled = issued
         val outstanding = (approved - fulfilled - line.waivedQuantity).coerceAtLeast(0)
         if (dto.quantity > outstanding) badRequest("Waived quantity exceeds the outstanding balance of $outstanding")
         if (line.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name) {
-            procurementService.reduceAuthorizedQuantity(
+            val releasedQuantity = procurementService.reduceAuthorizedQuantity(
                 requestId,
                 line,
                 approved - line.waivedQuantity - dto.quantity,
                 caller.id,
                 dto.reason.trim(),
             )
-            budget?.release(
-                request.departmentId,
-                request.requiredDate ?: LocalDate.now(clock),
-                line.unitPrice.multiply(BigDecimal.valueOf(dto.quantity.toLong())),
-            )
+            if (releasedQuantity > 0) {
+                budget?.release(
+                    request.departmentId,
+                    request.requiredDate ?: LocalDate.now(clock),
+                    line.unitPrice.multiply(BigDecimal.valueOf(releasedQuantity.toLong())),
+                )
+            }
         }
         line.waivedQuantity += dto.quantity
         lineItemRepository.save(line)
@@ -744,6 +747,11 @@ class ResourceRequestService(
             lineItems = lines.map { line ->
                 RequestLineItemResponseDto(
                     lineItemId = requireNotNull(line.lineItemId),
+                    resource = line.resourceId?.let { resourceId ->
+                        resources.findById(resourceId).orElse(null)?.let { resource ->
+                            RequestResourceResponseDto(resourceId = resource.id, name = resource.name)
+                        }
+                    },
                     vendorId = line.vendorId,
                     manufacturer = line.manufacturer,
                     unitOfMeasure = line.unitOfMeasure,

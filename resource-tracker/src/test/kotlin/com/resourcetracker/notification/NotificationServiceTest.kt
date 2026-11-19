@@ -37,7 +37,7 @@ class NotificationServiceTest {
         assertEquals(2, notifications.size)
         assertEquals(NotificationType.SUBMITTED, notifications[0].type)
         assertEquals(42, notifications[0].requestId)
-        assertEquals("Request 42 has been submitted.", notifications[0].message)
+        assertEquals("A new resource request is ready for your review.", notifications[0].message)
         assertEquals(NotificationStatus.UNREAD, notifications[0].status)
         assertEquals(null, notifications[0].readAt)
     }

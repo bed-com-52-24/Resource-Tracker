@@ -2,20 +2,31 @@ package com.resourcetracker.budget
 
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.ResourceNotFoundException
+import com.resourcetracker.request.entity.BudgetOverrideStatus
+import com.resourcetracker.request.service.BudgetOverrideDecision
+import com.resourcetracker.request.service.BudgetOverrideService
 import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.security.RequiresRoles
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.ObjectMapper
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.ExampleObject
 import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.media.Schema.RequiredMode
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.Validator
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
@@ -30,6 +41,24 @@ data class CreateBudgetRequestDto(
     val periodEnd: LocalDate,
     val amount: BigDecimal,
     val active: Boolean = true,
+)
+
+data class DecideBudgetOverrideRequest(
+    @field:Schema(
+        description = "ID of the pending budget override to decide",
+        requiredMode = RequiredMode.REQUIRED,
+        example = "12",
+    )
+    @field:Min(1)
+    val overrideId: Int,
+    @field:Schema(
+        description = "Managing Director decision. APPROVED commits the extra budget and authorizes the purchase. REJECTED blocks procurement for that line.",
+        allowableValues = ["APPROVED", "REJECTED"],
+        example = "APPROVED",
+    )
+    val decision: BudgetOverrideStatus,
+    @field:NotBlank @field:Size(min = 10, max = 500)
+    val comment: String,
 )
 
 data class UpdateBudgetRequestDto(
@@ -59,19 +88,73 @@ class BudgetController(
     private val budgetService: BudgetService,
     private val budgetRepository: BudgetRepository,
     private val users: UserRepository,
+    private val budgetOverrides: BudgetOverrideService,
+    private val objectMapper: ObjectMapper,
+    private val validator: Validator,
 ) {
     @PostMapping
     @RequiresRoles(Role.MANAGING_DIRECTOR)
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Create a budget", description = "Create a department budget for a period (MONTHLY, QUARTERLY, or ANNUAL). The budget is active by default. Only Managing Directors can create budgets.")
+    @Operation(
+        summary = "Create a budget or decide an override",
+        description = "Choose a request body example. Create a department budget for a selected MONTHLY, QUARTERLY, or ANNUAL period, or decide a pending over-budget procurement override. New budgets are active by default unless active is false. Only Managing Directors can use this endpoint.",
+        requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            content = [
+                Content(
+                    mediaType = "application/json",
+                    schema = Schema(oneOf = [CreateBudgetRequestDto::class, DecideBudgetOverrideRequest::class]),
+                    examples = [
+                        ExampleObject(
+                            name = "CREATE_BUDGET",
+                            summary = "Create a department budget",
+                            value = """
+                                {
+                                  "departmentId": 3,
+                                  "periodType": "MONTHLY",
+                                  "periodStart": "2026-11-01",
+                                  "periodEnd": "2026-11-30",
+                                  "amount": 2500000,
+                                  "active": true
+                                }
+                            """,
+                        ),
+                        ExampleObject(
+                            name = "DECIDE_OVERRIDE",
+                            summary = "Approve or reject a pending budget override",
+                            value = """
+                                {
+                                  "overrideId": 12,
+                                  "decision": "APPROVED",
+                                  "comment": "Approved due to urgent project requirements."
+                                }
+                            """,
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    )
     @ApiResponses(value = [
+        ApiResponse(responseCode = "200", description = "Budget override decision recorded", content = [Content(schema = Schema(implementation = com.resourcetracker.request.service.BudgetOverrideResponse::class))]),
         ApiResponse(responseCode = "201", description = "Budget created", content = [Content(schema = Schema(implementation = BudgetResponseDto::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request or overlapping active budget", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Missing or invalid access token", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun create(@Valid @RequestBody request: CreateBudgetRequestDto): BudgetResponseDto =
-        budgetService.create(
+    fun createOrDecide(@RequestBody body: JsonNode, @AuthenticationPrincipal caller: AuthenticatedUser): ResponseEntity<Any> {
+        if (body.has("overrideId")) {
+            val request = objectMapper.treeToValue(body, DecideBudgetOverrideRequest::class.java)
+            validator.validate(request).takeIf { it.isNotEmpty() }?.let { throw jakarta.validation.ConstraintViolationException(it) }
+            return ResponseEntity.ok(
+                budgetOverrides.decide(
+                    request.overrideId,
+                    caller.id,
+                    BudgetOverrideDecision(request.decision, request.comment),
+                ),
+            )
+        }
+        val request = objectMapper.treeToValue(body, CreateBudgetRequestDto::class.java)
+        val created = budgetService.create(
             CreateBudgetRequest(
                 departmentId = request.departmentId,
                 periodType = request.periodType,
@@ -81,6 +164,18 @@ class BudgetController(
                 active = request.active,
             )
         ).toDto()
+        return ResponseEntity.status(HttpStatus.CREATED).body(created)
+    }
+
+    @GetMapping("/overrides/pending")
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "List pending budget overrides", description = "Lists external procurement costs awaiting a Managing Director's over-budget decision.")
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Pending overrides"),
+        ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "403", description = "Managing Director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+    )
+    fun pendingOverrides() = budgetOverrides.pending()
 
     @GetMapping("/{id}")
     @RequiresRoles(Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)

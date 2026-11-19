@@ -4,6 +4,7 @@ import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.common.ListQuery
 import com.resourcetracker.request.entity.*
+import com.resourcetracker.request.repository.BudgetOverrideRepository
 import com.resourcetracker.request.repository.*
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
@@ -28,6 +29,11 @@ data class ProcurementResponse(
     val receivedQuantity: Int?,
 )
 data class UpdateProcurementRequest(
+    @field:Schema(
+        description = "Send only the next status in the sequence AUTHORISED → ORDERED → RECEIVED → ACCEPTED. RECEIVED requires receivedQuantity. CANCELLED is recorded by the system and cannot be set through this endpoint.",
+        allowableValues = ["ORDERED", "RECEIVED", "ACCEPTED"],
+        example = "ORDERED",
+    )
     val status: ProcurementStatus,
     @field:Schema(description = "Quantity received on this procurement authorization. The sum across received authorizations cannot exceed the line's approved quantity.", example = "4")
     val receivedQuantity: Int? = null,
@@ -41,13 +47,14 @@ class ProcurementService(
     private val history: RequestHistoryRepository,
     private val users: UserRepository,
     private val notifications: NotificationService,
+    private val budgetOverrides: BudgetOverrideRepository,
     private val clock: Clock,
 ) {
     @Transactional
     fun authorize(request: ResourceRequest, lineItems: List<ResourceRequestLineItem>, actorId: Int) {
         val externalLines = lineItems.filter {
             it.fulfillmentPreference == FulfillmentPreference.EXTERNAL.name &&
-                (it.approvedQuantity ?: it.quantity) > 0
+                (it.approvedQuantity ?: it.quantity) > 0 && !budgetOverrideBlocks(it.lineItemId)
         }
         if (externalLines.isEmpty()) return
 
@@ -71,6 +78,7 @@ class ProcurementService(
     @Transactional
     fun authorizeIncrease(request: ResourceRequest, line: ResourceRequestLineItem, quantity: Int, actorId: Int) {
         if (quantity <= 0 || line.fulfillmentPreference != FulfillmentPreference.EXTERNAL.name) return
+        if (budgetOverrideBlocks(line.lineItemId)) return
         val vendorId = line.vendorId
             ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
         val procurement = procurements.save(
@@ -97,6 +105,45 @@ class ProcurementService(
         )
     }
 
+    @Transactional
+    fun authorizeApprovedOverride(override: BudgetOverride, actorId: Int) {
+        val request = requests.findForUpdateById(override.requestId)
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found")
+        val line = lines.findById(override.lineItemId).orElseThrow {
+            ResponseStatusException(HttpStatus.NOT_FOUND, "Request line not found")
+        }
+        val vendorId = line.vendorId
+            ?: throw ResponseStatusException(HttpStatus.CONFLICT, "Vendor is required for external procurement")
+        val procurement = procurements.save(
+            Procurement(
+                requestId = override.requestId,
+                lineItemId = override.lineItemId,
+                vendorId = vendorId,
+                authorizedQuantity = override.requestedQuantity,
+                estimatedCost = override.amount,
+                expectedDelivery = request.requiredDate,
+            ),
+        )
+        history.save(
+            RequestHistory(
+                requestId = override.requestId,
+                eventType = "PROCUREMENT_AUTHORIZED",
+                fromStatus = request.status.name,
+                toStatus = request.status.name,
+                actorId = actorId,
+                lineItemId = override.lineItemId,
+                quantity = override.requestedQuantity,
+                comment = "Procurement ${procurement.id} authorized after budget override ${override.id}",
+            ),
+        )
+    }
+
+    private fun budgetOverrideBlocks(lineItemId: Int?): Boolean {
+        if (lineItemId == null) return false
+        return budgetOverrides.findFirstByLineItemIdOrderByIdDesc(lineItemId)?.status in
+            setOf(BudgetOverrideStatus.PENDING, BudgetOverrideStatus.REJECTED)
+    }
+
     @Transactional(readOnly = true)
     fun acceptedQuantity(requestId: Int, lineItemId: Int): Int =
         procurements.findAllByRequestId(requestId)
@@ -111,6 +158,24 @@ class ProcurementService(
 
     @Transactional
     fun cancelForRequest(requestId: Int, actorId: Int, reason: String?) {
+        budgetOverrides.findAllByRequestIdAndStatus(requestId, BudgetOverrideStatus.PENDING).forEach { override ->
+            override.status = BudgetOverrideStatus.CANCELLED
+            override.decidedBy = actorId
+            override.decisionComment = reason?.take(500)
+            override.decidedAt = LocalDateTime.now(clock)
+            budgetOverrides.save(override)
+            history.save(
+                RequestHistory(
+                    requestId = requestId,
+                    eventType = "BUDGET_OVERRIDE_CANCELLED",
+                    fromStatus = BudgetOverrideStatus.PENDING.name,
+                    toStatus = BudgetOverrideStatus.CANCELLED.name,
+                    actorId = actorId,
+                    lineItemId = override.lineItemId,
+                    comment = "Pending override ${override.id} cancelled with request. $reason",
+                ),
+            )
+        }
         val requestProcurements = procurements.findAllByRequestIdForUpdate(requestId)
         if (requestProcurements.any { it.status == ProcurementStatus.RECEIVED || it.status == ProcurementStatus.ACCEPTED }) {
             throw ResponseStatusException(
@@ -146,10 +211,13 @@ class ProcurementService(
         newApprovedQuantity: Int,
         actorId: Int,
         reason: String,
-    ) {
+    ): Int {
         val lineId = requireNotNull(line.lineItemId)
+        if (budgetOverrides.findFirstByLineItemIdOrderByIdDesc(lineId)?.status == BudgetOverrideStatus.PENDING) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Resolve the pending budget override before changing this external line")
+        }
         val existing = procurements.findAllByLineItemIdForUpdate(lineId)
-        if (existing.isEmpty()) return
+        if (existing.isEmpty()) return 0
         if (existing.any { it.status == ProcurementStatus.ORDERED }) {
             throw ResponseStatusException(
                 HttpStatus.CONFLICT,
@@ -164,6 +232,7 @@ class ProcurementService(
         }
         val targetAuthorized = newApprovedQuantity - received
         val open = existing.filter { it.status == ProcurementStatus.AUTHORISED }.sortedBy { it.id }
+        val previouslyAuthorized = open.sumOf { it.authorizedQuantity }
         val keeper = open.firstOrNull()
         if (keeper != null) {
             val previous = keeper.authorizedQuantity
@@ -227,6 +296,7 @@ class ProcurementService(
                 ),
             )
         }
+        return (previouslyAuthorized - targetAuthorized).coerceAtLeast(0)
     }
 
     fun list(
@@ -291,7 +361,11 @@ class ProcurementService(
         procurement.status = dto.status
         val saved = procurements.save(procurement)
         history.save(RequestHistory(requestId = request.requestId!!, eventType = "PROCUREMENT_${dto.status.name}", fromStatus = from.name, toStatus = dto.status.name, actorId = actor.id, lineItemId = procurement.lineItemId, quantity = procurement.receivedQuantity))
-        notifications.notify(listOf(request.requesterId), NotificationType.PROCUREMENT, mapOf("requestId" to request.requestId!!))
+        notifications.notify(
+            listOf(request.requesterId),
+            NotificationType.PROCUREMENT,
+            mapOf("requestId" to request.requestId!!, "requestNumber" to request.requestNumber),
+        )
         return saved.toResponse()
     }
 
