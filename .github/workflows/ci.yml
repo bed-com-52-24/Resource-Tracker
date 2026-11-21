@@ -70,21 +70,26 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\\n' "$SSH_PRIVATE_KEY" > ~/.ssh/resource-tracker-deploy
-          printf '%s\\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/resource-tracker-deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/resource-tracker-deploy
           chmod 600 ~/.ssh/known_hosts
 
       - name: Validate and apply production database migrations
         working-directory: resource-tracker
         env:
-          HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
           DB_NAME: ${{ secrets.LIGHTSAIL_DB_NAME }}
           DB_USER: ${{ secrets.LIGHTSAIL_DB_USER }}
           DB_PASSWORD: ${{ secrets.LIGHTSAIL_DB_PASSWORD }}
         run: |
           set -Eeuo pipefail
+
+          if [[ -z "$LIGHTSAIL_HOST" || -z "$LIGHTSAIL_USER" ]]; then
+            echo "ERROR: Lightsail SSH GitHub secrets are not configured."
+            exit 1
+          fi
 
           if [[ -z "$DB_NAME" || -z "$DB_USER" || -z "$DB_PASSWORD" ]]; then
             echo "ERROR: Production database GitHub secrets are not configured."
@@ -99,45 +104,45 @@ jobs:
 
           SSH_CONTROL_SOCKET="$RUNNER_TEMP/lightsail-db-tunnel.sock"
 
-          ssh -fN -M "${SSH_OPTS[@]}" \\
-            -S "$SSH_CONTROL_SOCKET" \\
-            -L 3307:127.0.0.1:3306 \\
-            "$USER@$HOST"
+          ssh -fN -M "${SSH_OPTS[@]}" \
+            -S "$SSH_CONTROL_SOCKET" \
+            -L 3307:127.0.0.1:3306 \
+            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST"
 
           cleanup() {
-            ssh -S "$SSH_CONTROL_SOCKET" -O exit "$USER@$HOST" 2>/dev/null || true
+            ssh -S "$SSH_CONTROL_SOCKET" -O exit "$LIGHTSAIL_USER@$LIGHTSAIL_HOST" 2>/dev/null || true
             rm -f "$SSH_CONTROL_SOCKET"
           }
           trap cleanup EXIT
 
-          ./mvnw --batch-mode --no-transfer-progress \\
-            -Dflyway.url="jdbc:mysql://127.0.0.1:3307/${DB_NAME}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \\
-            -Dflyway.user="$DB_USER" \\
-            -Dflyway.password="$DB_PASSWORD" \\
+          ./mvnw --batch-mode --no-transfer-progress \
+            -Dflyway.url="jdbc:mysql://127.0.0.1:3307/${DB_NAME}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \
+            -Dflyway.user="$DB_USER" \
+            -Dflyway.password="$DB_PASSWORD" \
             flyway:validate flyway:migrate
 
       - name: Upload application JAR
         env:
-          HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
         run: |
-          scp \\
-            -i ~/.ssh/resource-tracker-deploy \\
-            -o IdentitiesOnly=yes \\
-            -o StrictHostKeyChecking=yes \\
-            deploy/resource-tracker-0.0.1-SNAPSHOT.jar \\
-            "$USER@$HOST:/tmp/resource-tracker.jar"
+          scp \
+            -i ~/.ssh/resource-tracker-deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            deploy/resource-tracker-0.0.1-SNAPSHOT.jar \
+            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST:/tmp/resource-tracker.jar"
 
       - name: Deploy and verify application
         env:
-          HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
         run: |
-          ssh \\
-            -i ~/.ssh/resource-tracker-deploy \\
-            -o IdentitiesOnly=yes \\
-            -o StrictHostKeyChecking=yes \\
-            "$USER@$HOST" 'sudo bash -s' <<'REMOTE'
+          ssh \
+            -i ~/.ssh/resource-tracker-deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST" 'sudo bash -s' <<'REMOTE'
           set -Eeuo pipefail
 
           APP_DIR="/opt/resource-tracker"
@@ -160,7 +165,7 @@ jobs:
             echo "Previous JAR backed up to $BACKUP_JAR"
           fi
 
-          install -o resource-tracker -g resource-tracker \\
+          install -o resource-tracker -g resource-tracker \
             -m 0644 "$NEW_JAR" "$APP_DIR/app.jar.new"
 
           mv -f "$APP_DIR/app.jar.new" "$APP_JAR"
