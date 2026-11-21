@@ -8,6 +8,7 @@ import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.BadRequestException
 import com.resourcetracker.request.service.StockAvailabilityService
 import com.resourcetracker.request.repository.StockMovementRepository
+import com.resourcetracker.request.entity.StockMovement
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -24,7 +25,8 @@ class ResourceServiceTest {
     private val audit = mock(AuditService::class.java)
     private val availability = mock(StockAvailabilityService::class.java)
     private val movements = mock(StockMovementRepository::class.java)
-    private val service = ResourceService(resources, codes, vendors, audit, availability, movements)
+    private val assetService = mock(AssetService::class.java)
+    private val service = ResourceService(resources, codes, vendors, audit, availability, movements, assetService)
 
     private fun resource(active: Boolean) = Resource(
         id = 1,
@@ -61,6 +63,28 @@ class ResourceServiceTest {
         val response = service.update(resource.id, request())
 
         assertEquals(false, response.active)
+    }
+
+    @Test
+    fun `creates an individual resource without inventing aggregate stock`() {
+        `when`(codes.next()).thenReturn("R-NEW")
+        `when`(resources.save(org.mockito.kotlin.any<Resource>())).thenAnswer { it.getArgument<Resource>(0).apply { id = 10 } }
+        `when`(assetService.counts(10)).thenReturn(AssetCounts(0, 0, 0, 0, 0, 0, 0))
+
+        val response = service.create(
+            CreateResourceRequest(
+                name = "Laptop",
+                type = ResourceType.INTERNAL,
+                category = ResourceCategory.EQUIPMENT,
+                trackingMethod = TrackingMethod.INDIVIDUAL,
+                unitOfMeasure = "unit",
+            ),
+            actorId = 7,
+        )
+
+        assertEquals(TrackingMethod.INDIVIDUAL, response.trackingMethod)
+        assertEquals(0, response.quantity)
+        verify(movements, org.mockito.Mockito.never()).save(org.mockito.kotlin.any<StockMovement>())
     }
 
     @Test

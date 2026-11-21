@@ -26,6 +26,9 @@ enum class ResourceCategory {
     OTHER
 }
 
+@Schema(description = "How inventory for a catalogue resource is tracked")
+enum class TrackingMethod { QUANTITY, INDIVIDUAL }
+
 /** Canonical unit labels accepted by the resource API, grouped by category. */
 object ResourceUnits {
     val byCategory: Map<ResourceCategory, Set<String>> = mapOf(

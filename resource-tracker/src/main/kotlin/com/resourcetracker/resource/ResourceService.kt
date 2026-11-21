@@ -27,20 +27,23 @@ class ResourceService(
     private val audit: AuditService,
     private val availability: StockAvailabilityService,
     private val movements: StockMovementRepository,
+    private val assetService: AssetService,
 ) {
     @Transactional
     fun create(request: CreateResourceRequest, actorId: Int): ResourceResponse {
-        validateTypeRules(request.type, request.preferredVendorId, request.quantity)
+        validateTypeRules(request.type, request.preferredVendorId, request.quantity, request.trackingMethod)
         val unitOfMeasure = ResourceUnits.normalize(request.category, request.unitOfMeasure)
+        validateTrackingUnit(request.trackingMethod, unitOfMeasure)
         val resource = Resource(
             code = resourceCodeGenerator.next(),
             name = request.name,
             type = request.type,
             category = request.category,
+            trackingMethod = request.trackingMethod,
             unitOfMeasure = unitOfMeasure,
             description = request.description,
             preferredVendor = request.preferredVendorId?.let(::findVendor),
-            quantity = request.quantity,
+            quantity = if (request.trackingMethod == TrackingMethod.INDIVIDUAL) null else request.quantity,
             location = request.location,
             reorderLevel = request.reorderLevel,
         )
@@ -71,12 +74,13 @@ class ResourceService(
 
         val effectiveVendorId = request.preferredVendorId ?: resource.preferredVendor?.id
         val effectiveQuantity = request.quantity ?: resource.quantity
-        validateTypeRules(resource.type, effectiveVendorId, effectiveQuantity)
+        validateTypeRules(resource.type, effectiveVendorId, effectiveQuantity, resource.trackingMethod)
         val before = snapshot(resource)
         val category = request.category ?: resource.category
         val unitOfMeasure = request.unitOfMeasure?.let { ResourceUnits.normalize(category, it) }
             ?: if (category == resource.category) resource.unitOfMeasure
             else ResourceUnits.normalize(category, resource.unitOfMeasure)
+        validateTrackingUnit(resource.trackingMethod, unitOfMeasure)
 
         request.name?.let { resource.name = it }
         resource.category = category
@@ -169,7 +173,12 @@ class ResourceService(
             val reservedById = availability.reservedQuantities(internalResources.map { it.id })
             candidates.content.forEach { resource ->
                 val reserved = reservedById[resource.id] ?: 0
-                if (resource.type == ResourceType.INTERNAL && availability.availableQuantity(resource, knownReservedQuantity = reserved) > 0) {
+                val hasAvailableInventory = when {
+                    resource.type != ResourceType.INTERNAL -> false
+                    resource.trackingMethod == TrackingMethod.INDIVIDUAL -> availability.availableQuantity(resource, knownReservedQuantity = reserved) > 0
+                    else -> availability.availableQuantity(resource, knownReservedQuantity = reserved) > 0
+                }
+                if (hasAvailableInventory) {
                     if (availableCount >= windowStart && availableCount < windowEnd) selected += resource to reserved
                     availableCount++
                 }
@@ -185,21 +194,34 @@ class ResourceService(
         resource.active = active
     }
 
+    private fun validateTrackingUnit(trackingMethod: TrackingMethod, unitOfMeasure: String) {
+        if (trackingMethod == TrackingMethod.INDIVIDUAL && unitOfMeasure != "unit") {
+            throw BadRequestException("INDIVIDUAL resources must use the 'unit' unit of measure")
+        }
+    }
+
     private fun validateTypeRules(
         type: ResourceType,
         vendorId: Int?,
         quantity: Int?,
+        trackingMethod: TrackingMethod,
     ) {
         when (type) {
             ResourceType.INTERNAL -> {
                 if (vendorId != null) {
                     throw BadRequestException("preferredVendorId is not allowed for INTERNAL resources")
                 }
-                if (quantity == null) {
+                if (quantity == null && trackingMethod == TrackingMethod.QUANTITY) {
                     throw BadRequestException("quantity is required for INTERNAL resources")
+                }
+                if (quantity != null && trackingMethod == TrackingMethod.INDIVIDUAL) {
+                    throw BadRequestException("quantity is not allowed for INDIVIDUAL resources; register assets separately")
                 }
             }
             ResourceType.EXTERNAL -> {
+                if (trackingMethod == TrackingMethod.INDIVIDUAL) {
+                    throw BadRequestException("INDIVIDUAL tracking is only supported for INTERNAL resources")
+                }
                 if (quantity != null) {
                     throw BadRequestException("quantity is not allowed for EXTERNAL resources")
                 }
@@ -213,23 +235,26 @@ class ResourceService(
 
     private fun Resource.toResponse(reservedQuantity: Int? = null): ResourceResponse {
         val reserved = if (type == ResourceType.INTERNAL) reservedQuantity ?: availability.reservedQuantity(id) else 0
+        val assetSummary = if (trackingMethod == TrackingMethod.INDIVIDUAL) assetService.counts(id) else null
         return ResourceResponse(
             id = id,
             code = code,
             name = name,
             type = type,
             category = category,
+            trackingMethod = trackingMethod,
             unitOfMeasure = unitOfMeasure,
             description = description,
             active = active,
-            quantity = quantity,
+            quantity = assetSummary?.totalRegistered?.toInt() ?: quantity,
             location = location,
             reorderLevel = reorderLevel,
             status = status,
             preferredVendor = preferredVendor?.let { VendorReference(it.id, it.name) },
             reservedQuantity = reserved,
-            unavailableQuantity = if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
+            unavailableQuantity = assetSummary?.let { (it.issued + it.returnPending + it.damaged + it.missing + it.disposed).toInt() } ?: if (type == ResourceType.INTERNAL) unavailableQuantity else 0,
             availableQuantity = if (type == ResourceType.INTERNAL) availability.availableQuantity(this, knownReservedQuantity = reserved) else null,
+            assetCounts = assetSummary,
         )
     }
 
@@ -238,6 +263,7 @@ class ResourceService(
         "name" to resource.name,
         "type" to resource.type.name,
         "category" to resource.category.name,
+        "trackingMethod" to resource.trackingMethod.name,
         "description" to resource.description,
         "preferredVendorId" to resource.preferredVendor?.id,
         "unitOfMeasure" to resource.unitOfMeasure,

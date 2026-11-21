@@ -139,17 +139,21 @@ Response DTO fields (nullable fields may be `null`):
 - **Request body:** `PasswordSetRequest`
 
 **Request fields (`ChangePasswordRequest`):**
-- `code` (optional): `String?` (8 characters; for setup/reset)
+- `token` (optional): `String?` (single-use setup/reset token from the emailed link)
 - `currentPassword` (optional): `String?` (for authenticated password change)
 - `newPassword` (required): `String` (8–72 characters)
 
 - **Response body:** `PasswordSetResponse`
 - **Source:** `src/main/kotlin/com/resourcetracker/auth/AuthController.kt`
 
+For setup or reset, the frontend reads `token` from the emailed `/reset-password` link and submits it with the new password. The API hashes and validates the token, then consumes it once. Authenticated password changes continue using `currentPassword`.
+
 ### 12. `POST /api/v1/auth/forgot-password`
 
 - **Access:** Public
 - **Request body:** `ForgotPasswordRequest`
+
+For an active account, this request sends a single-use, expiring reset link. The response stays generic to protect account privacy.
 
 **Request fields (`ForgotPasswordRequest`):**
 - `email` (required, validation: NotBlank,Email,Size): `String`
@@ -556,21 +560,32 @@ Response DTO fields (nullable fields may be `null`):
 ### 52. `GET /api/v1/resources/{id}/movement-history`
 
 - **Access:** TEAM_LEAD, DEPARTMENT_MANAGER, MANAGING_DIRECTOR
-- **Visibility:** Team leads see requests for their teams; department managers see requests in their department; managing directors see all history.
+- **Visibility:** Team leads see events tied to requests for their teams; department managers see events tied to requests in their department; managing directors see the full resource history, including registration and stocktake audit events.
+- **Contents:** Quantity stock movements, request issue/return events, and individual-asset events in one chronological list. Asset events include asset code, previous/new status, location, assignment, request/issue/return references, actor, reason, and timestamp.
 - **Request body:** None
 - **Response body:** `List<ResourceMovementHistoryEntry>`
 - **Source:** `src/main/kotlin/com/resourcetracker/resource/ResourceController.kt`
 
-### 53. `POST /api/v1/resources/{id}/corrections`
+### 53. `PUT /api/v1/resources/{id}/corrections`
 
 - **Access:** MANAGING_DIRECTOR
-- **Request body:** `CorrectionRequestDto`
+- **Request body:** `InventoryCorrectionRequest`
 
-**Request fields (`CorrectionRequestDto`):**
-- `newQuantity` (required, validation: PositiveOrZero): `Int`
-- `reason` (required, validation: NotBlank): `String`
+For a `QUANTITY` resource:
 
-- **Response body:** `StockCorrectionResponse`
+```json
+{"newQuantity": 42, "reason": "Cycle count"}
+```
+
+For an `INDIVIDUAL` resource:
+
+```json
+{"assets": [{"assetId": 103, "status": "MISSING"}], "reason": "Asset not found during stocktake"}
+```
+
+Send exactly one of `newQuantity` or `assets`, according to the resource's tracking method. The server records movements atomically and validates every asset transition.
+
+- **Response body:** `InventoryCorrectionResponse`
 - **Source:** `src/main/kotlin/com/resourcetracker/resource/ResourceController.kt`
 
 ### 54. `GET /api/v1/teams/{id}/members`

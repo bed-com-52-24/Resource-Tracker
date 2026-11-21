@@ -6,6 +6,16 @@ import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.notification.NotificationType
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
+import com.resourcetracker.resource.TrackingMethod
+import com.resourcetracker.resource.AssetStatus
+import com.resourcetracker.resource.AssetMovementType
+import com.resourcetracker.resource.ResourceAssetRepository
+import com.resourcetracker.resource.AssetMovementRepository
+import com.resourcetracker.resource.AssetMovement
+import com.resourcetracker.resource.StockIssueAsset
+import com.resourcetracker.resource.StockIssueAssetRepository
+import com.resourcetracker.resource.StockReturnAsset
+import com.resourcetracker.resource.StockReturnAssetRepository
 import com.resourcetracker.common.UserReference
 import com.resourcetracker.user.Role
 import com.resourcetracker.user.UserRepository
@@ -29,6 +39,8 @@ data class StockIssueRequest(
     @field:Min(1) val lineItemId: Int,
     @field:Schema(description = "Quantity to hand over. Cannot exceed the approved balance or (for external items) the quantity received from the vendor and not yet handed over.", example = "2")
     @field:Min(1) val quantity: Int,
+    @field:Schema(description = "Required for INDIVIDUAL resources; select exactly quantity asset IDs. Omit for QUANTITY resources.", example = "[101, 104]")
+    val assetIds: List<Int>? = null,
 )
 @Schema(description = "Recorded handoff. resourceId is null for external purchases; returnTrackingEnabled indicates whether returns and due dates apply.")
 data class StockIssueResponse(
@@ -42,10 +54,11 @@ data class StockIssueResponse(
     val returnedQuantity: Int,
     val returnTrackingEnabled: Boolean,
     val receiver: UserReference,
-    val expectedReturnDate: LocalDate?
+    val expectedReturnDate: LocalDate?,
+    val assetIds: List<Int> = emptyList(),
 )
-data class CreateReturnRequest(val quantity: Int, val note: String? = null)
-data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null)
+data class CreateReturnRequest(val quantity: Int, val note: String? = null, val assetIds: List<Int>? = null)
+data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null, val assetIds: List<Int>? = null)
 @Schema(description = "Select one action per call. SUBMIT_RETURN requires issueId and quantity and is available to the Team Lead on that team. VERIFY_RETURN requires issueId, returnId, and condition and is available to the assigned Department Manager. REQUEST_EXTENSION requires issueId, newExpectedReturnDate, and reason and is available to the Team Lead. DECIDE_EXTENSION requires issueId, extensionId, and decision and is available to the assigned Department Manager; rejection also requires comment. Do not send fields for other actions or set a status. Return and extension statuses are set by the server. External handoffs do not support return or due-date actions.")
 enum class IssueWorkflowAction { SUBMIT_RETURN, VERIFY_RETURN, REQUEST_EXTENSION, DECIDE_EXTENSION }
 @Schema(description = "Choose one action per call. Each action requires different fields and is available to specific roles. Return and due-date actions apply only to internal stock issues.")
@@ -62,6 +75,8 @@ data class IssueWorkflowRequest(
     val quantity: Int? = null,
     @field:Schema(description = "VERIFY_RETURN only. USABLE returns stock to available inventory; DAMAGED or QUARANTINED make it unavailable; LOST does not add it back.", allowableValues = ["USABLE", "DAMAGED", "LOST", "QUARANTINED"], example = "USABLE")
     val condition: ReturnCondition? = null,
+    @field:Schema(description = "Required for individual-tracked returns. SUBMIT_RETURN names the exact assets being returned; VERIFY_RETURN names the subset accepted when verification is partial.", example = "[101, 104]")
+    val assetIds: List<Int>? = null,
     @field:Schema(description = "Optional submission note or verification note. For rejecting an extension, use comment.", example = "Inspected and usable")
     val note: String? = null,
     @field:Schema(description = "Required for REQUEST_EXTENSION; must be later than the current due date and in the future.", example = "2026-12-01")
@@ -105,6 +120,7 @@ data class StockReturnReviewResponse(
     val verifiedBy: Int?,
     val verifiedAt: LocalDateTime?,
     val note: String?,
+    val assetIds: List<Int> = emptyList(),
 )
 @Schema(description = "Issue or external handoff record. External handoffs have no internal resource ID, due date, or return tracking.")
 data class StockIssueProgressResponse(
@@ -124,6 +140,7 @@ data class StockIssueProgressResponse(
     val expectedReturnDate: LocalDate?,
     val returns: List<StockReturnReviewResponse>,
     val extensions: List<ReturnExtensionResponse>,
+    val assetIds: List<Int> = emptyList(),
 )
 data class ResourceMovementHistoryEntry(
     val movementId: Int?,
@@ -149,6 +166,14 @@ data class ResourceMovementHistoryEntry(
     val lineIssuedQuantity: Int? = null,
     val lineApprovedQuantity: Int? = null,
     val fulfillmentStatus: String? = null,
+    val assetId: Int? = null,
+    val assetCode: String? = null,
+    val previousAssetStatus: String? = null,
+    val newAssetStatus: String? = null,
+    val previousLocation: String? = null,
+    val newLocation: String? = null,
+    val previousAssignedUserId: Int? = null,
+    val newAssignedUserId: Int? = null,
 )
 
 @Service
@@ -170,6 +195,10 @@ class StockOperationsService(
     private val notifications: NotificationService,
     private val teams: TeamRepository,
     private val procurements: ProcurementRepository,
+    private val assetRecords: ResourceAssetRepository,
+    private val assetMovements: AssetMovementRepository,
+    private val issueAssets: StockIssueAssetRepository,
+    private val returnAssets: StockReturnAssetRepository,
 ) {
     @Transactional
     fun issue(requestId: Int, actorId: Int, dto: StockIssueRequest): StockIssueResponse {
@@ -195,6 +224,19 @@ class StockOperationsService(
                 val resourceId = line.resourceId ?: badRequest("Internal resource line has no catalogue resource")
                 val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
                 if (resource.type != ResourceType.INTERNAL) conflict("Only internal resources can use stock issuance")
+                val individual = resource.trackingMethod == TrackingMethod.INDIVIDUAL
+                val selectedAssets = if (individual) {
+                    val ids = dto.assetIds ?: badRequest("assetIds are required for individual resources")
+                    if (ids.distinct().size != ids.size || ids.size != dto.quantity) badRequest("Select exactly quantity distinct assets")
+                    val locked = assetRecords.findAllForUpdateByIdIn(ids.sorted())
+                    if (locked.size != ids.size) notFound("One or more selected assets were not found")
+                    if (locked.any { it.resourceId != resource.id }) badRequest("Every selected asset must belong to this resource")
+                    if (locked.any { it.status != AssetStatus.AVAILABLE }) conflict("Every selected asset must be available")
+                    locked
+                } else {
+                    if (!dto.assetIds.isNullOrEmpty()) badRequest("assetIds are only valid for individual resources")
+                    emptyList()
+                }
                 if (waitlistService.isWaiting(dto.lineItemId)) conflict("Line item is on the waitlist and has no reserved stock yet")
                 val activeReservations = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, dto.lineItemId, ReservationStatus.ACTIVE)
                 val reserved = activeReservations.sumOf { it.quantity }
@@ -219,17 +261,30 @@ class StockOperationsService(
                     val available = availability.availableQuantity(resource, lockReservations = true)
                     if (dto.quantity > available) conflict("Insufficient available stock; available $available")
                 }
-                resource.quantity = (resource.quantity ?: 0) - dto.quantity
-                resource.recomputeStatus()
-                resources.save(resource)
                 val durationDays = line.approvedDurationDays ?: conflict("The assigned manager must approve a return duration before stock can be issued")
                 val expectedReturnDate = LocalDate.now(clock.withZone(ZoneId.of("Africa/Blantyre"))).plusDays(durationDays.toLong())
                 val saved = issues.save(StockIssue(requestId = requestId, lineItemId = dto.lineItemId, resourceId = resource.id, teamId = request.teamId, reservationId = activeReservations.firstOrNull()?.id, quantity = dto.quantity, issuedBy = actor.id, expectedReturnDate = expectedReturnDate))
+                if (individual) {
+                    selectedAssets.forEach { asset ->
+                        val previous = asset.status
+                        val previousAssignee = asset.assignedUserId
+                        asset.status = AssetStatus.ISSUED
+                        asset.assignedUserId = request.requesterId
+                        assetRecords.save(asset)
+                        issueAssets.save(StockIssueAsset(issueId = saved.id, assetId = asset.id))
+                        assetMovements.save(AssetMovement(assetId = asset.id, type = AssetMovementType.ISSUED, previousStatus = previous, newStatus = asset.status, previousLocation = asset.location, newLocation = asset.location, previousAssignedUserId = previousAssignee, newAssignedUserId = asset.assignedUserId, reason = "Issued for request ${request.requestNumber}", actorId = actor.id, relatedIssueId = saved.id))
+                    }
+                } else {
+                    resource.quantity = (resource.quantity ?: 0) - dto.quantity
+                    resource.recomputeStatus()
+                    resources.save(resource)
+                }
                 if (waitlistReservedToIssue > 0) waitlistService.recordIssued(dto.lineItemId, waitlistReservedToIssue, actor.id)
-                movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = saved.id, actorId = actor.id))
+                if (!individual) movements.save(StockMovement(resourceId = resource.id, type = MovementType.ISSUE, quantity = dto.quantity, requestId = requestId, issueId = saved.id, actorId = actor.id))
                 saved
             }
             FulfillmentPreference.EXTERNAL.name -> {
+                if (!dto.assetIds.isNullOrEmpty()) badRequest("assetIds cannot be supplied for external handoffs")
                 val delivered = procurements.findAllByLineItemIdForUpdate(dto.lineItemId)
                     .filter { it.status == ProcurementStatus.RECEIVED || it.status == ProcurementStatus.ACCEPTED }
                     .sumOf { it.receivedQuantity ?: 0 }
@@ -270,6 +325,7 @@ class StockOperationsService(
             returnTrackingEnabled = line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name,
             receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
             expectedReturnDate = issue.expectedReturnDate,
+            assetIds = if (issue.resourceId != null) issueAssets.findAllByIssueId(issue.id).map { it.assetId }.sorted() else emptyList(),
         )
     }
 
@@ -405,6 +461,37 @@ class StockOperationsService(
                 )
             }
         }
+        val assetCache = assetRecords.findAllByResourceIdOrderByAssetCode(resourceId).associateBy { it.id }
+        assetMovements.findAllByResourceIdOrderByCreatedAtAsc(resourceId).forEach { movement ->
+            val issue = movement.relatedIssueId?.let(issueById::get)
+            val request = issue?.let { requestFor(it.requestId) }
+            val canSeeUnlinkedAudit = actor.role == Role.MANAGING_DIRECTOR
+            if (!canSeeUnlinkedAudit && (issue == null || issue.requestId !in visibleRequestIds.orEmpty())) return@forEach
+            val asset = assetCache[movement.assetId] ?: return@forEach
+            entries += ResourceMovementHistoryEntry(
+                movementId = movement.id,
+                movementType = "ASSET_${movement.type.name}",
+                quantity = 1,
+                movementDate = movement.createdAt,
+                actorId = movement.actorId,
+                reason = movement.reason,
+                requestId = issue?.requestId,
+                requestNumber = request?.requestNumber,
+                issueId = movement.relatedIssueId,
+                lineItemId = issue?.lineItemId,
+                teamId = issue?.teamId,
+                teamName = issue?.teamId?.let(::teamName),
+                returnId = movement.relatedReturnId,
+                assetId = asset.id,
+                assetCode = asset.assetCode,
+                previousAssetStatus = movement.previousStatus?.name,
+                newAssetStatus = movement.newStatus.name,
+                previousLocation = movement.previousLocation,
+                newLocation = movement.newLocation,
+                previousAssignedUserId = movement.previousAssignedUserId,
+                newAssignedUserId = movement.newAssignedUserId,
+            )
+        }
         return entries
             .filter { visibleRequestIds == null || it.requestId in visibleRequestIds }
             .sortedBy { it.movementDate }
@@ -437,7 +524,7 @@ class StockOperationsService(
             IssueWorkflowAction.SUBMIT_RETURN -> {
                 if (actor.role != Role.TEAM_LEAD) forbidden()
                 val quantity = dto.quantity ?: badRequest("quantity is required when submitting a return")
-                requestReturn(issueId(), actorId, CreateReturnRequest(quantity, dto.note))
+                requestReturn(issueId(), actorId, CreateReturnRequest(quantity, dto.note, dto.assetIds))
             }
             IssueWorkflowAction.VERIFY_RETURN -> {
                 if (actor.role != Role.DEPARTMENT_MANAGER) forbidden()
@@ -445,7 +532,7 @@ class StockOperationsService(
                 val returnId = dto.returnId ?: badRequest("returnId is required when verifying a return")
                 if (returns.findIssueIdById(returnId) != issueId) notFound("Return not found for this issue")
                 val condition = dto.condition ?: badRequest("condition is required when verifying a return")
-                verifyReturn(returnId, actorId, VerifyReturnRequest(condition, dto.quantity, dto.note))
+                verifyReturn(returnId, actorId, VerifyReturnRequest(condition, dto.quantity, dto.note, dto.assetIds))
             }
             IssueWorkflowAction.REQUEST_EXTENSION -> {
                 if (actor.role != Role.TEAM_LEAD) forbidden()
@@ -489,9 +576,10 @@ class StockOperationsService(
             expectedReturnDate = expectedReturnDate,
             returns = returns.findAllByIssueId(id).sortedByDescending { it.returnedAt }.map {
                 StockReturnReviewResponse(it.id, it.quantity, it.condition, it.status, it.returnedBy, it.returnedAt,
-                    it.verifiedBy, it.verifiedAt, it.note)
+                    it.verifiedBy, it.verifiedAt, it.note, returnAssets.findAllByReturnId(it.id).map { asset -> asset.assetId }.sorted())
             },
             extensions = extensions.findAllByIssueIdOrderByCreatedAtDesc(id).map { it.toResponse() },
+            assetIds = issueAssets.findAllByIssueId(id).map { it.assetId }.sorted(),
         )
     }
 
@@ -567,7 +655,26 @@ class StockOperationsService(
         if (dto.quantity <= 0) badRequest("quantity must be positive")
         val pending = returns.findByIssueIdAndStatusForUpdate(issueId, ReturnStatus.PENDING).sumOf { it.quantity }
         if (dto.quantity > issue.quantity - issue.returnedQuantity - pending) conflict("Return exceeds unreturned issued quantity")
+        val resource = resources.findForUpdateById(issue.resourceId!!) ?: notFound("Resource not found")
+        val selectedAssets = if (resource.trackingMethod == TrackingMethod.INDIVIDUAL) {
+            val ids = dto.assetIds ?: badRequest("assetIds are required for individually tracked returns")
+            if (ids.size != dto.quantity || ids.distinct().size != ids.size) badRequest("Select exactly quantity distinct assets")
+            val issuedIds = issueAssets.findAllByIssueId(issueId).map { it.assetId }.toSet()
+            if (!issuedIds.containsAll(ids)) badRequest("Every returned asset must belong to this issue")
+            val locked = assetRecords.findAllForUpdateByIdIn(ids.sorted())
+            if (locked.size != ids.size || locked.any { it.status != AssetStatus.ISSUED }) conflict("Every selected asset must currently be issued")
+            locked
+        } else {
+            if (!dto.assetIds.isNullOrEmpty()) badRequest("assetIds are only valid for individual resources")
+            emptyList()
+        }
         val created = returns.save(StockReturn(issueId = issueId, quantity = dto.quantity, returnedBy = actor.id, note = dto.note))
+        selectedAssets.forEach { asset ->
+            asset.status = AssetStatus.RETURN_PENDING
+            assetRecords.save(asset)
+            returnAssets.save(StockReturnAsset(returnId = created.id, assetId = asset.id))
+            assetMovements.save(AssetMovement(assetId = asset.id, type = AssetMovementType.RETURN_SUBMITTED, previousStatus = AssetStatus.ISSUED, newStatus = AssetStatus.RETURN_PENDING, previousLocation = asset.location, newLocation = asset.location, previousAssignedUserId = asset.assignedUserId, newAssignedUserId = asset.assignedUserId, reason = dto.note?.takeIf(String::isNotBlank) ?: "Return submitted for inspection", actorId = actor.id, relatedIssueId = issueId, relatedReturnId = created.id))
+        }
         history.save(RequestHistory(requestId = issue.requestId, eventType = "RETURN_REQUESTED", actorId = actor.id, lineItemId = issue.lineItemId, quantity = dto.quantity, comment = dto.note))
         return created
     }
@@ -587,6 +694,18 @@ class StockOperationsService(
         if (quantity !in 1..requestedQuantity) badRequest("Verified quantity must be between 1 and requested return quantity")
         val resourceId = issue.resourceId ?: conflict("This issue does not represent internal stock")
         val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
+        val submittedAssetIds = returnAssets.findAllByReturnId(returnId).map { it.assetId }
+        val selectedAssets = if (resource.trackingMethod == TrackingMethod.INDIVIDUAL) {
+            if (submittedAssetIds.size != requestedQuantity) conflict("Return asset records do not match the submitted quantity")
+            val selectedIds = dto.assetIds ?: if (quantity == requestedQuantity) submittedAssetIds else badRequest("assetIds are required when verifying only part of an asset return")
+            if (selectedIds.size != quantity || selectedIds.distinct().size != selectedIds.size || !submittedAssetIds.toSet().containsAll(selectedIds)) badRequest("Select exactly quantity distinct assets from this pending return")
+            val locked = assetRecords.findAllForUpdateByIdIn(selectedIds.sorted())
+            if (locked.size != selectedIds.size || locked.any { it.status != AssetStatus.RETURN_PENDING }) conflict("Selected assets are not awaiting return inspection")
+            locked
+        } else {
+            if (!dto.assetIds.isNullOrEmpty()) badRequest("assetIds are only valid for individual resources")
+            emptyList()
+        }
         stockReturn.quantity = quantity
         stockReturn.condition = dto.condition
         stockReturn.status = ReturnStatus.VERIFIED
@@ -595,9 +714,27 @@ class StockOperationsService(
         stockReturn.note = dto.note ?: stockReturn.note
         val saved = returns.save(stockReturn)
         if (quantity < requestedQuantity) {
-            returns.save(StockReturn(issueId = issue.id, quantity = requestedQuantity - quantity, returnedBy = stockReturn.returnedBy, note = stockReturn.note))
+            val remainder = returns.save(StockReturn(issueId = issue.id, quantity = requestedQuantity - quantity, returnedBy = stockReturn.returnedBy, note = stockReturn.note))
+            if (resource.trackingMethod == TrackingMethod.INDIVIDUAL) {
+                val remainderIds = submittedAssetIds.filterNot { id -> selectedAssets.any { it.id == id } }
+                returnAssets.deleteAllByReturnIdAndAssetIdIn(returnId, remainderIds)
+                remainderIds.forEach { returnAssets.save(StockReturnAsset(returnId = remainder.id, assetId = it)) }
+            }
         }
-        when (dto.condition) {
+        if (resource.trackingMethod == TrackingMethod.INDIVIDUAL) {
+            val newStatus = when (dto.condition) {
+                ReturnCondition.USABLE -> AssetStatus.AVAILABLE
+                ReturnCondition.DAMAGED, ReturnCondition.QUARANTINED -> AssetStatus.DAMAGED
+                ReturnCondition.LOST -> AssetStatus.MISSING
+            }
+            selectedAssets.forEach { asset ->
+                val previousAssignee = asset.assignedUserId
+                asset.status = newStatus
+                asset.assignedUserId = null
+                assetRecords.save(asset)
+                assetMovements.save(AssetMovement(assetId = asset.id, type = AssetMovementType.RETURNED, previousStatus = AssetStatus.RETURN_PENDING, newStatus = newStatus, previousLocation = asset.location, newLocation = asset.location, previousAssignedUserId = previousAssignee, newAssignedUserId = null, reason = dto.note?.takeIf(String::isNotBlank) ?: "Return verified: ${dto.condition}", actorId = actor.id, relatedIssueId = issue.id, relatedReturnId = saved.id))
+            }
+        } else when (dto.condition) {
             ReturnCondition.USABLE -> {
                 resource.quantity = (resource.quantity ?: 0) + quantity
                 movements.save(StockMovement(resourceId = resource.id, type = MovementType.RETURN_USABLE, quantity = quantity, requestId = request.requestId, issueId = issue.id, returnId = saved.id, actorId = actor.id, reason = dto.note))
@@ -610,8 +747,10 @@ class StockOperationsService(
         }
         issue.returnedQuantity += quantity
         issues.save(issue)
-        resource.recomputeStatus()
-        resources.save(resource)
+        if (resource.trackingMethod == TrackingMethod.QUANTITY) {
+            resource.recomputeStatus()
+            resources.save(resource)
+        }
         history.save(RequestHistory(requestId = request.requestId!!, eventType = "RETURNED", actorId = actor.id, lineItemId = issue.lineItemId, quantity = quantity, comment = "${dto.condition}: ${dto.note.orEmpty()}"))
         if (dto.condition == ReturnCondition.USABLE) waitlistService.onStockReturned(resource.id)
         return saved
@@ -624,6 +763,7 @@ class StockOperationsService(
         if (dto.newQuantity < 0 || dto.reason.isBlank()) badRequest("newQuantity must be non-negative and reason is required")
         val resource = resources.findForUpdateById(resourceId) ?: notFound("Resource not found")
         if (resource.type != ResourceType.INTERNAL) badRequest("Only internal resources have physical stock")
+        if (resource.trackingMethod != com.resourcetracker.resource.TrackingMethod.QUANTITY) badRequest("Use asset correction for individually tracked resources")
         val current = resource.quantity ?: 0
         val difference = dto.newQuantity - current
         if (difference == 0) badRequest("newQuantity matches the current quantity")

@@ -116,7 +116,7 @@ class ResourceRequestController(
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
         summary = "Issue reserved stock or hand over received external items",
-        description = "The assigned Department Manager records the handover to the Team Lead who submitted the request. Internal items require reserved or available stock and an approved return duration. External items can be handed over only up to the quantity marked RECEIVED or ACCEPTED on procurement records, less previous handoffs and waived amounts. External handoffs do not change internal stock and do not use return-date tracking. Requests must normally be APPROVED, PARTIALLY_APPROVED, or WAITLISTED. A previously completed request can still record a remaining external handoff. The request is completed when all approved quantities are handed over or waived.",
+        description = "The assigned Department Manager records the handover to the Team Lead who submitted the request. Internal quantity-tracked items require reserved or available stock. For INDIVIDUAL resources, send exactly quantity distinct assetIds; approval and reservation remain count-based until this handoff selects the actual assets. Internal items require an approved return duration. External items can be handed over only up to the quantity marked RECEIVED or ACCEPTED on procurement records. Requests must normally be APPROVED, PARTIALLY_APPROVED, or WAITLISTED.",
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Stock issued"),
@@ -157,8 +157,14 @@ class ResourceRequestController(
                 ExampleObject(name = "Submit return", summary = "Team lead submits a return", value = """
                     {"action":"SUBMIT_RETURN","issueId":21,"quantity":2,"note":"Returning two units"}
                 """),
+                ExampleObject(name = "Submit asset return", summary = "Team lead identifies the exact laptops being returned", value = """
+                    {"action":"SUBMIT_RETURN","issueId":21,"quantity":2,"assetIds":[101,104],"note":"Returning two laptops"}
+                """),
                 ExampleObject(name = "Verify return", summary = "Assigned department manager verifies a return", value = """
                     {"action":"VERIFY_RETURN","issueId":21,"returnId":31,"condition":"USABLE","quantity":2,"note":"Inspected and usable"}
+                """),
+                ExampleObject(name = "Verify asset return", summary = "Manager verifies exact returned laptops", value = """
+                    {"action":"VERIFY_RETURN","issueId":21,"returnId":31,"condition":"USABLE","quantity":2,"assetIds":[101,104],"note":"Inspected and usable"}
                 """),
                 ExampleObject(name = "Request extension", summary = "Team lead requests a later due date", value = """
                     {"action":"REQUEST_EXTENSION","issueId":21,"newExpectedReturnDate":"2026-12-01","reason":"Project requires the equipment for two more weeks"}
