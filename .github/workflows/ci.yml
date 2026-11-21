@@ -119,7 +119,7 @@ jobs:
             -Dflyway.url="jdbc:mysql://127.0.0.1:3307/${DB_NAME}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" \
             -Dflyway.user="$DB_USER" \
             -Dflyway.password="$DB_PASSWORD" \
-            flyway:validate flyway:migrate
+            flyway:migrate flyway:validate
 
       - name: Upload application JAR
         env:
