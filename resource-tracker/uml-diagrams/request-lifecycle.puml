@@ -1,0 +1,27 @@
+@startuml request-lifecycle
+title Request lifecycle (RequestStatus / RequestTransitions)
+hide empty description
+skinparam shadowing false
+
+[*] --> PENDING : Team Lead submits
+
+PENDING --> QUERIED : Manager queries
+QUERIED --> PENDING : Team Lead clarifies
+
+PENDING --> APPROVED : Manager approves
+PENDING --> PARTIALLY_APPROVED : line quantities\npartly approved
+PENDING --> REJECTED : Manager rejects
+PENDING --> WAITLISTED : Manager waitlists
+QUERIED --> REJECTED : Manager rejects
+
+APPROVED --> COMPLETED : all lines fulfilled /\naccepted / waived
+PARTIALLY_APPROVED --> COMPLETED : all lines fulfilled /\naccepted / waived
+WAITLISTED --> COMPLETED : all lines fulfilled /\naccepted / waived
+
+PENDING --> CANCELLED : Team Lead cancels
+QUERIED --> CANCELLED : Team Lead cancels
+APPROVED --> CANCELLED : Team Lead cancels\nbefore issue
+PARTIALLY_APPROVED --> CANCELLED : Team Lead cancels\nbefore issue
+WAITLISTED --> CANCELLED : Team Lead cancels\nbefore issue
+
+@enduml

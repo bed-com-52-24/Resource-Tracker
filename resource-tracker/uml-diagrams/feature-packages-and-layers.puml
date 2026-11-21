@@ -1,0 +1,47 @@
+@startuml feature-packages-and-layers
+title  Feature packages and application layers
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "Resource Tracker Spring Boot application" as APP {
+
+  package "Feature packages under com.resourcetracker" as FEATURES {
+    [auth] as AUTH
+    [user · department · team · project] as ORG
+    [resource · vendor · budget] as CATALOG
+    [request\nworkflow · reservation · waitlist\nissue/return · procurement] as REQUEST
+    [notification · mail] as COMMS
+    [audit] as TRACE
+    [common · security · config] as SHARED
+  }
+
+  package "Typical layers inside a feature package" as LAYERS {
+    [Controller\nHTTP · validation · roles · OpenAPI] as C
+    [Service\nrules · transactions · record scope] as S
+    [Repository\nJPA/specifications · selected JDBC] as R
+    [Entity\nJPA table mapping] as E
+    [DTO\nrequest and response models] as D
+
+    C --> S
+    S --> R
+    R --> E
+    C --> D
+    S --> D
+  }
+
+  AUTH --> REQUEST
+  ORG --> REQUEST
+  CATALOG --> REQUEST
+  REQUEST --> COMMS
+  REQUEST --> TRACE
+  ORG --> TRACE
+  CATALOG --> TRACE
+  SHARED ..> FEATURES : shared concerns
+}
+
+database "MySQL" as DB
+R --> DB
+
+@enduml
