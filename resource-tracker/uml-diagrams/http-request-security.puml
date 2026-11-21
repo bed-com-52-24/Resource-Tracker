@@ -1,0 +1,40 @@
+@startuml http-request-security
+title HTTP request security and shared handling
+left to right direction
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+actor "API client" as CLIENT
+rectangle "HTTP request" as HTTP
+component "JwtAuthenticationFilter\nvalidate JWT · revocation · active user" as JWT
+component "Spring MVC controller" as MVC
+component "RoleAuthorizationInterceptor\n@RequiresRoles" as ROLE
+component "Feature service\nrecord-level authorization" as SERVICE
+component "Repositories / JDBC" as REPO
+database "MySQL" as DB
+component "AuditService / AuditAspect\nAuditEntryWriter" as AUDIT
+component "NotificationService" as NOTIFY
+component "SSE unread-count stream" as SSE
+component "GlobalExceptionHandler\nstructured error body" as ERR
+component "CorrelationIdFilter\ncorrelation ID" as CID
+rectangle "401 structured response" as AUTHERR
+rectangle "403 structured response" as FORBIDDEN
+
+CLIENT --> HTTP
+HTTP --> JWT
+JWT --> MVC : valid or public route
+JWT --> AUTHERR : invalid or missing\non protected route
+MVC --> ROLE
+ROLE --> SERVICE : role allowed
+ROLE --> FORBIDDEN : role denied
+SERVICE --> REPO
+REPO --> DB
+SERVICE --> AUDIT
+AUDIT --> DB
+SERVICE --> NOTIFY
+NOTIFY --> DB
+NOTIFY --> SSE
+MVC ..> ERR : exceptions
+HTTP ..> CID : correlation
+
+@enduml
