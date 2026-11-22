@@ -212,7 +212,7 @@ jobs:
           echo "Waiting for application health..."
 
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/actuator/health; then
+            if curl -fsS http://127.0.0.1:8080/api/v1/health; then
               echo
               echo "Deployment successful."
               find "$BACKUP_DIR" -type f -name 'app-*.jar' -mtime +7 -delete
