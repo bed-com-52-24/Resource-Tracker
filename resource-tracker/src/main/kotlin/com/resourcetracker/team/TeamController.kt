@@ -206,10 +206,10 @@ class TeamController(private val service: TeamService) {
     fun get(@PathVariable id: Int): TeamResponse = service.get(id)
 
     @GetMapping
-    @RequiresRoles(Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
+    @RequiresRoles(Role.ADMIN, Role.MEMBER, Role.TEAM_LEAD, Role.DEPARTMENT_MANAGER, Role.MANAGING_DIRECTOR)
     @Operation(
         summary = "List teams",
-        description = "Allowed roles: MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. ADMIN does not have team access. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
+        description = "Allowed roles: ADMIN, MEMBER, TEAM_LEAD, DEPARTMENT_MANAGER, and MANAGING_DIRECTOR. Lists all teams by default, with optional filters, keyword search, pagination, and one-field sorting."
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Teams returned"),
