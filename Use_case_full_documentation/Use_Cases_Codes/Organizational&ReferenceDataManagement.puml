@@ -1,0 +1,28 @@
+
+@startuml Organizational and Reference Data Management
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Managing Director" as MD
+actor "Department Manager" as DM
+
+rectangle "Reference Data Management" {
+  usecase "Manage Departments" as ManageDept
+  usecase "Manage Resource Catalogue" as ManageResource
+  usecase "Manage Vendors" as ManageVendor
+  usecase "Manage Projects" as ManageProject
+  usecase "Manage Teams and Memberships" as ManageTeam
+}
+
+MD -- ManageDept
+MD -- ManageResource
+MD -- ManageVendor
+
+DM -- ManageProject
+DM -- ManageTeam
+
+' to manage team  u require project
+ManageTeam ..> ManageProject : <<include>> (requires active project)
+
+@enduml

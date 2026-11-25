@@ -1,0 +1,38 @@
+
+@startuml Authentication and User Management
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "System User" as User
+actor "Admin" as Admin
+
+rectangle "Authentication and User Management" {
+  usecase "Login" as Login
+  usecase "Reset Password" as ResetPassword
+  usecase "Refresh Token" as RefreshToken
+  usecase "Logout" as Logout
+  usecase "Manage Password" as ManagePassword
+  usecase "View Profile" as ViewProfile
+  usecase "Manage Users" as ManageUser
+  usecase "Create User" as CreateUser
+  usecase "Update User Status/Profile" as UpdateUserStatus
+  usecase "Resend Setup Code" as ResendCode
+}
+
+User -- Login
+Login <.. ResetPassword : <<extend>>[User forgot password]
+
+User -- RefreshToken
+User -- Logout
+User -- ManagePassword
+User -- ViewProfile
+
+Admin -- ManageUser
+ManageUser <.. CreateUser : <<extend>>
+ManageUser <.. UpdateUserStatus : <<extend>>
+ManageUser <.. ResendCode : <<extend>>
+
+Login ..> RefreshToken : <<include>> (on success)
+
+@enduml

@@ -1,0 +1,23 @@
+
+@startuml Inventory and Stock Management
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Department Manager" as DM
+actor "Managing Director" as MD
+
+rectangle "Stock Management" {
+  usecase "Issue Stock" as IssueStock
+  usecase "Verify Return" as VerifyReturn
+  usecase "Manage Waitlist" as ManageWaitlist
+  usecase "Stock Correction" as CorrectStock
+}
+
+DM -- IssueStock
+DM -- VerifyReturn
+DM -- ManageWaitlist
+MD -- CorrectStock
+
+IssueStock ..> ManageWaitlist : <<extend>> (if stock insufficient)
+@enduml
