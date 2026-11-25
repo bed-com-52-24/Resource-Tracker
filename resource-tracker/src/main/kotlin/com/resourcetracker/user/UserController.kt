@@ -3,6 +3,7 @@ package com.resourcetracker.user
 import com.resourcetracker.common.ErrorResponse
 import com.resourcetracker.common.PagedResponse
 import com.resourcetracker.security.RequiresRoles
+import com.resourcetracker.security.AuthenticatedUser
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 
 @Validated
 @RestController
@@ -137,9 +139,11 @@ class UserController(private val users: UserService) {
     ): UserResponse = users.update(id, request)
 
     @GetMapping
+    @RequiresRoles(Role.ADMIN, Role.MANAGING_DIRECTOR, Role.DEPARTMENT_MANAGER)
     @Operation(
         summary = "List users",
         description = "Returns a paginated user list. Search matches username, email, or full name. " +
+                "Department managers see users in their own department only. Admins and Managing Directors can see users across departments. " +
                 "Responses include department/team IDs and display names. Page size is capped at 100."
     )
     @ApiResponses(
@@ -156,7 +160,7 @@ class UserController(private val users: UserService) {
             ),
             ApiResponse(
                 responseCode = "403",
-                description = "Admin or Managing Director role required",
+                description = "Admin, Managing Director, or Department Manager role required",
                 content = [Content(schema = Schema(implementation = ErrorResponse::class))]
             ),
         ]
@@ -175,12 +179,14 @@ class UserController(private val users: UserService) {
         @RequestParam(defaultValue = "username") sort: String,
         @Parameter(description = "Sort direction: asc or desc", example = "asc")
         @RequestParam(defaultValue = "asc") direction: String,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
     ): PagedResponse<UserResponse> {
         val sortField = sort.takeIf { it in ALLOWED_SORT_FIELDS } ?: "username"
         val sortDirection = if (direction.equals("desc", ignoreCase = true)) Sort.Direction.DESC else Sort.Direction.ASC
         val result: Page<UserResponse> = users.list(
             search,
             PageRequest.of(page, size.coerceAtMost(MAX_PAGE_SIZE), Sort.by(sortDirection, sortField)),
+            caller,
         )
         return PagedResponse.from(result)
     }

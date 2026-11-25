@@ -13,14 +13,18 @@ import com.resourcetracker.common.DuplicateResourceException
 import com.resourcetracker.common.BusinessRuleException
 import com.resourcetracker.common.ResourceNotFoundException
 import com.resourcetracker.common.ListQuery
+import com.resourcetracker.security.AuthenticatedUser
 import com.resourcetracker.audit.AuditAction
 import com.resourcetracker.audit.AuditRecord
 import com.resourcetracker.audit.AuditService
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
 @Service
 class UserService(
     private val users: UserRepository,
@@ -160,7 +164,7 @@ class UserService(
     }
 
     @Transactional(readOnly = true)
-    fun list(search: String?, pageable: Pageable): Page<UserResponse> {
+    fun list(search: String?, pageable: Pageable, caller: AuthenticatedUser): Page<UserResponse> {
         val requestedSort = pageable.sort.firstOrNull()
         val safe = ListQuery.pageable(
             pageable.pageNumber,
@@ -173,7 +177,31 @@ class UserService(
         )
 
         val term = search?.trim()?.takeIf { it.isNotEmpty() }
-        val page = if (term == null) users.findAll(safe) else users.search(term, safe)
+        val page = if (caller.role == Role.DEPARTMENT_MANAGER) {
+            val departmentId = users.findById(caller.id).orElseThrow { ResourceNotFoundException("User not found") }
+                .department?.id ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "Department access is not configured")
+            val pattern = term?.let { "%${it.lowercase()}%" }
+            val departmentScope = Specification<User> { root, _, criteria ->
+                val inDepartment = criteria.equal(root.get<Department>("department").get<Int>("id"), departmentId)
+                if (pattern == null) {
+                    inDepartment
+                } else {
+                    criteria.and(
+                        inDepartment,
+                        criteria.or(
+                            criteria.like(criteria.lower(root.get<String>("username")), pattern),
+                            criteria.like(criteria.lower(root.get<String>("email")), pattern),
+                            criteria.like(criteria.lower(criteria.coalesce(root.get("fullName"), root.get("username"))), pattern),
+                        ),
+                    )
+                }
+            }
+            users.findAll(departmentScope, safe)
+        } else if (term == null) {
+            users.findAll(safe)
+        } else {
+            users.search(term, safe)
+        }
 
         return page.map { it.toResponse() }
     }
