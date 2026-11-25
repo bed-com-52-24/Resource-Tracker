@@ -1,11 +1,13 @@
 package com.resourcetracker.request.entity
 
 import jakarta.persistence.*
+import io.swagger.v3.oas.annotations.media.Schema
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.LocalDate
 import java.time.LocalDateTime
 
+@Schema(description = "Internal stock waitlist status: WAITING means stock is unavailable; FULFILLABLE means stock is ready to reserve or issue; FULFILLED means the waitlisted amount was issued; CANCELLED or WAIVED means no further fulfillment is expected.")
 enum class WaitlistStatus { WAITING, FULFILLABLE, FULFILLED, CANCELLED, WAIVED }
 
 /** Who performed an audited action. SYSTEM = no human user (automatic fulfilment). */

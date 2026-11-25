@@ -62,11 +62,11 @@ data class UpdateOwnProfileRequest(
 )
 
 data class ChangePasswordRequest(
-    @field:Size(min = 8, max = 8) val code: String? = null,
+    @field:Size(min = 43, max = 64) val token: String? = null,
     @field:Size(max = 72) val currentPassword: String? = null,
     @field:NotBlank @field:Size(min = 8, max = 72) val newPassword: String,
 ) {
-    override fun toString() = "ChangePasswordRequest(code=***, currentPassword=***, newPassword=***)"
+    override fun toString() = "ChangePasswordRequest(token=***, currentPassword=***, newPassword=***)"
 }
 
 @Schema(description = "Assign an existing active department to a department manager")
@@ -76,10 +76,10 @@ data class AssignDepartmentRequest(
 )
 
 data class PasswordSetRequest(
-    @field:NotBlank @field:Size(min = 8, max = 8) val code: String,
+    @field:NotBlank @field:Size(min = 43, max = 64) val token: String,
     @field:NotBlank val password: String,
 ) {
-    override fun toString() = "PasswordSetRequest(code=***, password=***)"
+    override fun toString() = "PasswordSetRequest(token=***, password=***)"
 }
 
 data class ForgotPasswordRequest(

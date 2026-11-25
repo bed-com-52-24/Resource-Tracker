@@ -3,6 +3,10 @@ package com.resourcetracker.request.service
 import com.resourcetracker.audit.AuditService
 import com.resourcetracker.request.entity.FulfillmentPreference
 import com.resourcetracker.request.entity.ResourceRequestLineItem
+import com.resourcetracker.request.repository.BudgetOverrideRepository
+import com.resourcetracker.request.repository.RequestHistoryRepository
+import com.resourcetracker.notification.NotificationService
+import com.resourcetracker.user.UserRepository
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -16,6 +20,10 @@ import java.time.LocalDate
 class ExternalBudgetHandlerTest {
     private val budget = mock<BudgetPort>()
     private val audit = mock<AuditService>()
+    private val overrides = mock<BudgetOverrideRepository>()
+    private val history = mock<RequestHistoryRepository>()
+    private val users = mock<UserRepository>()
+    private val notifications = mock<NotificationService>()
 
     @Test
     fun `incremental external approval commits only the newly approved amount`() {
@@ -33,7 +41,7 @@ class ExternalBudgetHandlerTest {
             fulfillmentPreference = FulfillmentPreference.EXTERNAL.name,
         )
 
-        ExternalBudgetHandler(budget, audit).handle(
+        ExternalBudgetHandler(budget, audit, overrides, history, users, notifications).handle(
             LineDecision(
                 requestId = 10,
                 actorId = 6,

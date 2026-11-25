@@ -1,0 +1,35 @@
+@startuml runtime-and-deployment
+title Runtime and deployment
+top to bottom direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+artifact ".env / environment variables\ndatabase · JWT · mail · frontend URL · reset-token TTL" as ENV
+
+node "Local development: start.sh development" as DEV {
+  component "Validate environment\nwait for MySQL · ensure database exists" as DEVSTART
+  component "./mvnw spring-boot:run" as DEVAPP
+  database "MySQL" as DEVDB
+  DEVSTART --> DEVAPP
+  DEVAPP --> DEVDB : Flyway migrations\non startup
+}
+
+node "Container deployment: start.sh production / Docker Compose" as PROD {
+  component "Docker Compose" as COMPOSE
+  database "MySQL 8\nhealth check · mysql_data volume" as MYSQL
+  component "Backend container\nport 8080" as BACKEND
+  COMPOSE --> MYSQL
+  MYSQL --> BACKEND : healthy
+  BACKEND --> MYSQL : Flyway migrations\non startup
+}
+
+actor "API clients" as CLIENT
+cloud "SMTP service" as MAIL
+
+ENV --> DEVAPP
+ENV --> COMPOSE
+CLIENT --> BACKEND : HTTP
+DEVAPP <--> MAIL : password setup /\nreset mail
+BACKEND <--> MAIL : password setup /\nreset mail
+
+@enduml

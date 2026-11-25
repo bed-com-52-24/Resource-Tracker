@@ -21,7 +21,7 @@ At a high level, the system connects organisational structure to resource use:
 1. Administrators and leadership maintain users, departments, projects, teams, resources, and suppliers.
 2. A Team Lead submits a request on behalf of a team, describing one or more line items, quantities, timing, and justification.
 3. The assigned Department Manager reviews the request, may ask for clarification, approve all or part of it, reject it, or place it on a waitlist. Budget information and stock availability support this review.
-4. Approved internal stock can be reserved and issued. External needs can proceed through procurement tracking.
+4. Approved internal stock can be reserved and issued. External items are tracked through procurement, then handed over to the Team Lead through the issue endpoint after the vendor delivery is recorded.
 5. Issues can be returned and verified; return dates can be extended through a request and decision workflow.
 6. Request history, stock movements, audit records, notifications, reports, and dashboards help users follow what happened and what requires attention.
 
@@ -115,6 +115,7 @@ The API includes explicit exceptions. For example, some reporting is open to Adm
 
 - The system can reserve available stock for approved request lines and manage a waitlist when stock is not currently available.
 - Department Managers issue reserved stock and can see issue, due-date, and return information for visible requests.
+- Department Managers hand over external items through the same issue endpoint after procurement is marked RECEIVED or ACCEPTED. Handoffs cannot exceed the quantity recorded as received; they do not change internal stock counts.
 - Team Leads and assigned managers participate in eligible return workflows.
 - A return is reported and then verified with a condition such as usable, damaged, lost, or quarantined.
 - A Team Lead can request a later return date; the responsible manager approves or rejects that extension.
@@ -128,7 +129,9 @@ The API includes explicit exceptions. For example, some reporting is open to Adm
 
 - Department Managers create and update vendors; Team Leads and Department Managers can view permitted vendor data.
 - A procurement record is associated with a request line and vendor and can track estimated cost, expected delivery, order status, quantities received, and acceptance.
+- The assigned Department Manager records the external item handoff to the Team Lead after the vendor delivery is marked RECEIVED or ACCEPTED. The request is completed only after all approved quantities are handed over or waived.
 - Department Managers can view and update procurements for requests assigned to them.
+- When an external line would exceed its department's remaining budget, the Department Manager must provide a reason for an override request. The manager's request decision remains recorded, but that line's procurement stays on hold until a Managing Director approves the budget exception. Approval commits the amount and authorizes procurement together; rejection leaves the request decision intact and blocks procurement for the line.
 
 **Design rationale:** Supplier records are distinct from resources: the vendor is who supplies something, while the resource is what the organisation needs. Procurement is also distinct from stock issuance because an order may still be authorised, ordered, partially received, or awaiting acceptance. Tracking these steps lets the request remain traceable through delivery rather than being marked fulfilled when an order is merely placed.
 
@@ -189,7 +192,7 @@ The following summarizes the functional behavior implemented by the current syst
 - **FR-16:** The system shall support waitlisting when requested internal stock is unavailable.
 - **FR-17:** The system shall record stock returns, verify their condition, and update availability accordingly.
 - **FR-18:** The system shall support return-date extension requests, decisions, and reminders.
-- **FR-19:** The system shall track procurement progress for externally sourced items through receipt and acceptance.
+- **FR-19:** The system shall track procurement progress for externally sourced items through receipt, acceptance, and handoff to the requesting Team Lead.
 
 ### Budgets, oversight, and communication
 
@@ -226,7 +229,7 @@ Use one request as the story that connects the modules:
 1. **Set the context:** Show the organisation's department, project, team, and the Team Lead responsible for submitting the need.
 2. **Submit demand:** Create a request with a few line items and explain the generated reference, status, and request history.
 3. **Review and decide:** Sign in as the assigned Department Manager; show the request, budget context, available stock, and a query or partial approval.
-4. **Fulfil:** Show a reservation and issue for internal stock, or procurement tracking for an external item. Explain why the two paths differ.
+4. **Fulfil:** Show a reservation and issue for internal stock, or procurement receipt followed by a handoff to the Team Lead for an external item.
 5. **Close the loop:** Record a return and its condition, or show the procurement being received and accepted.
 6. **Show accountability:** Open the request history, stock movement history, or audit entry, then finish with the relevant availability or spending report.
 
@@ -234,8 +237,134 @@ This narrative demonstrates both the user-facing workflow and the reason the sys
 
 ## 8. Scope and presentation notes
 
-- The current API has 69 documented endpoint operations; see [api-documentation.md](api-documentation.md) for paths, roles, request DTOs, and response models.
+- The current API has 72 documented endpoint operations; see [api-documentation.md](api-documentation.md) for paths, roles, request DTOs, and response models.
 - This document describes backend behavior visible in the repository. It does not claim that every workflow is exposed in a particular frontend screen.
 - A role's exact access can differ by endpoint and record ownership; use the API reference for endpoint-level detail.
 - Budget commitments and report figures should be presented as system tracking and review support. Do not describe them as a substitute for an external accounting ledger unless that integration is separately established.
 - Explain that the architecture rationale above is inferred from the implemented safeguards and data model where there is no explicit design decision record.
+
+## 9. Architecture diagrams
+
+The diagrams below show the backend structure and flows present in the repository. They describe the current implementation, including the actual request states and the local and container deployment paths.
+
+### 9.1 Feature packages and application layers
+
+The application is a layered monolith. Code is grouped primarily by domain feature; within a feature, controllers handle HTTP, services hold business rules, repositories access persistence, entities map stored data, and DTOs define API payloads. Some smaller features do not use every layer.
+
+```mermaid
+flowchart TB
+  subgraph APP[Resource Tracker Spring Boot application]
+    subgraph FEATURES[Feature packages under com.resourcetracker]
+      AUTH[auth]
+      ORG[user · department · team · project]
+      CATALOG[resource · vendor · budget]
+      REQUEST[request<br/>workflow · reservation · waitlist<br/>issue/return · procurement]
+      COMMS[notification · mail]
+      TRACE[audit]
+      SHARED[common · security · config]
+    end
+
+    subgraph LAYERS[Typical layers inside a feature package]
+      C[Controller<br/>HTTP · validation · roles · OpenAPI]
+      S[Service<br/>rules · transactions · record scope]
+      R[Repository<br/>JPA/specifications · selected JDBC]
+      E[Entity<br/>JPA table mapping]
+      D[DTO<br/>request and response models]
+      C --> S --> R --> E
+      C --> D
+      S --> D
+    end
+
+    AUTH --> REQUEST
+    ORG --> REQUEST
+    CATALOG --> REQUEST
+    REQUEST --> COMMS
+    REQUEST --> TRACE
+    ORG --> TRACE
+    CATALOG --> TRACE
+    SHARED -. shared concerns .-> FEATURES
+  end
+
+  R --> DB[(MySQL)]
+```
+
+### 9.2 HTTP request security and shared handling
+
+Protected API requests are authenticated by the Spring Security filter chain. The MVC role interceptor applies an endpoint's `@RequiresRoles` annotation, and services enforce ownership or department/team scope where needed. Public routes are listed explicitly in `SecurityConfig`.
+
+```mermaid
+flowchart LR
+  CLIENT[API client] --> HTTP[HTTP request]
+  HTTP --> JWT[JwtAuthenticationFilter<br/>validate JWT · revocation · active user]
+  JWT -->|valid or public route| MVC[Spring MVC controller]
+  JWT -->|invalid or missing on protected route| AUTHERR[401 structured response]
+  MVC --> ROLE[RoleAuthorizationInterceptor<br/>@RequiresRoles]
+  ROLE -->|role allowed| SERVICE[Feature service<br/>record-level authorization]
+  ROLE -->|role denied| FORBIDDEN[403 structured response]
+  SERVICE --> REPO[Repositories / JDBC]
+  REPO --> DB[(MySQL)]
+  SERVICE --> AUDIT[AuditService / AuditAspect<br/>AuditEntryWriter]
+  AUDIT --> DB
+  SERVICE --> NOTIFY[NotificationService]
+  NOTIFY --> DB
+  NOTIFY --> SSE[SSE unread-count stream]
+  MVC -. exceptions .-> ERR[GlobalExceptionHandler<br/>structured error body]
+  HTTP -. correlation .-> CID[CorrelationIdFilter<br/>correlation ID]
+```
+
+Public routes include login, refresh, password setup, forgot-password, health, Swagger UI, and API docs. Security is stateless: CSRF is disabled and sessions are not created. Access JWTs are checked against the revocation store and the current user record; refresh tokens are opaque, stored hashed, and rotated. Password mail is handled after commit by the async mail listener; failed mail is retried by scheduled work.
+
+### 9.3 Request lifecycle
+
+This state diagram reflects `RequestStatus` and `RequestTransitions`. Approval can be partial; fulfillment of approved or waitlisted work can complete the request. Cancellation is allowed from the shown states by the Team Lead, subject to the service's refusal once stock has been issued.
+
+```mermaid
+stateDiagram-v2
+  [*] --> PENDING: Team Lead submits
+  PENDING --> QUERIED: Manager queries
+  QUERIED --> PENDING: Team Lead clarifies
+  PENDING --> APPROVED: Manager approves
+  PENDING --> PARTIALLY_APPROVED: line quantities partly approved
+  PENDING --> REJECTED: Manager rejects
+  PENDING --> WAITLISTED: Manager waitlists
+  QUERIED --> REJECTED: Manager rejects
+  PARTIALLY_APPROVED --> APPROVED: manager approves remaining quantities
+  APPROVED --> COMPLETED: all lines issued / handed over / waived
+  WAITLISTED --> COMPLETED: all lines issued / handed over / waived
+  PENDING --> CANCELLED: Team Lead cancels
+  QUERIED --> CANCELLED: Team Lead cancels
+  APPROVED --> CANCELLED: Team Lead cancels before issue
+  PARTIALLY_APPROVED --> CANCELLED: Team Lead cancels before issue
+  WAITLISTED --> CANCELLED: Team Lead cancels before issue
+```
+
+Internal items follow reservation, issue, and return verification; external items follow procurement, receipt, and a recorded handoff through the issue endpoint. A handoff is allowed only up to the received quantity on procurement records marked RECEIVED or ACCEPTED. An external line over budget remains held for a separate Managing Director budget decision before procurement is authorized. Both fulfillment paths are tracked against request lines and contribute to completion.
+
+### 9.4 Runtime and deployment
+
+```mermaid
+flowchart TB
+  ENV[.env / environment variables<br/>database · JWT · mail · frontend URL · reset-token TTL]
+  subgraph DEV[Local development: start.sh development]
+    DEVSTART[Validate environment<br/>wait for MySQL · ensure database exists]
+    DEVAPP[./mvnw spring-boot:run]
+    DEVDB[(MySQL)]
+    DEVSTART --> DEVAPP
+    DEVAPP -->|Flyway migrations on startup| DEVDB
+  end
+  subgraph PROD[Container deployment: start.sh production / Docker Compose]
+    COMPOSE[Docker Compose]
+    MYSQL[MySQL 8<br/>health check · mysql_data volume]
+    BACKEND[Backend container<br/>port 8080]
+    COMPOSE --> MYSQL
+    MYSQL -->|healthy| BACKEND
+    BACKEND -->|Flyway migrations on startup| MYSQL
+  end
+  ENV --> DEVAPP
+  ENV --> COMPOSE
+  CLIENT[API clients] -->|HTTP| BACKEND
+  MAIL[SMTP service] <-->|password setup / reset mail| DEVAPP
+  MAIL <-->|password setup / reset mail| BACKEND
+```
+
+Flyway applies pending migrations at application startup; Hibernate schema generation is disabled. The development startup script does not clean the database: it waits for MySQL, ensures the database exists, then runs Spring Boot. Production runs MySQL and the backend as Compose services, with a named MySQL volume and a backend dependency on MySQL health.

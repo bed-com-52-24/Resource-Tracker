@@ -32,45 +32,55 @@ import java.nio.charset.StandardCharsets
 import org.springframework.web.util.HtmlUtils
 
 interface MailService {
-    fun sendPasswordCode(email: String, username: String, code: String)
+    fun sendPasswordLink(email: String, username: String, token: String, purpose: String)
 }
 
 @Service
 class SmtpMailService(
     private val sender: JavaMailSender,
     @Value("\${app.mail.from}") private val from: String,
+    @Value("\${app.frontend-base-url}") private val frontendBaseUrl: String,
 ) : MailService {
-    override fun sendPasswordCode(email: String, username: String, code: String) {
+    override fun sendPasswordLink(email: String, username: String, token: String, purpose: String) {
+        val link = org.springframework.web.util.UriComponentsBuilder.fromUriString(frontendBaseUrl.trimEnd('/') + "/reset-password")
+            .queryParam("token", token)
+            .build()
+            .encode()
+            .toUriString()
         val message = sender.createMimeMessage()
         val helper = MimeMessageHelper(message, true, StandardCharsets.UTF_8.name())
         helper.setFrom(from)
         helper.setTo(email)
-        helper.setSubject("Resource Tracker | Password setup or reset code")
-        helper.setText(plainText(username, code), htmlMessage(username, code))
+        val setup = purpose == "SETUP"
+        val action = if (setup) "set up" else "reset"
+        helper.setSubject("Resource Tracker | Password $action")
+        helper.setText(plainText(username, link, action), htmlMessage(username, link, action))
         sender.send(message)
     }
 
-    private fun plainText(username: String, code: String) = """Hello $username,
+    private fun plainText(username: String, link: String, action: String) = """Hello $username,
 
-We received a request to set up or reset the password for your Resource Tracker account.
+We received a request to $action the password for your Resource Tracker account.
 
-Your verification code: $code
+Open this one-time link to continue:
+$link
 
-Enter this code in the Resource Tracker app. For your security, do not share it with anyone. It can only be used once.
+This link can only be used once. Password reset links expire automatically.
 
-If you did not request this, you can ignore this email. Your password will not be changed unless the code is used.
+If you did not request this, you can ignore this email. Your password will not be changed unless the link is used.
 
 Resource Tracker Support""".trimIndent()
 
-    private fun htmlMessage(username: String, code: String): String {
+    private fun htmlMessage(username: String, link: String, action: String): String {
         val safeUsername = HtmlUtils.htmlEscape(username)
-        val safeCode = HtmlUtils.htmlEscape(code)
+        val safeLink = HtmlUtils.htmlEscape(link)
+        val safeAction = HtmlUtils.htmlEscape(action)
         return """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Password setup or reset code</title>
+  <title>Password $safeAction</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#172033;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;padding:32px 12px;">
@@ -78,19 +88,14 @@ Resource Tracker Support""".trimIndent()
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
         <tr><td style="background-color:#123b32;padding:24px 32px;">
           <p style="margin:0;color:#b8e8d7;font-size:12px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;">Resource Tracker</p>
-          <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;line-height:1.3;font-weight:700;">Password security code</h1>
+          <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;line-height:1.3;font-weight:700;">Password $safeAction</h1>
         </td></tr>
         <tr><td style="padding:32px;">
           <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Hello $safeUsername,</p>
-          <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.7;">We received a request to set up or reset the password for your account. Use this one-time verification code to continue:</p>
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;background-color:#f0f9f6;border:1px solid #cce9dd;border-radius:8px;">
-            <tr><td align="center" style="padding:20px 16px;">
-              <p style="margin:0 0 8px;color:#42645b;font-size:12px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;">Your verification code</p>
-              <p style="margin:0;color:#123b32;font-family:Consolas,'Courier New',monospace;font-size:32px;line-height:1.3;font-weight:bold;letter-spacing:8px;">$safeCode</p>
-            </td></tr>
-          </table>
-          <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.7;">Enter the code in the Resource Tracker app. It can only be used once. For your security, do not share it with anyone.</p>
-          <p style="margin:0;padding:16px;background-color:#f8fafc;border-left:3px solid #94a3b8;color:#64748b;font-size:13px;line-height:1.6;">If you did not request this, you can ignore this message. Your password will not change unless the code is used.</p>
+          <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.7;">We received a request to $safeAction the password for your account. Use this one-time link to continue:</p>
+          <p style="margin:0 0 24px;"><a href="$safeLink" style="display:inline-block;padding:13px 22px;background-color:#087c5b;border-radius:6px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;">$safeAction password</a></p>
+          <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.7;">If the button does not work, copy and paste this URL into your browser:<br><a href="$safeLink">$safeLink</a><br>The link can only be used once.</p>
+          <p style="margin:0;padding:16px;background-color:#f8fafc;border-left:3px solid #94a3b8;color:#64748b;font-size:13px;line-height:1.6;">If you did not request this, you can ignore this message. Your password will not change unless the link is used.</p>
         </td></tr>
         <tr><td style="padding:18px 32px;background-color:#f8fafc;border-top:1px solid #e2e8f0;">
           <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6;">Resource Tracker Support</p>
@@ -103,10 +108,11 @@ Resource Tracker Support""".trimIndent()
     }
 }
 
-data class PasswordCodeRequested(
+data class PasswordLinkRequested(
     val email: String,
     val username: String,
-    val code: String,
+    val token: String,
+    val purpose: com.resourcetracker.auth.PasswordTokenPurpose,
 )
 
 @Component
@@ -118,9 +124,9 @@ class PasswordLinkMailListener(
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async("mailTaskExecutor")
-    fun send(event: PasswordCodeRequested) {
+    fun send(event: PasswordLinkRequested) {
         try {
-            mailService.sendPasswordCode(event.email, event.username, event.code)
+            mailService.sendPasswordLink(event.email, event.username, event.token, event.purpose.name)
         } catch (exception: MailException) {
             log.error(
                 "Unable to send password link to {} ({})",
@@ -156,7 +162,8 @@ class FailedPasswordEmail(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) val id: Long = 0,
     @Column(nullable = false, length = 200) val email: String,
     @Column(nullable = false, length = 100) val username: String,
-    @Column(nullable = false, length = 512) val encryptedCode: String,
+    @Column(name = "encrypted_code", nullable = false, length = 512) val encryptedToken: String,
+    @Column(nullable = false, length = 10) val purpose: String = "RESET",
     @Column(nullable = false) var attempts: Int = 0,
     @Column(nullable = false) var nextAttemptAt: Instant = Instant.now(),
     @Column(nullable = false) val createdAt: Instant = Instant.now(),
@@ -180,8 +187,8 @@ class FailedMailService(
     private val maxAttempts = 8
 
     @Transactional
-    fun enqueue(event: PasswordCodeRequested) {
-        records.save(FailedPasswordEmail(email = event.email, username = event.username, encryptedCode = encrypt(event.code)))
+    fun enqueue(event: PasswordLinkRequested) {
+        records.save(FailedPasswordEmail(email = event.email, username = event.username, encryptedToken = encrypt(event.token), purpose = event.purpose.name))
     }
 
     @Scheduled(fixedDelayString = "\${app.mail.retry.delay-ms:60000}")
@@ -191,7 +198,7 @@ class FailedMailService(
             val due = records.findDueForUpdate(Instant.now(), maxAttempts)
             due.forEach { entry ->
                 try {
-                    mail.sendPasswordCode(entry.email, entry.username, decrypt(entry.encryptedCode))
+                    mail.sendPasswordLink(entry.email, entry.username, decrypt(entry.encryptedToken), entry.purpose)
                     records.delete(entry)
                 } catch (exception: Exception) {
                     entry.attempts += 1

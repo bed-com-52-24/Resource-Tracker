@@ -27,6 +27,9 @@ data class CreateResourceRequest(
     )
     val category: ResourceCategory,
 
+    @field:Schema(description = "QUANTITY preserves the aggregate stock workflow. INDIVIDUAL requires registering each physical asset separately.", example = "QUANTITY")
+    val trackingMethod: TrackingMethod = TrackingMethod.QUANTITY,
+
     @field:NotBlank
     @field:Size(max = 50)
     @field:Schema(
@@ -96,6 +99,7 @@ data class ResourceResponse(
     val name: String,
     val type: ResourceType,
     val category: ResourceCategory,
+    val trackingMethod: TrackingMethod = TrackingMethod.QUANTITY,
     val unitOfMeasure: String,
     val description: String?,
     val active: Boolean,
@@ -107,18 +111,35 @@ data class ResourceResponse(
     val reservedQuantity: Int = 0,
     val unavailableQuantity: Int = 0,
     val availableQuantity: Int? = null,
+    val assetCounts: AssetCounts? = null,
 )
 
-data class CorrectionRequestDto(
-    @field:PositiveOrZero val newQuantity: Int,
-    @field:Size(max = 500)
-    @field:NotBlank val reason: String,
+data class AssetCounts(
+    val totalRegistered: Long,
+    val available: Long,
+    val reserved: Long,
+    val issued: Long,
+    val damaged: Long,
+    val missing: Long,
+    val disposed: Long,
+    val returnPending: Long = 0,
 )
 
-@Schema(description = "Audit record for a stock correction")
-data class StockCorrectionResponse(
-    val movementId: Int,
+data class AssetStatusCorrection(
+    @field:Positive val assetId: Int,
+    val status: AssetStatus,
+)
+
+@Schema(description = "Tracking-aware inventory correction. Send newQuantity for QUANTITY resources, or assets for INDIVIDUAL resources; do not send both.")
+data class InventoryCorrectionRequest(
+    @field:PositiveOrZero val newQuantity: Int? = null,
+    @field:Size(min = 1) val assets: List<@jakarta.validation.Valid AssetStatusCorrection>? = null,
+    @field:Size(max = 500) @field:NotBlank val reason: String,
+)
+
+data class InventoryCorrectionResponse(
     val resourceId: Int,
-    val quantityChange: Int,
-    val reason: String?,
+    val trackingMethod: TrackingMethod,
+    val quantityChange: Int? = null,
+    val assets: List<ResourceAssetResponse> = emptyList(),
 )

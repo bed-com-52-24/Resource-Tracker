@@ -18,13 +18,13 @@ import org.springframework.stereotype.Component
 import java.time.LocalDate
 
 /**
- * Seeds sample data for local development.
+ * Seeds sample data when the dev or prod profile is active.
  *
  * Safe to run on every startup: each item is skipped if it already exists.
  * Users, departments and teams mirror the payloads used by the corresponding APIs.
  */
 @Component
-@Profile("dev")
+@Profile("dev | prod")
 class DevDataSeeder(
     private val users: UserRepository,
     private val departments: DepartmentRepository,

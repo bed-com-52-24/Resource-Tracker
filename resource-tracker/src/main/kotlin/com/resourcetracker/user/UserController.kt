@@ -40,7 +40,7 @@ class UserController(private val users: UserService) {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
         summary = "Create a user",
-        description = "Creates an account without a password and emails a single-use 8-digit setup code. " +
+        description = "Creates an account without a password and emails a single-use password setup link. " +
                 "The department and every supplied team must exist and be active; supplied teams must belong to the selected department. " +
                 "Team assignment is optional at creation; a department manager may assign the user to a team later. Managing Directors cannot be assigned to teams. " +
                 "A department is required for MEMBER and TEAM_LEAD."
@@ -77,10 +77,10 @@ class UserController(private val users: UserService) {
     fun create(@Valid @RequestBody request: CreateUserRequest): UserResponse = users.create(request)
 
     @PostMapping("/{id}/resend-setup")
-    @Operation(summary = "Resend password setup code", description = "Replaces the unused setup token and queues a new one-time setup code for email delivery.")
+    @Operation(summary = "Resend password setup link", description = "Replaces the unused setup token and queues a new one-time setup link for email delivery.")
     @ApiResponses(
         value = [
-            ApiResponse(responseCode = "200", description = "New password setup code queued for delivery", content = [Content(schema = Schema(implementation = UserResponse::class))]),
+            ApiResponse(responseCode = "200", description = "New password setup link queued for delivery", content = [Content(schema = Schema(implementation = UserResponse::class))]),
             ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
             ApiResponse(responseCode = "403", description = "Admin or Managing Director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
             ApiResponse(responseCode = "404", description = "User not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),

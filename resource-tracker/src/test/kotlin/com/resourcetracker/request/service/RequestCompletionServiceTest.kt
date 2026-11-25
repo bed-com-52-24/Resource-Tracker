@@ -4,7 +4,6 @@ import com.resourcetracker.audit.AuditService
 import com.resourcetracker.notification.NotificationService
 import com.resourcetracker.request.entity.RequestStatus
 import com.resourcetracker.request.entity.ResourceRequest
-import com.resourcetracker.request.repository.ProcurementRepository
 import com.resourcetracker.request.repository.RequestHistoryRepository
 import com.resourcetracker.request.repository.RequestLineItemRepository
 import com.resourcetracker.request.repository.ResourceRequestRepository
@@ -20,7 +19,6 @@ class RequestCompletionServiceTest {
     private val requests = mock<ResourceRequestRepository>()
     private val lines = mock<RequestLineItemRepository>()
     private val issues = mock<StockIssueRepository>()
-    private val procurements = mock<ProcurementRepository>()
     private val history = mock<RequestHistoryRepository>()
     private val audit = mock<AuditService>()
     private val notifications = mock<NotificationService>()
@@ -34,7 +32,7 @@ class RequestCompletionServiceTest {
         whenever(requests.findForUpdateById(10)).thenReturn(request)
 
         val completed = RequestCompletionService(
-            requests, lines, issues, procurements, history, audit, notifications,
+            requests, lines, issues, history, audit, notifications,
         ).completeIfFulfilled(10, actorId = 20)
 
         assertFalse(completed)

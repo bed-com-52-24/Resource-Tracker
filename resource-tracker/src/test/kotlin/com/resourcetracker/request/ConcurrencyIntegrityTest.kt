@@ -35,6 +35,10 @@ import com.resourcetracker.resource.Resource
 import com.resourcetracker.resource.ResourceCategory
 import com.resourcetracker.resource.ResourceRepository
 import com.resourcetracker.resource.ResourceType
+import com.resourcetracker.resource.TrackingMethod
+import com.resourcetracker.resource.ResourceAsset
+import com.resourcetracker.resource.ResourceAssetRepository
+import com.resourcetracker.resource.AssetStatus
 import com.resourcetracker.team.Team
 import com.resourcetracker.team.TeamRepository
 import com.resourcetracker.user.Role
@@ -89,6 +93,9 @@ class ConcurrencyIntegrityTest {
 
     @Autowired
     private lateinit var resources: ResourceRepository
+
+    @Autowired
+    private lateinit var assets: ResourceAssetRepository
 
     @Autowired
     private lateinit var requests: ResourceRequestRepository
@@ -213,11 +220,42 @@ class ConcurrencyIntegrityTest {
         assertEquals(UserReference(manager.id, manager.username), response.receiver)
     }
 
+    @Test
+    fun `individual resource is reserved by quantity then issued and returned by exact asset`() {
+        resource.trackingMethod = TrackingMethod.INDIVIDUAL
+        resource.quantity = null
+        resources.save(resource)
+        val asset = assets.save(ResourceAsset(resourceId = resource.id, assetCode = "AS-${UUID.randomUUID()}", location = "Store"))
+        reservations.reserve(
+            requireNotNull(request.requestId), manager.id,
+            CreateReservationRequest(requireNotNull(line.lineItemId), 1),
+        )
+
+        val issued = stockOperations.issue(
+            requireNotNull(request.requestId), manager.id,
+            StockIssueRequest(requireNotNull(line.lineItemId), 1, listOf(asset.id)),
+        )
+        assertEquals(listOf(asset.id), issued.assetIds)
+        assertEquals(AssetStatus.ISSUED, assets.findById(asset.id).orElseThrow().status)
+        assertEquals(null, resources.findById(resource.id).orElseThrow().quantity)
+
+        val returnRecord = stockOperations.requestReturn(issued.id, manager.id, CreateReturnRequest(1, assetIds = listOf(asset.id)))
+        assertEquals(AssetStatus.RETURN_PENDING, assets.findById(asset.id).orElseThrow().status)
+        stockOperations.verifyReturn(returnRecord.id, manager.id, VerifyReturnRequest(ReturnCondition.USABLE, assetIds = listOf(asset.id)))
+
+        assertEquals(AssetStatus.AVAILABLE, assets.findById(asset.id).orElseThrow().status)
+        assertEquals(1, issues.findById(issued.id).orElseThrow().returnedQuantity)
+        assertEquals(null, resources.findById(resource.id).orElseThrow().quantity)
+    }
+
     @AfterEach
     fun cleanUp() {
         jdbc.execute("DROP TRIGGER IF EXISTS fail_stock_movement")
+        jdbc.update("DELETE FROM asset_movements WHERE asset_id IN (SELECT asset_id FROM resource_assets WHERE resource_id = ?)", resource.id)
         (listOfNotNull(request.requestId) + listOfNotNull(additionalRequestId)).forEach { requestId ->
             jdbc.update("DELETE FROM notifications WHERE request_id = ?", requestId)
+            jdbc.update("DELETE FROM stock_return_assets WHERE return_id IN (SELECT return_id FROM stock_returns WHERE issue_id IN (SELECT issue_id FROM stock_issues WHERE request_id = ?))", requestId)
+            jdbc.update("DELETE FROM stock_issue_assets WHERE issue_id IN (SELECT issue_id FROM stock_issues WHERE request_id = ?)", requestId)
             jdbc.update("DELETE FROM stock_movements WHERE request_id = ?", requestId)
             jdbc.update(
                 "DELETE FROM stock_returns WHERE issue_id IN (SELECT issue_id FROM stock_issues WHERE request_id = ?)",
@@ -230,6 +268,7 @@ class ConcurrencyIntegrityTest {
             jdbc.update("DELETE FROM resource_request_line_items WHERE request_id = ?", requestId)
             jdbc.update("DELETE FROM resource_requests WHERE request_id = ?", requestId)
         }
+        jdbc.update("DELETE FROM resource_assets WHERE resource_id = ?", resource.id)
         jdbc.update("DELETE FROM team_projects WHERE team_id = ?", team.id)
         jdbc.update("DELETE FROM user_teams WHERE user_id = ?", manager.id)
         jdbc.update("DELETE FROM teams WHERE team_id = ?", team.id)

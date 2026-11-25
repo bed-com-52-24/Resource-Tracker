@@ -123,10 +123,10 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
 
     @PostMapping("/password")
     @ResponseStatus(HttpStatus.OK)
-    @Operation(summary = "Change, set, or reset a password", description = "Provide either the authenticated user's current password or a single-use 8-digit setup/reset code, together with the new password.")
+    @Operation(summary = "Change, set, or reset a password", description = "Provide either the authenticated user's current password or the single-use token from a setup/reset email link, together with the new password.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Password updated", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordSetResponse::class))]),
-        ApiResponse(responseCode = "400", description = "Invalid or expired code, or password does not meet policy", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid or expired token, or password does not meet policy", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),
     ])
     fun updatePassword(
         @AuthenticationPrincipal caller: AuthenticatedUser?,
@@ -135,7 +135,7 @@ class AuthController(private val auth: AuthService, private val users: UserRepos
 
     @PostMapping("/forgot-password")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    @Operation(summary = "Request a password reset", description = "Queues a one-time reset code for email delivery when an active account matches the address. Always returns the same response to protect account privacy.")
+    @Operation(summary = "Request a password reset", description = "Queues a one-time, expiring reset link for email delivery when an active account matches the address. Always returns the same response to protect account privacy.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "202", description = "Reset request accepted", content = [Content(schema = Schema(implementation = com.resourcetracker.user.PasswordResetResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid email address", content = [Content(schema = Schema(implementation = com.resourcetracker.common.ErrorResponse::class))]),

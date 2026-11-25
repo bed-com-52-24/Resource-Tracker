@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
@@ -29,6 +30,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.CorsConfigurationSource
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 import java.time.Clock
 
 data class AuthenticatedUser(
@@ -44,6 +48,21 @@ data class AuthenticatedUser(
 @EnableMethodSecurity
 class SecurityConfig {
     @Bean
+    fun corsConfigurationSource(
+        @Value("\${app.frontend-base-url}") frontendBaseUrl: String,
+    ): CorsConfigurationSource {
+        val configuration = CorsConfiguration().apply {
+            allowedOrigins = listOf(frontendBaseUrl.trimEnd('/'), "http://localhost:3000")
+            allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+            allowedHeaders = listOf("*")
+            allowCredentials = true
+        }
+        return UrlBasedCorsConfigurationSource().apply {
+            registerCorsConfiguration("/api/**", configuration)
+        }
+    }
+
+    @Bean
     fun clock(): Clock = Clock.systemUTC()
 
     @Bean
@@ -58,6 +77,7 @@ class SecurityConfig {
         entryPoint: RestAuthenticationEntryPoint,
     ): SecurityFilterChain = http
         .csrf { it.disable() }
+        .cors { }
         .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
         .exceptionHandling { it.authenticationEntryPoint(entryPoint) }
         .authorizeHttpRequests {

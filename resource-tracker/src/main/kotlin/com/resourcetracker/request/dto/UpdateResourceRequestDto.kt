@@ -11,7 +11,11 @@ enum class RequesterUpdateStatus { PENDING, CANCELLED }
 
 /** Shared PUT body. Fields are role-scoped by ResourceRequestService. */
 data class UpdateRequestDto(
-    @field:Schema(description = "TEAM_LEAD: PENDING to clarify or CANCELLED to cancel. DEPARTMENT_MANAGER: QUERIED, APPROVED, REJECTED, or WAITLISTED. APPROVED may finish a PARTIALLY_APPROVED request or move a WAITLISTED request into normal approval; the server recalculates the resulting status from approved quantities.", example = "APPROVED")
+    @field:Schema(
+        description = "TEAM_LEAD may send PENDING to clarify a QUERIED request, or CANCELLED from PENDING, QUERIED, APPROVED, PARTIALLY_APPROVED, or WAITLISTED (only before stock is issued). The assigned DEPARTMENT_MANAGER may send QUERIED, APPROVED, REJECTED, or WAITLISTED as allowed by the current status. PARTIALLY_APPROVED and COMPLETED are produced by the server, not sent here.",
+        allowableValues = ["PENDING", "CANCELLED", "QUERIED", "APPROVED", "REJECTED", "WAITLISTED"],
+        example = "APPROVED",
+    )
     val status: com.resourcetracker.request.entity.RequestStatus? = null,
     @field:Schema(description = "TEAM_LEAD clarification/cancellation comment. Do not send for manager actions.", example = "Updated quantities as requested")
     @field:Size(max = 1000) val comment: String? = null,
@@ -43,7 +47,7 @@ data class ApprovedQuantityDecision(
     val approvedDurationDays: Int? = null,
 )
 
-@Schema(description = "Approved quantities per request line item. For a partial approval, include only the lines being approved; omitted lines remain unapproved. Use quantity 0 to explicitly leave a line unapproved. The request remains PARTIALLY_APPROVED until every line reaches its requested quantity; later manager updates can approve the remaining quantities.")
+@Schema(description = "Approved quantities per request line item. For a partial approval, include only the lines being approved; omitted lines remain unapproved. Use quantity 0 to explicitly leave a line unapproved. The request remains PARTIALLY_APPROVED until every line reaches its requested quantity; later manager updates can approve the remaining quantities. The server calculates whether the resulting request is APPROVED or PARTIALLY_APPROVED.")
 data class RequestDecisionDto(
     @field:Schema(allowableValues = ["QUERY", "APPROVE", "REJECT", "WAITLIST"], example = "APPROVE")
     val decision: Decision,
@@ -52,7 +56,7 @@ data class RequestDecisionDto(
     @field:Valid val approvedQuantities: List<ApprovedQuantityDecision> = emptyList(),
 )
 
-@Schema(description = "APPROVE reserves stock now; WAITLIST approves into the FIFO waitlist (internal lines only); REJECT/QUERY as before")
+@Schema(description = "Manager decision for a PENDING or QUERIED request. QUERY is available from PENDING; APPROVE, REJECT, and WAITLIST are available from PENDING; REJECT is also available from QUERIED. APPROVE reserves available internal stock and authorizes external procurement unless a budget exception is pending. WAITLIST places internal lines in the fulfillment queue.")
 enum class Decision { QUERY, APPROVE, REJECT, WAITLIST }
 
 data class ManagerReassignmentDto(val managerId: Int)

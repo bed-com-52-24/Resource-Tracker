@@ -1,6 +1,6 @@
 CREATE TABLE resource_inventory (
     id BIGINT AUTO_INCREMENT NOT NULL,
-    resource_id BINARY(16) NOT NULL,
+    resource_id INT NOT NULL,
     location VARCHAR(120) NOT NULL,
     total_quantity INT NOT NULL,
     reserved_quantity INT NOT NULL DEFAULT 0,

@@ -34,9 +34,10 @@ class ProcurementServiceTest {
     private val history = mock<RequestHistoryRepository>()
     private val users = mock<UserRepository>()
     private val notifications = mock<NotificationService>()
+    private val budgetOverrides = mock<com.resourcetracker.request.repository.BudgetOverrideRepository>()
 
     private fun service() = ProcurementService(
-        procurements, requests, lines, history, users, notifications, Clock.systemUTC(),
+        procurements, requests, lines, history, users, notifications, budgetOverrides, Clock.systemUTC(),
     )
 
     @Test

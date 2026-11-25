@@ -43,6 +43,10 @@ class Resource(
     @Column(nullable = false, length = 20)
     var category: ResourceCategory,
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tracking_method", nullable = false, length = 20)
+    var trackingMethod: TrackingMethod = TrackingMethod.QUANTITY,
+
     @Column(length = 500)
     var description: String? = null,
 
@@ -100,7 +104,7 @@ class Resource(
     }
 
     fun recomputeStatus() {
-        status = if (type == ResourceType.INTERNAL) {
+        status = if (type == ResourceType.INTERNAL && trackingMethod == TrackingMethod.QUANTITY) {
             if (quantity!! > 0) ResourceStatus.AVAILABLE else ResourceStatus.OUT_OF_STOCK
         } else {
             null

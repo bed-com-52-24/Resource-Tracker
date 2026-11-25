@@ -179,7 +179,7 @@ class AuthService(
     @Transactional
     fun setPassword(request: PasswordSetRequest): PasswordSetResponse {
         val now = clock.instant()
-        val token = passwordTokens.findForUpdateByTokenHash(passwordTokenService.hash(request.code))
+        val token = passwordTokens.findForUpdateByTokenHash(passwordTokenService.hash(request.token))
             ?: throw invalidPasswordToken()
         val expiresAt = token.expiresAt
         if (token.usedAt != null || (expiresAt != null && !expiresAt.isAfter(now))) {
@@ -243,14 +243,14 @@ class AuthService(
 
     @Transactional
     fun updatePassword(caller: AuthenticatedUser?, request: ChangePasswordRequest): PasswordSetResponse {
-        val hasCode = !request.code.isNullOrBlank()
+        val hasToken = !request.token.isNullOrBlank()
         val hasCurrentPassword = !request.currentPassword.isNullOrBlank()
-        if (hasCode == hasCurrentPassword) {
-            throw IllegalArgumentException("Provide either a password setup/reset code or the current password")
+        if (hasToken == hasCurrentPassword) {
+            throw IllegalArgumentException("Provide either a password setup/reset token or the current password")
         }
-        if (hasCode) {
-            val code = request.code ?: throw IllegalArgumentException("A setup/reset code is required")
-            return setPassword(PasswordSetRequest(code = code, password = request.newPassword))
+        if (hasToken) {
+            val token = request.token ?: throw IllegalArgumentException("A setup/reset token is required")
+            return setPassword(PasswordSetRequest(token = token, password = request.newPassword))
         }
         val authenticatedCaller = caller ?: throw UnauthenticatedException()
         return changeOwnPassword(authenticatedCaller, request)

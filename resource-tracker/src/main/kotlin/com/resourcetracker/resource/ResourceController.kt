@@ -48,7 +48,26 @@ import org.springframework.web.bind.annotation.RestController
 class ResourceController(
     private val resources: ResourceService,
     private val stockOperations: StockOperationsService,
+    private val assetService: AssetService,
+    private val inventoryCorrections: InventoryCorrectionService,
 ) {
+
+    @GetMapping("/{id}/assets")
+    @Operation(summary = "List individually tracked assets", description = "Lists registered assets and their authoritative statuses for an individual-tracked resource.")
+    fun listAssets(@PathVariable @Min(1) id: Int): List<ResourceAssetResponse> = assetService.list(id)
+
+    @PostMapping("/{id}/assets")
+    @RequiresRoles(Role.MANAGING_DIRECTOR)
+    @Operation(summary = "Register assets", description = "Registers one or more real physical assets against an active INDIVIDUAL resource. Asset codes and non-empty serial numbers must be unique.")
+    fun registerAssets(
+        @PathVariable @Min(1) id: Int,
+        @Valid @RequestBody request: List<@Valid AssetRegistrationRequest>,
+        @AuthenticationPrincipal caller: AuthenticatedUser,
+    ): List<ResourceAssetResponse> = assetService.register(id, caller.id, request)
+
+    @GetMapping("/assets/{assetId}/history")
+    @Operation(summary = "Get asset movement history", description = "Returns append-only registration and correction movements for one asset.")
+    fun assetHistory(@PathVariable @Min(1) assetId: Int): List<AssetMovementResponse> = assetService.history(assetId)
 
     @GetMapping
     @Operation(
@@ -92,7 +111,7 @@ class ResourceController(
 
     @PostMapping
     @RequiresRoles(Role.MANAGING_DIRECTOR)
-    @Operation(summary = "Create a resource", description = "Managing directors create new active resources in the shared inventory. INTERNAL resources require an opening quantity and cannot have a preferred vendor. EXTERNAL resources cannot have a quantity; a preferred vendor may be supplied.")
+    @Operation(summary = "Create a resource", description = "Managing directors create resources in the shared catalogue. trackingMethod defaults to QUANTITY for backward compatibility. INTERNAL QUANTITY resources require an opening quantity; INTERNAL INDIVIDUAL resources must omit quantity and register real assets separately. EXTERNAL resources remain quantity-free.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "201", description = "Resource created", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "400", description = "Invalid request body, unit, or resource type fields", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -130,7 +149,7 @@ class ResourceController(
     ): ResourceResponse = resources.update(id, request)
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get a resource", description = "Returns one shared resource, including stock and availability for INTERNAL resources and any preferred vendor reference.")
+    @Operation(summary = "Get a resource", description = "Returns one shared resource. QUANTITY resources report stock balances; INDIVIDUAL resources derive quantity and availability from registered asset records and include counts by asset status.")
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Resource returned", content = [Content(schema = Schema(implementation = ResourceResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
@@ -143,8 +162,8 @@ class ResourceController(
 
     @GetMapping("/{id}/movement-history")
     @Operation(
-        summary = "Get a resource's issue and return movement history",
-        description = "Returns chronological stock movements for a resource, including the team and request for issues, submitted/verified returns, return condition and dates, and current issued/returned/outstanding quantities. For each issue, fulfillmentStatus indicates whether the line is partially issued, issued, partially returned, or returned. Team leads see requests for their teams, department managers see requests in their department, and managing directors see all history.",
+        summary = "Get unified resource and asset movement history",
+        description = "Returns one chronological timeline combining quantity movements, request issues/returns, and individual asset events. Asset entries include asset code, status/location/assignment changes, actor, reason, and linked request, issue, or return. Team leads see events tied to their teams; department managers see events in their department; managing directors see the full audit history.",
     )
     @ApiResponses(value = [
         ApiResponse(responseCode = "200", description = "Movement history returned"),
@@ -157,30 +176,31 @@ class ResourceController(
         @AuthenticationPrincipal caller: AuthenticatedUser,
     ) = stockOperations.resourceMovementHistory(id, caller.id)
 
-    @PostMapping("/{id}/corrections")
+    @PutMapping("/{id}/corrections")
     @RequiresRoles(Role.MANAGING_DIRECTOR)
-    @Operation(summary = "Correct resource stock", description = "Managing directors can set an internal resource quantity and record the reason.")
+    @Operation(
+        summary = "Correct inventory for a resource",
+        description = "One tracking-aware correction operation. For QUANTITY resources send newQuantity; for INDIVIDUAL resources send assets containing exact assetId and corrected status values. Send a mandatory reason and only the fields for that tracking method.",
+        requestBody = io.swagger.v3.oas.annotations.parameters.RequestBody(
+            content = [Content(mediaType = "application/json", schema = Schema(implementation = InventoryCorrectionRequest::class), examples = [
+                io.swagger.v3.oas.annotations.media.ExampleObject(name = "Quantity correction", value = "{\"newQuantity\":42,\"reason\":\"Cycle count\"}"),
+                io.swagger.v3.oas.annotations.media.ExampleObject(name = "Asset correction", value = "{\"assets\":[{\"assetId\":103,\"status\":\"MISSING\"}],\"reason\":\"LAP-003 was not found during stocktake\"}"),
+            ])],
+        ),
+    )
     @ApiResponses(value = [
-        ApiResponse(responseCode = "200", description = "Stock corrected", content = [Content(schema = Schema(implementation = StockCorrectionResponse::class))]),
-        ApiResponse(responseCode = "400", description = "Invalid quantity or reason", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
+        ApiResponse(responseCode = "200", description = "Inventory corrected", content = [Content(schema = Schema(implementation = InventoryCorrectionResponse::class))]),
+        ApiResponse(responseCode = "400", description = "Invalid tracking-method correction body or reason", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "401", description = "Authentication required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "403", description = "Managing director role required", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "404", description = "Resource not found", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
         ApiResponse(responseCode = "409", description = "Stock correction is not allowed", content = [Content(schema = Schema(implementation = ErrorResponse::class))]),
     ])
-    fun correctStock(
+    fun correctInventory(
         @Parameter(description = "Resource ID", example = "12") @PathVariable @Min(1) id: Int,
-        @Valid @RequestBody request: CorrectionRequestDto,
+        @Valid @RequestBody request: InventoryCorrectionRequest,
         @AuthenticationPrincipal caller: AuthenticatedUser,
-    ): StockCorrectionResponse {
-        val movement = stockOperations.correctResource(id, caller.id, StockCorrectionRequest(request.newQuantity, request.reason))
-        return StockCorrectionResponse(
-            movementId = movement.id,
-            resourceId = movement.resourceId,
-            quantityChange = movement.quantity,
-            reason = movement.reason,
-        )
-    }
+    ): InventoryCorrectionResponse = inventoryCorrections.correct(id, caller.id, request)
 
     companion object {
         private val ALLOWED_SORT_FIELDS = setOf("name", "code", "type", "category", "active", "createdAt", "quantity", "status")

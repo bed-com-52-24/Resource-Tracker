@@ -1,15 +1,22 @@
 package com.resourcetracker.request.entity
 
 import jakarta.persistence.*
+import io.swagger.v3.oas.annotations.media.Schema
 import org.hibernate.annotations.CreationTimestamp
 import java.time.LocalDate
 import java.time.LocalDateTime
 
+@Schema(description = "Reservation lifecycle: ACTIVE stock is held for a request; CONSUMED stock was issued; RELEASED stock is no longer held; EXPIRED reservations passed their expiry time.")
 enum class ReservationStatus { ACTIVE, CONSUMED, RELEASED, EXPIRED }
+@Schema(description = "Return review status. The current workflow creates PENDING returns and moves them to VERIFIED after manager review. REJECTED is a legacy stored value; the API does not currently provide a reject-return action.")
 enum class ReturnStatus { PENDING, VERIFIED, REJECTED }
+@Schema(description = "Condition selected by the manager during return verification. USABLE returns stock to availability; DAMAGED and QUARANTINED keep it unavailable; LOST is not returned to stock.")
 enum class ReturnCondition { USABLE, DAMAGED, LOST, QUARANTINED }
 enum class MovementType { ISSUE, RETURN_USABLE, RETURN_UNAVAILABLE, CORRECTION, OPENING }
+@Schema(description = "Procurement lifecycle: AUTHORISED → ORDERED → RECEIVED → ACCEPTED. CANCELLED records an authorization cancelled before goods were received; it is set by the system.")
 enum class ProcurementStatus { AUTHORISED, ORDERED, RECEIVED, ACCEPTED, CANCELLED }
+@Schema(description = "Budget exception review status. PENDING awaits Managing Director review; APPROVED commits the requested amount and releases procurement; REJECTED blocks procurement; CANCELLED means the underlying request was cancelled.")
+enum class BudgetOverrideStatus { PENDING, APPROVED, REJECTED, CANCELLED }
 
 @Entity
 @Table(name = "stock_reservations")
@@ -37,7 +44,7 @@ class StockIssue(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "issue_id") var id: Int = 0,
     @Column(name = "request_id", nullable = false) var requestId: Int,
     @Column(name = "line_item_id", nullable = false) var lineItemId: Int,
-    @Column(name = "resource_id", nullable = false) var resourceId: Int,
+    @Column(name = "resource_id") var resourceId: Int?,
     @Column(name = "team_id", nullable = false) var teamId: Int,
     @Column(name = "reservation_id") var reservationId: Int? = null,
     @Column(nullable = false) var quantity: Int,
@@ -51,6 +58,7 @@ class StockIssue(
     @Column(name = "reminder_due_day_sent", nullable = false) var reminderDueDaySent: Boolean = false,
 )
 
+@Schema(description = "Return-date extension review status: PENDING awaits the assigned manager; APPROVED updates the due date; REJECTED leaves the existing due date in place.")
 enum class ReturnExtensionStatus { PENDING, APPROVED, REJECTED }
 
 @Entity
