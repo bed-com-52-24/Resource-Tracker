@@ -57,7 +57,6 @@ data class StockIssueResponse(
     val returnTrackingEnabled: Boolean,
     val receiver: UserReference,
     val expectedReturnDate: LocalDate?,
-    val assetIds: List<Int> = emptyList(),
     val assets: List<IssuedAssetReference> = emptyList(),
 )
 data class CreateReturnRequest(val quantity: Int, val note: String? = null, val assetIds: List<Int>? = null)
@@ -143,7 +142,6 @@ data class StockIssueProgressResponse(
     val expectedReturnDate: LocalDate?,
     val returns: List<StockReturnReviewResponse>,
     val extensions: List<ReturnExtensionResponse>,
-    val assetIds: List<Int> = emptyList(),
     val assets: List<IssuedAssetReference> = emptyList(),
 )
 data class ResourceMovementHistoryEntry(
@@ -241,9 +239,14 @@ class StockOperationsService(
                     if (!dto.assetIds.isNullOrEmpty()) badRequest("assetIds are only valid for individual resources")
                     emptyList()
                 }
-                if (waitlistService.isWaiting(dto.lineItemId)) conflict("Line item is on the waitlist and has no reserved stock yet")
                 val activeReservations = reservations.findByRequestIdAndLineItemIdAndStatusForUpdate(requestId, dto.lineItemId, ReservationStatus.ACTIVE)
                 val reserved = activeReservations.sumOf { it.quantity }
+                // A backordered line may also have stock reserved from the initial approval.
+                // It can issue that reserved portion; only a line with no reservation must wait
+                // for the FIFO waitlist allocator before drawing from currently available stock.
+                if (reserved == 0 && waitlistService.isWaiting(dto.lineItemId)) {
+                    conflict("Line item is on the waitlist and has no reserved stock yet")
+                }
                 var waitlistReservedToIssue = 0
                 if (reserved > 0) {
                     if (dto.quantity > reserved) conflict("Issue exceeds reserved quantity")
@@ -332,7 +335,6 @@ class StockOperationsService(
             returnTrackingEnabled = line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name,
             receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
             expectedReturnDate = issue.expectedReturnDate,
-            assetIds = issuedAssets.map { it.id },
             assets = issuedAssets,
         )
     }
@@ -590,7 +592,6 @@ class StockOperationsService(
             assets = issueAssets.findAllByIssueId(id).map { it.assetId }.sorted().mapNotNull { assetId ->
                 assetRecords.findById(assetId).orElse(null)?.let { IssuedAssetReference(it.id, it.assetCode, it.serialNumber) }
             },
-            assetIds = issueAssets.findAllByIssueId(id).map { it.assetId }.sorted(),
         )
     }
 
