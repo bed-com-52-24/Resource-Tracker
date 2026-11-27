@@ -1,0 +1,28 @@
+
+@startuml Resource Request Lifecycle
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Team Lead" as TL
+actor "Department Manager" as DM
+
+rectangle "Request Lifecycle" {
+  usecase "Create Request" as CreateRequest
+  usecase "Assign Manager" as AssignManager
+  usecase "Request Decision (Approve/Reject/Query/Waitlist)" as RequestDecision
+  usecase "Clarify & Resubmit" as Resubmit
+  usecase "Cancel Request" as CancelRequest
+  usecase "Set Priority(Critical/High/Medium/Low)" as SetPriority
+}
+
+TL -- CreateRequest
+TL -- Resubmit
+TL -- CancelRequest
+
+DM -- RequestDecision
+DM -- SetPriority
+
+CreateRequest ..> AssignManager : <<include>>
+
+@enduml

@@ -1,0 +1,22 @@
+
+@startuml Oversight, Reporting and Audit
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Managing Director" as MD
+actor "Admin" as Admin
+actor "Department Manager" as DM
+
+rectangle "Oversight and Audit" {
+  usecase "View Organizational Reports" as ViewOrgReport
+  usecase "Read Audit Trail" as ReadAuditTrail
+  usecase "View Request History" as ViewRequestHistory
+}
+
+MD -- ViewOrgReport
+MD -- ViewRequestHistory
+DM -- ViewRequestHistory
+Admin -- ReadAuditTrail
+
+@enduml
