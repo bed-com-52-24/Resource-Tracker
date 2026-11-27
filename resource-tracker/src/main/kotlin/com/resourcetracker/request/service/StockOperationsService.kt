@@ -42,6 +42,8 @@ data class StockIssueRequest(
     @field:Schema(description = "Required for INDIVIDUAL resources; select exactly quantity asset IDs. Omit for QUANTITY resources.", example = "[101, 104]")
     val assetIds: List<Int>? = null,
 )
+@Schema(description = "Identifying details for an individually tracked asset issued on a request")
+data class IssuedAssetReference(val id: Int, val assetCode: String, val serialNumber: String?)
 @Schema(description = "Recorded handoff. resourceId is null for external purchases; returnTrackingEnabled indicates whether returns and due dates apply.")
 data class StockIssueResponse(
     val id: Int,
@@ -56,6 +58,7 @@ data class StockIssueResponse(
     val receiver: UserReference,
     val expectedReturnDate: LocalDate?,
     val assetIds: List<Int> = emptyList(),
+    val assets: List<IssuedAssetReference> = emptyList(),
 )
 data class CreateReturnRequest(val quantity: Int, val note: String? = null, val assetIds: List<Int>? = null)
 data class VerifyReturnRequest(val condition: ReturnCondition, val quantity: Int? = null, val note: String? = null, val assetIds: List<Int>? = null)
@@ -141,6 +144,7 @@ data class StockIssueProgressResponse(
     val returns: List<StockReturnReviewResponse>,
     val extensions: List<ReturnExtensionResponse>,
     val assetIds: List<Int> = emptyList(),
+    val assets: List<IssuedAssetReference> = emptyList(),
 )
 data class ResourceMovementHistoryEntry(
     val movementId: Int?,
@@ -313,6 +317,9 @@ class StockOperationsService(
             mapOf("requestId" to requestId, "requestNumber" to request.requestNumber),
         )
         requestCompletion.completeIfFulfilled(requestId, actor.id)
+        val issuedAssets = if (issue.resourceId != null) issueAssets.findAllByIssueId(issue.id).map { it.assetId }.sorted()
+            .mapNotNull { id -> assetRecords.findById(id).orElse(null)?.let { IssuedAssetReference(it.id, it.assetCode, it.serialNumber) } }
+        else emptyList()
         return StockIssueResponse(
             id = issue.id,
             requestId = issue.requestId,
@@ -325,7 +332,8 @@ class StockOperationsService(
             returnTrackingEnabled = line.fulfillmentPreference == FulfillmentPreference.INTERNAL.name,
             receiver = UserReference(receiver.id, receiver.fullName ?: receiver.username),
             expectedReturnDate = issue.expectedReturnDate,
-            assetIds = if (issue.resourceId != null) issueAssets.findAllByIssueId(issue.id).map { it.assetId }.sorted() else emptyList(),
+            assetIds = issuedAssets.map { it.id },
+            assets = issuedAssets,
         )
     }
 
@@ -579,6 +587,9 @@ class StockOperationsService(
                     it.verifiedBy, it.verifiedAt, it.note, returnAssets.findAllByReturnId(it.id).map { asset -> asset.assetId }.sorted())
             },
             extensions = extensions.findAllByIssueIdOrderByCreatedAtDesc(id).map { it.toResponse() },
+            assets = issueAssets.findAllByIssueId(id).map { it.assetId }.sorted().mapNotNull { assetId ->
+                assetRecords.findById(assetId).orElse(null)?.let { IssuedAssetReference(it.id, it.assetCode, it.serialNumber) }
+            },
             assetIds = issueAssets.findAllByIssueId(id).map { it.assetId }.sorted(),
         )
     }

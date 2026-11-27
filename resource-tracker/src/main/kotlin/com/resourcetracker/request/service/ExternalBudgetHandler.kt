@@ -108,6 +108,16 @@ class ExternalBudgetHandler(
                 "overrideId" to override.id,
             ),
         )
+        notifications.notify(
+            users.findActiveByRoleAndDepartmentId(Role.DEPARTMENT_MANAGER, departmentId).map { it.id },
+            NotificationType.BUDGET_OVERRIDE_ROUTED,
+            mapOf(
+                "requestId" to decision.requestId,
+                "requestNumber" to budget.requestNumberOfRequest(decision.requestId),
+                "lineItemId" to lineId,
+                "overrideId" to override.id,
+            ),
+        )
     }
 
     private fun committedComment(lineId: Int, before: BudgetStatus, cost: java.math.BigDecimal): String =
