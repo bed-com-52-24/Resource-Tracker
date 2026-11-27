@@ -106,6 +106,7 @@ class NotificationService(
             NotificationType.PROCUREMENT -> "There’s an update on a purchase for $request. Open it to see the latest details."
             NotificationType.RESOURCE_ISSUED -> "Items from $request have been handed over to your team. Open the request to see the quantities."
             NotificationType.BUDGET_OVERRIDE_REQUIRED -> "A resource request$reference is above the department’s available budget. Please review whether extra budget can be approved. The purchase is on hold until you decide."
+            NotificationType.BUDGET_OVERRIDE_ROUTED -> "$request exceeds the department’s available budget and is awaiting Managing Director authorization. The purchase is on hold until the Managing Director decides."
             NotificationType.BUDGET_OVERRIDE_DECIDED -> if (payload["decision"]?.toString() == "APPROVED") {
                 "The request for extra budget for $request was approved. The purchase can now proceed."
             } else {

@@ -17,7 +17,7 @@ set -euo pipefail
 # ==============================================================================
 
 ENVIRONMENT="${1:-development}"
-IMAGE_NAME="jeckman/resource-tracker-backend:v11"
+IMAGE_NAME="jeckman/resource-tracker-backend:v12"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # ----------------------------------------------------------------------------

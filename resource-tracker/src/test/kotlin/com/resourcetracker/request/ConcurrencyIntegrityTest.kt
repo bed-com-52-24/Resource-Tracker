@@ -235,7 +235,7 @@ class ConcurrencyIntegrityTest {
             requireNotNull(request.requestId), manager.id,
             StockIssueRequest(requireNotNull(line.lineItemId), 1, listOf(asset.id)),
         )
-        assertEquals(listOf(asset.id), issued.assetIds)
+        assertEquals(listOf(asset.id), issued.assets.map { it.id })
         assertEquals(AssetStatus.ISSUED, assets.findById(asset.id).orElseThrow().status)
         assertEquals(null, resources.findById(resource.id).orElseThrow().quantity)
 

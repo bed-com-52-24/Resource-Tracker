@@ -13,7 +13,7 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
         member = person "Member" "Views team resources"
 
         // External systems
-        smtp   = softwareSystem "SMTP Provider" "Delivers setup, reset and notification emails" "External"
+        smtp   = softwareSystem "SMTP Provider" "Delivers password setup and reset emails" "External"
         github = softwareSystem "GitHub and Actions" "Source control and CI/CD" "External"
 
         // Our system
@@ -29,8 +29,8 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
             api = container "Resource Tracker API" "Modular monolith exposing REST /api/v1" "Spring Boot, Kotlin, Java 21" "Backend" {
 
                 corrFilter  = component "CorrelationIdFilter" "Tags each request with a correlation ID" "Servlet filter"
-                jwtFilter   = component "JWT Authentication" "Validates access (30 min) and refresh (7 d) tokens" "Spring Security, JJWT"
-                rbac        = component "RBAC Interceptor" "Enforces role and team/department scope" "Spring interceptor"
+                jwtFilter   = component "JWT Authentication" "Validates access token, revocation list and active user" "Spring Security, JJWT"
+                rbac        = component "RBAC Interceptor" "Enforces role annotations (@RequiresRoles)" "Spring interceptor"
                 controllers = component "REST Controllers" "Validation, structured errors, OpenAPI docs" "Spring MVC"
 
                 authSvc     = component "Auth and User Service" "Login, refresh, password tokens, users" "Spring service"
@@ -39,7 +39,7 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
                 stockSvc    = component "Stock and Reservation Services" "Availability, reservations, waitlist, issue/return" "Spring services"
                 procSvc     = component "Procurement and Budget Services" "External procurement, budgets, overrides" "Spring services"
                 reportSvc   = component "Reports and Dashboards" "Inventory reports and analytics" "Spring service"
-                notifSvc    = component "Notification and Mail Service" "In-app notifications and email" "Spring service, JTE"
+                notifSvc    = component "Notification and Mail Service" "In-app notifications and password emails" "Spring service, JTE"
                 auditAspect = component "Audit Aspect" "Append-only audit in the same transaction" "Spring AOP"
                 repos       = component "Repositories" "Used by every domain service (JPA)" "Spring Data JPA"
             }
@@ -53,7 +53,7 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
         dm     -> rt "Reviews requests" "HTTPS"
         tl     -> rt "Submits requests" "HTTPS"
         member -> rt "Views team resources" "HTTPS"
-        rt     -> smtp "Sends emails" "SMTP"
+        rt     -> smtp "Sends password emails" "SMTP"
         github -> rt "Builds, migrates and deploys" "GitHub Actions, SSH"
 
         // Container relationships
@@ -65,7 +65,7 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
         web    -> nginx "Calls API" "HTTPS/JSON"
         nginx  -> api "Forwards requests" "HTTP"
         api    -> db "Reads and writes" "JDBC"
-        api    -> smtp "Sends emails" "SMTP"
+        api    -> smtp "Sends password emails" "SMTP"
 
         // Component relationships
         nginx       -> corrFilter "Forwards requests" "HTTP"
@@ -92,7 +92,7 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
         notifSvc    -> repos      "Reads and writes" "Spring Data JPA" "Persistence"
         auditAspect -> repos      "Saves audit entries" "Spring Data JPA" "Persistence"
         repos       -> db         "Runs SQL" "JDBC"
-        notifSvc    -> smtp       "Sends email" "SMTP"
+        notifSvc    -> smtp       "Sends password emails" "SMTP"
 
         // Deployment
         production = deploymentEnvironment "Production" {
@@ -143,32 +143,30 @@ workspace "Resource Tracker" "Resource request, approval, stock and procurement 
         }
 
         dynamic api "5-Login" "Login: the response returns along the same path." {
-            web         -> nginx       "1. POST /auth/login"
-            nginx       -> corrFilter  "2. Forward"
-            corrFilter  -> jwtFilter   "3. Public route"
-            jwtFilter   -> rbac        "4. Principal"
-            rbac        -> controllers "5. Allowed"
-            controllers -> authSvc     "6. login()"
-            authSvc     -> repos       "7. Load user, save token"
-            repos       -> db          "8. SQL"
+            web         -> nginx       "POST /auth/login"
+            nginx       -> corrFilter  "Forward"
+            corrFilter  -> jwtFilter   "Public route"
+            jwtFilter   -> rbac        "Principal"
+            rbac        -> controllers "Allowed"
+            controllers -> authSvc     "login()"
+            authSvc     -> repos       "Load user, save token"
+            repos       -> db          "SQL"
             autolayout lr 250 200
         }
 
         dynamic rt "6a-SubmitRequest" "Team Lead submits a request." {
-            tl    -> web   "1. Submit request"
-            web   -> nginx "2. POST /requests"
-            nginx -> api   "3. Forward"
-            api   -> db    "4. Save PENDING, route, audit"
-            api   -> smtp  "5. Notify manager"
+            tl    -> web   "Submit request"
+            web   -> nginx "POST /requests"
+            nginx -> api   "Forward"
+            api   -> db    "Save PENDING, route, audit, notify manager (in-app)"
             autolayout lr 250 200
         }
 
         dynamic rt "6b-DecideRequest" "Department Manager decides." {
-            dm    -> web   "1. Approve, reject or query"
-            web   -> nginx "2. Decision call"
-            nginx -> api   "3. Forward"
-            api   -> db    "4. Status, budget, stock, audit"
-            api   -> smtp  "5. Notify Team Lead"
+            dm    -> web   "Approve, reject or query"
+            web   -> nginx "Decision call"
+            nginx -> api   "Forward"
+            api   -> db    "Save status, budget, stock, audit, notify Team Lead (in-app)"
             autolayout lr 250 200
         }
 
